@@ -1,0 +1,2 @@
+add_subdirectory(libblifparse)
+add_subdirectory(blif_parse_test)
