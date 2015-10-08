@@ -49,21 +49,50 @@ int main(int argc, char** argv) {
 
 
 void build_bdd(BlifData* blif_data) {
-    Cudd mgr();
-    //DdManager* mgr = Cudd_Init(0,0,CUDD_UNIQUE_SLOTS,CUDD_CACHE_SLOTS,0);
+    Cudd mgr;
+
+    BDD f = mgr.bddOne();
 
     BlifModel* model = blif_data->models[0];
     
     BlifNames* names = model->names[0];
-    for(size_t i = 0; i < names->ios.size() - 1; i--) {
-        cout << *names->ios[i] << " ";
-    }
-    cout << "\n";
     for(auto row_ptr : names->cover_rows) {
-        for(auto logic_val : *row_ptr) {
-            cout << logic_val << " ";
+        BDD cube = mgr.bddOne();
+
+        //Loop through the input plane
+        for(size_t i = 0; i < row_ptr->size()-1; i++) {
+            BDD var = mgr.bddVar(i);
+
+            LogicValue val = (*row_ptr)[row_ptr->size()-1];
+            cout << val << " ";
+
+            switch(val) {
+                case LogicValue::TRUE:
+                    cube &= var;
+                    break;
+                case LogicValue::FALSE:
+                    cube &= !var;
+                    break;
+                default:
+                    assert(0);
+                    break;
+            }
         }
-        cout << "\n";
+
+        //Last element is the output value
+        LogicValue output_val = (*row_ptr)[row_ptr->size()-1];
+
+        cout << "| " << output_val << "\n";
+
+        //Only expect ON set cover
+        assert(output_val == LogicValue::TRUE);
+
+        cout << "Cube: " << cube << "\n";
+
+        f &= cube;
     }
+
+    //Show the BDD
+    cout << "f: " << f << "\n"; 
 
 }
