@@ -51,7 +51,7 @@ int main(int argc, char** argv) {
 void build_bdd(BlifData* blif_data) {
     Cudd mgr;
 
-    BDD f = mgr.bddOne();
+    BDD f = mgr.bddZero();
 
     BlifModel* model = blif_data->models[0];
     
@@ -63,7 +63,7 @@ void build_bdd(BlifData* blif_data) {
         for(size_t i = 0; i < row_ptr->size()-1; i++) {
             BDD var = mgr.bddVar(i);
 
-            LogicValue val = (*row_ptr)[row_ptr->size()-1];
+            LogicValue val = (*row_ptr)[i];
             cout << val << " ";
 
             switch(val) {
@@ -89,7 +89,7 @@ void build_bdd(BlifData* blif_data) {
 
         cout << "Cube: " << cube << "\n";
 
-        f &= cube;
+        f |= cube;
     }
 
     //Show the BDD
