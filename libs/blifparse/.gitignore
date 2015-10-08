@@ -1,0 +1,11 @@
+#Build
+obj/
+
+#Generated
+blif_parse_test
+*.a
+*.o
+*.d
+
+#VIM
+*.sw[op]
