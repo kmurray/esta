@@ -1,8 +1,8 @@
 #Build
 obj/
+build*
 
 #Generated
-blif_parse_test
 *.a
 *.o
 *.d
