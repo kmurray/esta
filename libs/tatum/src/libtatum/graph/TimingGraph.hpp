@@ -184,7 +184,7 @@ class TimingGraph {
         ///\see levelize()
         std::vector<NodeId> optimize_node_layout();
 
-    private:
+    protected:
         /*
          * For improved memory locality, we use a Struct of Arrays (SoA)
          * data layout, rather than Array of Structs (AoS)
