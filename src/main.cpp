@@ -19,6 +19,11 @@ using std::cerr;
 using std::endl;
 using std::string;
 
+//XXX: global variable
+//TODO: Clean up and pass appropriately....
+
+BlifData* blif_data = nullptr;
+
 int main(int argc, char** argv) {
     if(argc != 2) {
         std::cout << "Usage: " << argv[0] << " filename1.blif" << endl;
@@ -31,9 +36,8 @@ int main(int argc, char** argv) {
     BlifParser parser;
 
     //Load the file
-    BlifData* blif_data = nullptr;
     try {
-        blif_data = parser.parse(argv[1]);;
+        blif_data = parser.parse(argv[1]);
     } catch (BlifParseError& e) {
         cerr << argv[1] << ":" << e.line_num << " " << e.what() << " (near text '" << e.near_text << "')" << endl; 
         return 1;
@@ -71,9 +75,13 @@ int main(int argc, char** argv) {
         using AnalysisType = SetupAnalysis;
 
         using DelayCalcType = PreCalcDelayCalculator;
+
+        //The actual delay calculator
         auto delay_calc = PreCalcDelayCalculator(std::vector<float>(timing_graph.num_edges(), 1.));
 
         using AnalyzerType = SerialTimingAnalyzer<AnalysisType,DelayCalcType>;
+
+        //The actual analyzer
         auto analyzer = std::make_shared<AnalyzerType>(timing_graph, timing_constraints, delay_calc);
 
         cout << "Analyzing...\n";
