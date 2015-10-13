@@ -1,7 +1,6 @@
 #pragma once
 
 #include "TimingTag.hpp"
-#include "memory_pool.hpp"
 
 //How many timing tag objects should be flattened into the TimingTags class?
 //  A value of 1 tends to help cache locality and performs best
@@ -36,6 +35,7 @@
  */
 class TimingTags {
     public:
+        typedef TimingTag Tag;
         /*
          * Getters
          */

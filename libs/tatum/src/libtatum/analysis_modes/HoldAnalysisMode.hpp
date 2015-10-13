@@ -42,12 +42,14 @@
  * The hold analysis implementation is generally similar to the implementation used for Setup, except
  * that the minumum arrival times (and maximum required times) are propagated through the timing graph.
  */
-template<class BaseAnalysisMode = BaseAnalysisMode>
+template<class BaseAnalysisMode = BaseAnalysisMode, class Tags=TimingTags>
 class HoldAnalysisMode : public BaseAnalysisMode {
     public:
+        typedef typename Tags::Tag Tag;
+
         //External tag access
-        const TimingTags& hold_data_tags(NodeId node_id) const { return hold_data_tags_[node_id]; }
-        const TimingTags& hold_clock_tags(NodeId node_id) const { return hold_clock_tags_[node_id]; }
+        const Tags& hold_data_tags(NodeId node_id) const { return hold_data_tags_[node_id]; }
+        const Tags& hold_clock_tags(NodeId node_id) const { return hold_clock_tags_[node_id]; }
     protected:
         //Internal operations for performing hold analysis to satisfy the BaseAnalysisMode interface
         void initialize_traversal(const TimingGraph& tg);
@@ -63,8 +65,8 @@ class HoldAnalysisMode : public BaseAnalysisMode {
         void backward_traverse_edge(const TimingGraph& tg, const DelayCalcType& dc, const NodeId node_id, const EdgeId edge_id);
 
         //Hold Tag data structure
-        std::vector<TimingTags> hold_data_tags_; //Data tags for each node [0..timing_graph.num_nodes()-1]
-        std::vector<TimingTags> hold_clock_tags_; //Clock tags for each node [0..timing_graph.num_nodes()-1]
+        std::vector<Tags> hold_data_tags_; //Data tags for each node [0..timing_graph.num_nodes()-1]
+        std::vector<Tags> hold_clock_tags_; //Clock tags for each node [0..timing_graph.num_nodes()-1]
 };
 
 //Implementation

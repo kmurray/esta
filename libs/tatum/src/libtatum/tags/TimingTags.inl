@@ -1,3 +1,4 @@
+#include <algorithm>
 #include "assert.hpp"
 /*
  * TimingTags implementation
