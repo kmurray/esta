@@ -4,9 +4,9 @@
 #include "ParallelLevelizedTimingAnalyzer.hpp"
 #include "TimingGraph.hpp"
 
-template<class AnalysisType, class DelayCalcType, class TagPoolType>
-ParallelLevelizedTimingAnalyzer<AnalysisType, DelayCalcType, TagPoolType>::ParallelLevelizedTimingAnalyzer(const TimingGraph& timing_graph, const TimingConstraints& timing_constraints, const DelayCalcType& delay_calculator)
-    : SerialTimingAnalyzer<AnalysisType,DelayCalcType, TagPoolType>(timing_graph, timing_constraints, delay_calculator)
+template<class AnalysisType, class DelayCalcType>
+ParallelLevelizedTimingAnalyzer<AnalysisType, DelayCalcType>::ParallelLevelizedTimingAnalyzer(const TimingGraph& timing_graph, const TimingConstraints& timing_constraints, const DelayCalcType& delay_calculator)
+    : SerialTimingAnalyzer<AnalysisType,DelayCalcType>(timing_graph, timing_constraints, delay_calculator)
     //These thresholds control how fine-grained we allow the parallelization
     //
     //The ideal values will vary on different machines, however default value
@@ -30,30 +30,14 @@ ParallelLevelizedTimingAnalyzer<AnalysisType, DelayCalcType, TagPoolType>::Paral
     //while not decreasing the amount of useful parallelism on larger levels.
     , parallel_threshold_fwd_(400)
     , parallel_threshold_bck_(400) {
-
-    //How many parallel workers (threads) are there?
-    int nworkers = __cilkrts_get_nworkers();
-
-    //To avoid contention during tag allocation, we give each worker
-    //a separate tag pool
-    for(int i = 0; i < nworkers; i++) {
-        //XXX: Need to dynamically allocate since move constructor is broken
-        //     in boost.pool
-        tag_pools_.push_back(new TagPoolType(sizeof(TimingTag)));
-    }
 }
 
-template<class AnalysisType, class DelayCalcType, class TagPoolType>
-ParallelLevelizedTimingAnalyzer<AnalysisType, DelayCalcType, TagPoolType>::~ParallelLevelizedTimingAnalyzer() {
-    //Clean-up dynamically alloated tag pools
-    for(size_t i = 0; i < tag_pools_.size(); i++) {
-        //Pool destructor frees any allocated memory
-        delete tag_pools_[i];
-    }
+template<class AnalysisType, class DelayCalcType>
+ParallelLevelizedTimingAnalyzer<AnalysisType, DelayCalcType>::~ParallelLevelizedTimingAnalyzer() {
 }
 
-template<class AnalysisType, class DelayCalcType, class TagPoolType>
-void ParallelLevelizedTimingAnalyzer<AnalysisType, DelayCalcType, TagPoolType>::forward_traversal() {
+template<class AnalysisType, class DelayCalcType>
+void ParallelLevelizedTimingAnalyzer<AnalysisType, DelayCalcType>::forward_traversal() {
     using namespace std::chrono;
 
     //Forward traversal (arrival times)
@@ -67,15 +51,13 @@ void ParallelLevelizedTimingAnalyzer<AnalysisType, DelayCalcType, TagPoolType>::
             cilk_for(int node_idx = 0; node_idx < level.size(); node_idx++) {
                 NodeId node_id = level[node_idx];
 
-                //We use a per-thread tag pool to avoid synchronization
-                TagPoolType& tag_pool = *tag_pools_[__cilkrts_get_worker_number()];
-                this->forward_traverse_node(tag_pool, node_id);
+                this->forward_traverse_node(node_id);
             }
         } else {
             //Serial
             for(int node_idx = 0; node_idx < (int) level.size(); node_idx++) {
                 NodeId node_id = level[node_idx];
-                this->forward_traverse_node(this->tag_pool_, node_id);
+                this->forward_traverse_node(node_id);
             }
 
         }
@@ -86,8 +68,8 @@ void ParallelLevelizedTimingAnalyzer<AnalysisType, DelayCalcType, TagPoolType>::
     }
 }
 
-template<class AnalysisType, class DelayCalcType, class TagPoolType>
-void ParallelLevelizedTimingAnalyzer<AnalysisType, DelayCalcType, TagPoolType>::backward_traversal() {
+template<class AnalysisType, class DelayCalcType>
+void ParallelLevelizedTimingAnalyzer<AnalysisType, DelayCalcType>::backward_traversal() {
     using namespace std::chrono;
 
     //Backward traversal (required times)
@@ -101,15 +83,13 @@ void ParallelLevelizedTimingAnalyzer<AnalysisType, DelayCalcType, TagPoolType>::
             cilk_for(int node_idx = 0; node_idx < level.size(); node_idx++) {
                 NodeId node_id = level[node_idx];
 
-                //We use a per-thread tag pool to avoid synchronization
-                TagPoolType& tag_pool = *tag_pools_[__cilkrts_get_worker_number()];
-                this->backward_traverse_node(tag_pool, node_id);
+                this->backward_traverse_node(node_id);
             }
         } else {
             //Serial
             for(int node_idx = 0; node_idx < (NodeId) level.size(); node_idx++) {
                 NodeId node_id = level[node_idx];
-                this->backward_traverse_node(this->tag_pool_, node_id);
+                this->backward_traverse_node(node_id);
             }
         }
 

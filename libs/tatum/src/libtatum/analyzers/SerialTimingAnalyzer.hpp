@@ -3,7 +3,6 @@
 #include <string>
 
 #include "TimingAnalyzer.hpp"
-#include "memory_pool.hpp"
 
 /**
  * Overview
@@ -42,23 +41,11 @@
  *       they only read from their upstream nodes (this can as each node 'pulling' the results
  *       of its dependancies. . This allows us to avoid using locks in any parallel analyzers
  *       provided we process a node in only a single thread!
- *
- * Memory Allocation
- * ===================
- * To facilitate efficient multi-clock analysis we use Tags (see class TimingTags) to record
- * arrival/required times on a per-clock basis.  For efficiency the current TimingTag
- * implementation uses a memory pool to allocate tags rather than the generic new/delete.
- *
- * This memory pool (specified by the TagPoolType template parameter) is owned
- * by the SerialTimingAnalyzer class which will destroy it is destructed.
  */
 
-template<class AnalysisType, class DelayCalcType, class TagPoolType=MemoryPool>
+template<class AnalysisType, class DelayCalcType>
 class SerialTimingAnalyzer : public TimingAnalyzer<AnalysisType, DelayCalcType> {
     public:
-        ///The type of the pooled memory allocator
-        typedef TagPoolType tag_pool_type;
-
         ///Initializes the analyzer
         /// \param timing_graph The timing graph to analyze
         /// \param timing_constraints The timing constraints to apply during analysis
@@ -80,14 +67,12 @@ class SerialTimingAnalyzer : public TimingAnalyzer<AnalysisType, DelayCalcType> 
         virtual void backward_traversal();
 
         ///Per node worker function for forward traversal
-        /// \param tag_pool The tag pool used to allocate new TimingTag objects
         /// \param node_id The node to process
-        void forward_traverse_node(TagPoolType& tag_pool, const NodeId node_id);
+        void forward_traverse_node(const NodeId node_id);
 
         ///Per node worker function for backward traversal
-        /// \param tag_pool The tag pool used to allocate new TimingTag objects
         /// \param node_id The node to process
-        void backward_traverse_node(TagPoolType& tag_pool, const NodeId node_id);
+        void backward_traverse_node(const NodeId node_id);
 
         /*
          * Data
@@ -95,7 +80,6 @@ class SerialTimingAnalyzer : public TimingAnalyzer<AnalysisType, DelayCalcType> 
         const TimingGraph& tg_; //The timing graph to analyzer
         const TimingConstraints& tc_; //The timing constraints to evaluate
         const DelayCalcType& dc_; //The delay calculator to use
-        TagPoolType tag_pool_; //Memory pool for allocating tags
 
         std::map<std::string, double> perf_data_; //Performance profiling info, assumes each data point has a unique string identifier
 };

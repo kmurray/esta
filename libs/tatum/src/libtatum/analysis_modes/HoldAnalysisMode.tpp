@@ -8,10 +8,9 @@ void HoldAnalysisMode<BaseAnalysisMode>::initialize_traversal(const TimingGraph&
 }
 
 template<class BaseAnalysisMode>
-template<class TagPoolType>
-void HoldAnalysisMode<BaseAnalysisMode>::pre_traverse_node(TagPoolType& tag_pool, const TimingGraph& tg, const TimingConstraints& tc, const NodeId node_id) {
+void HoldAnalysisMode<BaseAnalysisMode>::pre_traverse_node(const TimingGraph& tg, const TimingConstraints& tc, const NodeId node_id) {
     //Chain to base
-    BaseAnalysisMode::pre_traverse_node(tag_pool, tg, tc, node_id);
+    BaseAnalysisMode::pre_traverse_node(tg, tc, node_id);
 
     //Primary Input
     ASSERT(tg.num_node_in_edges(node_id) == 0);
@@ -31,7 +30,7 @@ void HoldAnalysisMode<BaseAnalysisMode>::pre_traverse_node(TagPoolType& tag_pool
         //Initialize clock tag with zero arrival and invalid required
         TimingTag clock_tag = TimingTag(Time(0.), Time(NAN), tg.node_clock_domain(node_id), node_id);
 
-        hold_clock_tags_[node_id].add_tag(tag_pool, clock_tag);
+        hold_clock_tags_[node_id].add_tag(clock_tag);
 
     } else {
         ASSERT(node_type == TN_Type::INPAD_SOURCE);
@@ -48,20 +47,20 @@ void HoldAnalysisMode<BaseAnalysisMode>::pre_traverse_node(TagPoolType& tag_pool
         if(tg.node_is_clock_source(node_id)) {
             ASSERT_MSG(hold_clock_tags_[node_id].num_tags() == 0, "Primary input already has clock tags");
 
-            hold_clock_tags_[node_id].add_tag(tag_pool, data_tag);
+            hold_clock_tags_[node_id].add_tag(data_tag);
         } else {
             ASSERT_MSG(hold_clock_tags_[node_id].num_tags() == 0, "Primary input already has data tags");
 
-            hold_data_tags_[node_id].add_tag(tag_pool, data_tag);
+            hold_data_tags_[node_id].add_tag(data_tag);
         }
     }
 }
 
 template<class BaseAnalysisMode>
-template<class TagPoolType, class DelayCalcType>
-void HoldAnalysisMode<BaseAnalysisMode>::forward_traverse_edge(TagPoolType& tag_pool, const TimingGraph& tg, const DelayCalcType& dc, const NodeId node_id, const EdgeId edge_id) {
+template<class DelayCalcType>
+void HoldAnalysisMode<BaseAnalysisMode>::forward_traverse_edge(const TimingGraph& tg, const DelayCalcType& dc, const NodeId node_id, const EdgeId edge_id) {
     //Chain to base
-    BaseAnalysisMode::forward_traverse_edge(tag_pool, tg, dc, node_id, edge_id);
+    BaseAnalysisMode::forward_traverse_edge(tg, dc, node_id, edge_id);
 
     //We must use the tags by reference so we don't accidentally wipe-out any
     //existing tags
@@ -83,7 +82,7 @@ void HoldAnalysisMode<BaseAnalysisMode>::forward_traverse_edge(TagPoolType& tag_
         const TimingTags& src_clk_tags = hold_clock_tags_[src_node_id];
         for(const TimingTag& src_clk_tag : src_clk_tags) {
             //Standard propagation through the clock network
-            node_clock_tags.min_arr(tag_pool, src_clk_tag.arr_time() + edge_delay, src_clk_tag);
+            node_clock_tags.min_arr(src_clk_tag.arr_time() + edge_delay, src_clk_tag);
 
             if(tg.node_type(node_id) == TN_Type::FF_SOURCE) {
                 //This is a clock to data launch edge
@@ -96,7 +95,7 @@ void HoldAnalysisMode<BaseAnalysisMode>::forward_traverse_edge(TagPoolType& tag_
                 ASSERT(launch_tag.next() == nullptr);
 
                 //Mark propagated launch time as a DATA tag
-                node_data_tags.min_arr(tag_pool, launch_tag.arr_time() + edge_delay, launch_tag);
+                node_data_tags.min_arr(launch_tag.arr_time() + edge_delay, launch_tag);
             }
         }
     }
@@ -109,15 +108,14 @@ void HoldAnalysisMode<BaseAnalysisMode>::forward_traverse_edge(TagPoolType& tag_
 
     for(const TimingTag& src_data_tag : src_data_tags) {
         //Standard data-path propagation
-        node_data_tags.min_arr(tag_pool, src_data_tag.arr_time() + edge_delay, src_data_tag);
+        node_data_tags.min_arr(src_data_tag.arr_time() + edge_delay, src_data_tag);
     }
 }
 
 template<class BaseAnalysisMode>
-template<class TagPoolType>
-void HoldAnalysisMode<BaseAnalysisMode>::forward_traverse_finalize_node(TagPoolType& tag_pool, const TimingGraph& tg, const TimingConstraints& tc, const NodeId node_id) {
+void HoldAnalysisMode<BaseAnalysisMode>::forward_traverse_finalize_node(const TimingGraph& tg, const TimingConstraints& tc, const NodeId node_id) {
     //Chain to base
-    BaseAnalysisMode::forward_traverse_finalize_node(tag_pool, tg, tc, node_id);
+    BaseAnalysisMode::forward_traverse_finalize_node(tg, tc, node_id);
 
     TimingTags& node_data_tags = hold_data_tags_[node_id];
     TimingTags& node_clock_tags = hold_clock_tags_[node_id];
@@ -136,7 +134,7 @@ void HoldAnalysisMode<BaseAnalysisMode>::forward_traverse_finalize_node(TagPoolT
 
                 //The output delay is assumed to be on the edge from the OUTPAD_IPIN to OUTPAD_SINK
                 //so we do not need to account for it here
-                node_data_tags.max_req(tag_pool, Time(clock_constraint), data_tag);
+                node_data_tags.max_req(Time(clock_constraint), data_tag);
             }
         }
     } else if (tg.node_type(node_id) == TN_Type::FF_SINK) {

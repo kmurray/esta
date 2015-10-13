@@ -17,8 +17,8 @@
  * by evaluating serially levels that not 'sufficiently' large.
  */
 
-template<class AnalysisType, class DelayCalcType, class TagPoolType=MemoryPool>
-class ParallelLevelizedTimingAnalyzer : public SerialTimingAnalyzer<AnalysisType, DelayCalcType, TagPoolType> {
+template<class AnalysisType, class DelayCalcType>
+class ParallelLevelizedTimingAnalyzer : public SerialTimingAnalyzer<AnalysisType, DelayCalcType> {
     public:
         ParallelLevelizedTimingAnalyzer(const TimingGraph& timing_graph, const TimingConstraints& timing_constraints, const DelayCalcType& delay_calculator);
         ~ParallelLevelizedTimingAnalyzer() override;
@@ -32,9 +32,6 @@ class ParallelLevelizedTimingAnalyzer : public SerialTimingAnalyzer<AnalysisType
          * Propogate required times
          */
         void backward_traversal() override;
-
-        //We use multiple tag pools to reduce contention between threads
-        std::vector<MemoryPool*> tag_pools_;
 
         //Level width thresholds beyond which to execute a parallel traversal
         //  For very narrow levels the overhead of (finegrained) parallel execution

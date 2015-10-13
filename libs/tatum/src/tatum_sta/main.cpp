@@ -27,7 +27,7 @@
 
 
 //Illegal versions used for upper-bound speed-up estimates
-#include "ParallelNoDependancyTimingAnalyzer.hpp"
+//#include "ParallelNoDependancyTimingAnalyzer.hpp"
 
 #include "vpr_timing_graph_common.hpp"
 

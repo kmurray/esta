@@ -68,8 +68,12 @@ int main(int argc, char** argv) {
         }
 
 
+        using AnalysisType = SetupAnalysis;
+
+        using DelayCalcType = PreCalcDelayCalculator;
         auto delay_calc = PreCalcDelayCalculator(std::vector<float>(timing_graph.num_edges(), 1.));
-        using AnalyzerType = SerialTimingAnalyzer<SetupAnalysis,PreCalcDelayCalculator>;
+
+        using AnalyzerType = SerialTimingAnalyzer<AnalysisType,DelayCalcType>;
         auto analyzer = std::make_shared<AnalyzerType>(timing_graph, timing_constraints, delay_calc);
 
         cout << "Analyzing...\n";

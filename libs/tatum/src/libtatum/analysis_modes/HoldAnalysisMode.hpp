@@ -52,14 +52,12 @@ class HoldAnalysisMode : public BaseAnalysisMode {
         //Internal operations for performing hold analysis to satisfy the BaseAnalysisMode interface
         void initialize_traversal(const TimingGraph& tg);
 
-        template<class TagPoolType>
-        void pre_traverse_node(TagPoolType& tag_pool, const TimingGraph& tg, const TimingConstraints& tc, const NodeId node_id);
+        void pre_traverse_node(const TimingGraph& tg, const TimingConstraints& tc, const NodeId node_id);
 
-        template<class TagPoolType, class DelayCalcType>
-        void forward_traverse_edge(TagPoolType& tag_pool, const TimingGraph& tg, const DelayCalcType& dc, const NodeId node_id, const EdgeId edge_id);
+        template<class DelayCalcType>
+        void forward_traverse_edge(const TimingGraph& tg, const DelayCalcType& dc, const NodeId node_id, const EdgeId edge_id);
 
-        template<class TagPoolType>
-        void forward_traverse_finalize_node(TagPoolType& tag_pool, const TimingGraph& tg, const TimingConstraints& tc, const NodeId node_id);
+        void forward_traverse_finalize_node(const TimingGraph& tg, const TimingConstraints& tc, const NodeId node_id);
 
         template<class DelayCalcType>
         void backward_traverse_edge(const TimingGraph& tg, const DelayCalcType& dc, const NodeId node_id, const EdgeId edge_id);

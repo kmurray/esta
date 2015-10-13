@@ -1,15 +1,13 @@
-template<class AnalysisType, class DelayCalcType, class TagPoolType>
-SerialTimingAnalyzer<AnalysisType,DelayCalcType,TagPoolType>::SerialTimingAnalyzer(const TimingGraph& tg, const TimingConstraints& tc, const DelayCalcType& dc)
+template<class AnalysisType, class DelayCalcType>
+SerialTimingAnalyzer<AnalysisType,DelayCalcType>::SerialTimingAnalyzer(const TimingGraph& tg, const TimingConstraints& tc, const DelayCalcType& dc)
     : tg_(tg)
     , tc_(tc)
-    , dc_(dc)
-    //Need to give the size of the object to allocate
-    , tag_pool_(sizeof(TimingTag)) {
+    , dc_(dc) {
     AnalysisType::initialize_traversal(tg_);
 }
 
-template<class AnalysisType, class DelayCalcType, class TagPoolType>
-void SerialTimingAnalyzer<AnalysisType,DelayCalcType,TagPoolType>::calculate_timing() {
+template<class AnalysisType, class DelayCalcType>
+void SerialTimingAnalyzer<AnalysisType,DelayCalcType>::calculate_timing() {
     using namespace std::chrono;
 
     auto analysis_start = high_resolution_clock::now();
@@ -35,16 +33,13 @@ void SerialTimingAnalyzer<AnalysisType,DelayCalcType,TagPoolType>::calculate_tim
     perf_data_["bck_traversal"] = duration_cast<duration<double>>(bck_traversal_end - bck_traversal_start).count();
 }
 
-template<class AnalysisType, class DelayCalcType, class TagPoolType>
-void SerialTimingAnalyzer<AnalysisType,DelayCalcType,TagPoolType>::reset_timing() {
-    //Release the memory allocated to tags
-    tag_pool_.purge_memory();
-
+template<class AnalysisType, class DelayCalcType>
+void SerialTimingAnalyzer<AnalysisType,DelayCalcType>::reset_timing() {
     AnalysisType::initialize_traversal(tg_);
 }
 
-template<class AnalysisType, class DelayCalcType, class TagPoolType>
-void SerialTimingAnalyzer<AnalysisType,DelayCalcType,TagPoolType>::pre_traversal() {
+template<class AnalysisType, class DelayCalcType>
+void SerialTimingAnalyzer<AnalysisType,DelayCalcType>::pre_traversal() {
     /*
      * The pre-traversal sets up the timing graph for propagating arrival
      * and required times.
@@ -52,12 +47,12 @@ void SerialTimingAnalyzer<AnalysisType,DelayCalcType,TagPoolType>::pre_traversal
      *   - Initialize arrival times on primary inputs
      */
     for(NodeId node_id : tg_.primary_inputs()) {
-        AnalysisType::pre_traverse_node(tag_pool_, tg_, tc_, node_id);
+        AnalysisType::pre_traverse_node(tg_, tc_, node_id);
     }
 }
 
-template<class AnalysisType, class DelayCalcType, class TagPoolType>
-void SerialTimingAnalyzer<AnalysisType,DelayCalcType,TagPoolType>::forward_traversal() {
+template<class AnalysisType, class DelayCalcType>
+void SerialTimingAnalyzer<AnalysisType,DelayCalcType>::forward_traversal() {
     using namespace std::chrono;
 
     //Forward traversal (arrival times)
@@ -65,7 +60,7 @@ void SerialTimingAnalyzer<AnalysisType,DelayCalcType,TagPoolType>::forward_trave
         auto fwd_level_start = high_resolution_clock::now();
 
         for(NodeId node_id : tg_.level(level_id)) {
-            forward_traverse_node(tag_pool_, node_id);
+            forward_traverse_node(node_id);
         }
 
         auto fwd_level_end = high_resolution_clock::now();
@@ -74,8 +69,8 @@ void SerialTimingAnalyzer<AnalysisType,DelayCalcType,TagPoolType>::forward_trave
     }
 }
 
-template<class AnalysisType, class DelayCalcType, class TagPoolType>
-void SerialTimingAnalyzer<AnalysisType,DelayCalcType,TagPoolType>::backward_traversal() {
+template<class AnalysisType, class DelayCalcType>
+void SerialTimingAnalyzer<AnalysisType,DelayCalcType>::backward_traversal() {
     using namespace std::chrono;
 
     //Backward traversal (required times)
@@ -83,7 +78,7 @@ void SerialTimingAnalyzer<AnalysisType,DelayCalcType,TagPoolType>::backward_trav
         auto bck_level_start = high_resolution_clock::now();
 
         for(NodeId node_id : tg_.level(level_id)) {
-            backward_traverse_node(tag_pool_, node_id);
+            backward_traverse_node(node_id);
         }
 
         auto bck_level_end = high_resolution_clock::now();
@@ -92,20 +87,20 @@ void SerialTimingAnalyzer<AnalysisType,DelayCalcType,TagPoolType>::backward_trav
     }
 }
 
-template<class AnalysisType, class DelayCalcType, class TagPoolType>
-void SerialTimingAnalyzer<AnalysisType,DelayCalcType,TagPoolType>::forward_traverse_node(TagPoolType& tag_pool, const NodeId node_id) {
+template<class AnalysisType, class DelayCalcType>
+void SerialTimingAnalyzer<AnalysisType,DelayCalcType>::forward_traverse_node(const NodeId node_id) {
     //Pull from upstream sources to current node
     for(int edge_idx = 0; edge_idx < tg_.num_node_in_edges(node_id); edge_idx++) {
         EdgeId edge_id = tg_.node_in_edge(node_id, edge_idx);
 
-        AnalysisType::forward_traverse_edge(tag_pool, tg_, dc_, node_id, edge_id);
+        AnalysisType::forward_traverse_edge(tg_, dc_, node_id, edge_id);
     }
 
-    AnalysisType::forward_traverse_finalize_node(tag_pool, tg_, tc_, node_id);
+    AnalysisType::forward_traverse_finalize_node(tg_, tc_, node_id);
 }
 
-template<class AnalysisType, class DelayCalcType, class TagPoolType>
-void SerialTimingAnalyzer<AnalysisType,DelayCalcType,TagPoolType>::backward_traverse_node(TagPoolType& tag_pool, const NodeId node_id) {
+template<class AnalysisType, class DelayCalcType>
+void SerialTimingAnalyzer<AnalysisType,DelayCalcType>::backward_traverse_node(const NodeId node_id) {
     //Pull from downstream sinks to current node
 
     //We don't propagate required times past FF_CLOCK nodes,
@@ -123,6 +118,6 @@ void SerialTimingAnalyzer<AnalysisType,DelayCalcType,TagPoolType>::backward_trav
         AnalysisType::backward_traverse_edge(tg_, dc_, node_id, edge_id);
     }
 
-    AnalysisType::backward_traverse_finalize_node(tag_pool, tg_, tc_, node_id);
+    AnalysisType::backward_traverse_finalize_node(tg_, tc_, node_id);
 }
 
