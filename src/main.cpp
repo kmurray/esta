@@ -14,6 +14,8 @@
 #include "SerialTimingAnalyzer.hpp"
 #include "PreCalcDelayCalculator.hpp"
 
+#include "ExtTimingTags.hpp"
+
 using std::cout;
 using std::cerr;
 using std::endl;
@@ -21,8 +23,8 @@ using std::string;
 
 //XXX: global variable
 //TODO: Clean up and pass appropriately....
-
-BlifData* blif_data = nullptr;
+BlifData* g_blif_data = nullptr;
+Cudd g_cudd;
 
 int main(int argc, char** argv) {
     if(argc != 2) {
@@ -37,17 +39,17 @@ int main(int argc, char** argv) {
 
     //Load the file
     try {
-        blif_data = parser.parse(argv[1]);
+        g_blif_data = parser.parse(argv[1]);
     } catch (BlifParseError& e) {
         cerr << argv[1] << ":" << e.line_num << " " << e.what() << " (near text '" << e.near_text << "')" << endl; 
         return 1;
     }
 
-    if(blif_data != nullptr) {
+    if(g_blif_data != nullptr) {
         cout << "\tOK" << endl;
 
         //Create the builder
-        BlifTimingGraphBuilder tg_builder(blif_data);
+        BlifTimingGraphBuilder tg_builder(g_blif_data);
 
         TimingGraph timing_graph;
 
@@ -71,8 +73,7 @@ int main(int argc, char** argv) {
             timing_constraints.add_input_constraint(id, 0.);
         }
 
-
-        using AnalysisType = SetupAnalysis;
+        using AnalysisType = SetupAnalysisMode<BaseAnalysisMode,ExtTimingTags>;
 
         using DelayCalcType = PreCalcDelayCalculator;
 
@@ -94,7 +95,7 @@ int main(int argc, char** argv) {
             }
         }
 
-        delete blif_data;
+        delete g_blif_data;
     }
 
     return 0;
