@@ -14,6 +14,8 @@ void BlifLexerContext::init_lexer(BlifParser* parser) {
 }
 
 void BlifLexerContext::destroy_lexer() {
+    //There seems to be memory in flex which this doesn't
+    //free... not much we can do
     BlifParse_lex_destroy(this->lexer_state_);
 }
 
