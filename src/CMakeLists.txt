@@ -72,6 +72,14 @@ include_directories(${install_dir}/src/project_cudd/include/ ${install_dir}/src/
 file(GLOB_RECURSE ETA_SOURCES *.cpp)
 file(GLOB_RECURSE ETA_HEADERS *.hpp)
 
+#Include directories
+foreach(header ${ETA_HEADERS})
+    get_filename_component(incl_dir ${header} DIRECTORY)
+    list(APPEND ETA_INCLUDE_DIRS ${incl_dir})
+endforeach()
+#Remove duplicate include directories
+list(REMOVE_DUPLICATES ETA_INCLUDE_DIRS)
+
 #Define Executable
 add_executable(eta
                ${ETA_SOURCES}
