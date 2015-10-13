@@ -13,6 +13,7 @@ using std::vector;
 using std::string;
 using std::cout;
 
+void add_port_conn(BlifParser* context, BlifPort* port, std::string* net_name);
 %}
 
 %union {
@@ -21,13 +22,11 @@ using std::cout;
     BlifNames* blif_names_val;
     BlifLatch* blif_latch_val;
     BlifSubckt* blif_subckt_val;
-    PortConnection* port_connection_val;
 
     std::string* str_val;
 
     std::vector<LogicValue>* logic_list_val;
     std::vector<std::string*>* str_list_val;
-    std::vector<PortConnection*>* port_connection_list_val;
 
     LatchTypeControl* latch_type_control_val;
     LatchType latch_type_val;
@@ -103,14 +102,12 @@ void yyerror(YYLTYPE* llocp, BlifParser* context, const char* msg) {
 %type <blif_names_val> names
 %type <blif_latch_val> latch
 %type <blif_subckt_val> subckt
-%type <port_connection_val> port_connection
 %type <latch_type_control_val> latch_type_control
 %type <latch_type_val> latch_type
 %type <str_val> latch_control
 %type <logic_value_val> latch_init
 %type <str_list_val> id_list
 %type <logic_list_val> so_cover_row
-%type <port_connection_list_val> port_connection_list
 
 /* Top level rule */
 %start blif_data
@@ -137,44 +134,72 @@ blif_data
 
 model
     : DOT_MODEL id EOL {
-        $$ = new BlifModel(); 
-        $$->model_name = $2; 
-        $$->ended = false;
+        $$ = new BlifModel($2); 
       }
     | model DOT_INPUTS id_list EOL {
         assert(!$$->ended);
         if($$->inputs.size() != 0) {
             std::string msg = std::string("Duplicate input list ('.inputs') for model '");
-            msg += *($$->model_name);
+            msg += *($$->name);
             msg += std::string("'");
             throw_parse_error(parser_context, msg);
         }
 
-        $$->inputs = *$3;
+        for(auto port_name : *$3) {
+            //Create the port
+            BlifPort* port = new BlifPort(port_name, $$);
+
+            //Add port -> net connections
+            //Models generate nets with the same name as ports
+            add_port_conn(parser_context, port, port_name);
+
+            //Add the connected port to the model
+            $$->inputs.push_back(port);
+        }
+
         delete $3;
     }
     | model DOT_OUTPUTS id_list EOL {
         assert(!$$->ended);
         if($$->outputs.size() != 0) {
             std::string msg = std::string("Duplicate output list ('.outputs') for model '");
-            msg += *($$->model_name);
+            msg += *($$->name);
             msg += std::string("'");
             throw_parse_error(parser_context, msg);
         }
+        for(auto port_name : *$3) {
+            //Create the port
+            BlifPort* port = new BlifPort(port_name, $$);
 
-        $$->outputs = *$3;
+            //Add port -> net connections
+            //Models generate nets with the same name as ports
+            add_port_conn(parser_context, port, port_name);
+
+            //Add the connected port to the model
+            $$->outputs.push_back(port);
+        }
+
         delete $3;
       }
     | model DOT_CLOCK id_list EOL {
         assert(!$$->ended);
         if($$->clocks.size() != 0) {
             std::string msg = std::string("Duplicate clock list ('.clock') for model '");
-            msg += *($$->model_name);
+            msg += *($$->name);
             msg += std::string("'");
             throw_parse_error(parser_context, msg);
         }
+        for(auto port_name : *$3) {
+            //Create the port
+            BlifPort* port = new BlifPort(port_name, $$);
 
-        $$->clocks = *$3;
+            //Add port -> net connections
+            //Models generate nets with the same name as ports
+            add_port_conn(parser_context, port, port_name);
+
+            //Add the connected port to the model
+            $$->clocks.push_back(port);
+        }
         delete $3;
       }
     | model names {
@@ -182,12 +207,12 @@ model
         assert(!$$->blackbox);
         $$->names.push_back($2);
       }
-    | model latch {
+    | model latch EOL {
         assert(!$$->ended);
         assert(!$$->blackbox);
         $$->latches.push_back($2);
       }
-    | model subckt {
+    | model subckt EOL {
         assert(!$$->ended);
         assert(!$$->blackbox);
         $$->subckts.push_back($2);
@@ -199,7 +224,24 @@ model
     ;
 
 names
-    : DOT_NAMES id_list EOL { $$ = new BlifNames; $$->ios = *$2; delete $2; }
+    : DOT_NAMES id_list EOL { 
+        $$ = new BlifNames();
+        for(size_t i = 0; i < $2->size(); i++) {
+            auto port_name = (*$2)[i];
+
+            //Create the port
+            BlifPort* port = new BlifPort(port_name, $$);
+
+            //Add port -> net connections
+            //Names generate nets with the same name as ports
+            add_port_conn(parser_context, port, port_name);
+
+            //Add the connected port to the model
+            $$->ports.push_back(port);
+        }
+
+        delete $2;
+      }
     | names so_cover_row EOL { $$->cover_rows.push_back($2); }
     ;
 
@@ -211,12 +253,21 @@ so_cover_row
     ;
 
 latch
-    : DOT_LATCH id id latch_type_control latch_init EOL {
+    : DOT_LATCH id id latch_type_control latch_init {
         $$ = new BlifLatch();
-        $$->input = $2;
-        $$->output = $3;
+
+        //Add the connected ports to the latch
+        $$->input = new BlifPort($2, $$);
+        $$->output = new BlifPort($3, $$);
+        $$->control = new BlifPort($4->control, $$);
+
+        //Add port -> net connections
+        //Latches use net names the same as ports
+        add_port_conn(parser_context, $$->input, $2);
+        add_port_conn(parser_context, $$->output, $3);
+        add_port_conn(parser_context, $$->control, $4->control);
+
         $$->type = $4->type;
-        $$->control = $4->control;
         $$->initial_state = $5;
       } 
     ;
@@ -235,8 +286,6 @@ latch_type_control
         $$->control = $2;
       }
     ;
-
-    
 
 latch_type
     : LATCH_FE { $$ = LatchType::FALLING_EDGE; }
@@ -260,21 +309,51 @@ latch_init
     ;
 
 subckt
-    : DOT_SUBCKT id port_connection_list EOL { $$ = new BlifSubckt(); $$->type = $2; $$->port_connections = *$3; delete $3; }
+    : DOT_SUBCKT id {
+        $$ = new BlifSubckt($2);
+      }
+    | subckt id '=' id {
+        BlifPort* port = new BlifPort($2, $$);
+
+        add_port_conn(parser_context, port, $4);
+
+        $$->ports.push_back(port); 
+      }
     ;
 
-port_connection_list
-    : { $$ = new std::vector<PortConnection*>(); }
-    | port_connection_list port_connection { $$->push_back($2); }
-
-port_connection
-    : id '=' id { $$ = new PortConnection; $$->port_name = $1; $$->signal_name = $3; }
+/*
+ *port_connection_list
+ *    : { $$ = new std::vector<PortConnection*>(); }
+ *    | port_connection_list port_connection { $$->push_back($2); }
+ *
+ *port_connection
+ *    : id '=' id { $$ = new PortConnection; $$->port_name = $1; $$->signal_name = $3; }
+ */
 
 id_list
-    : { $$ = new vector<string*>(); }
-    | id_list id    { $$->push_back($2); }
+    : id { $$ = new vector<string*>(); $$->push_back($1); }
+    | id_list id { $1->push_back($2); $$ = $1; }
     ;
 
 id: STRING { $$ = $1; }
 
 %%
+
+void add_port_conn(BlifParser* parser_context, BlifPort* port, std::string* net_name) {
+
+    assert(port->port_conn == nullptr);
+
+    if(net_name != nullptr) {
+        BlifData* blif_data = parser_context->get_blif_data();
+
+        //Get/create the associated net
+        // Models create nets with the names of their ports
+        BlifNet* net = blif_data->get_net(net_name);
+
+        //Create the connection between net and port
+        BlifPortConn* conn = new BlifPortConn(port, net);
+
+        //Add connection to port
+        port->port_conn = conn; 
+    }
+}

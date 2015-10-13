@@ -23,6 +23,11 @@ BlifData* BlifParser::parse(std::string filename) {
         fclose(blif_file);
     }
 
+    //Resolve internal references to nets
+    blif_data_->resolve_nets();
+
+    blif_data_->clean_nets();
+
     return blif_data_;
 }
 
