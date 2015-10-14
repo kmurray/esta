@@ -1,2 +1,2 @@
 add_subdirectory(libblifparse)
-add_subdirectory(blif_parse_test)
+add_subdirectory(blif_parse_test EXCLUDE_FROM_ALL)
