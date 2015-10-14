@@ -1,2 +1,2 @@
 add_subdirectory(libtatum)
-add_subdirectory(tatum_sta)
+add_subdirectory(tatum_sta EXCLUDE_FROM_ALL)
