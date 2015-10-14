@@ -242,7 +242,13 @@ names
 
         delete $2;
       }
-    | names so_cover_row EOL { $$->cover_rows.push_back($2); }
+    | names so_cover_row EOL { 
+        if($2->size() > 0) {
+            $$->cover_rows.push_back($2); 
+        } else {
+            delete $2;
+        }
+      }
     ;
 
 so_cover_row
