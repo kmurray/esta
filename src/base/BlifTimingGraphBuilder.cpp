@@ -62,6 +62,9 @@ void BlifTimingGraphBuilder::build(TimingGraph& tg) {
      * in the netlist and add edges to represent them.
      */
     create_net_edges(tg);
+
+
+    annotate_logic_functions(tg);
 }
 
 void BlifTimingGraphBuilder::create_input(TimingGraph& tg, const BlifPort* input_port) {
@@ -69,12 +72,8 @@ void BlifTimingGraphBuilder::create_input(TimingGraph& tg, const BlifPort* input
     //    INPAD_SOURCE ---> INPAD_OPIN
 
 
-    //Creat the variable representing this input.
-    //  Note that this is used for both the source and opin since they are logically equivalent
-    BDD var = g_cudd.bddVar();
-
-    NodeId src = tg.add_node(TN_Type::INPAD_SOURCE, 0, false, var); //Default to 1st clock domain
-    NodeId opin = tg.add_node(TN_Type::INPAD_OPIN, INVALID_CLOCK_DOMAIN, false, var);
+    NodeId src = tg.add_node(TN_Type::INPAD_SOURCE, 0, false); //Default to 1st clock domain
+    NodeId opin = tg.add_node(TN_Type::INPAD_OPIN, INVALID_CLOCK_DOMAIN, false);
 
     //Add the edge between them
     tg.add_edge(src, opin);
@@ -88,12 +87,8 @@ void BlifTimingGraphBuilder::create_output(TimingGraph& tg, const BlifPort* outp
     //An output becomes the following in the timing graph:
     //    OUTPAD_IPIN ---> OUTPAD_SINK
     
-    //Creat the variable representing this input.
-    //  Note that this is used for both the source and opin since they are logically equivalent
-    BDD var = g_cudd.bddVar();
-
-    NodeId ipin = tg.add_node(TN_Type::OUTPAD_IPIN, INVALID_CLOCK_DOMAIN, false, var);
-    NodeId sink = tg.add_node(TN_Type::OUTPAD_SINK, INVALID_CLOCK_DOMAIN, false, var);
+    NodeId ipin = tg.add_node(TN_Type::OUTPAD_IPIN, INVALID_CLOCK_DOMAIN, false);
+    NodeId sink = tg.add_node(TN_Type::OUTPAD_SINK, INVALID_CLOCK_DOMAIN, false);
 
     //Add the edge between them
     tg.add_edge(ipin, sink);
@@ -115,17 +110,12 @@ void BlifTimingGraphBuilder::create_latch(TimingGraph& tg, const BlifLatch* latc
 
     assert(latch->type == LatchType::RISING_EDGE);
 
-    //Creat the variable representing this input.
-    BDD var_d = g_cudd.bddVar();
-    BDD var_q = g_cudd.bddVar();
-    BDD var_clk = g_cudd.bddVar();
-
     //The nodes
-    NodeId ipin = tg.add_node(TN_Type::FF_IPIN, INVALID_CLOCK_DOMAIN, false, var_d);
-    NodeId sink = tg.add_node(TN_Type::FF_SINK, INVALID_CLOCK_DOMAIN, false, var_d);
-    NodeId src  = tg.add_node(TN_Type::FF_SOURCE, INVALID_CLOCK_DOMAIN, false, var_q);
-    NodeId opin = tg.add_node(TN_Type::FF_OPIN, INVALID_CLOCK_DOMAIN, false, var_q);
-    NodeId clock = tg.add_node(TN_Type::FF_CLOCK, INVALID_CLOCK_DOMAIN, false, var_clk); 
+    NodeId ipin = tg.add_node(TN_Type::FF_IPIN, INVALID_CLOCK_DOMAIN, false);
+    NodeId sink = tg.add_node(TN_Type::FF_SINK, INVALID_CLOCK_DOMAIN, false);
+    NodeId src  = tg.add_node(TN_Type::FF_SOURCE, INVALID_CLOCK_DOMAIN, false);
+    NodeId opin = tg.add_node(TN_Type::FF_OPIN, INVALID_CLOCK_DOMAIN, false);
+    NodeId clock = tg.add_node(TN_Type::FF_CLOCK, INVALID_CLOCK_DOMAIN, false); 
 
     //The edges
     tg.add_edge(ipin, sink);
@@ -156,23 +146,18 @@ void BlifTimingGraphBuilder::create_names(TimingGraph& tg, const BlifNames* name
      
     //Build the nodes
     std::vector<NodeId> input_ids;
-    std::vector<BDD> input_vars;
     for(size_t i = 0; i < names->ports.size() - 1; i++) {
         const BlifPort* input_port = names->ports[i];
 
-        BDD var = g_cudd.bddVar();
-        NodeId node_id = tg.add_node(TN_Type::PRIMITIVE_IPIN, INVALID_CLOCK_DOMAIN, false, var);
+        NodeId node_id = tg.add_node(TN_Type::PRIMITIVE_IPIN, INVALID_CLOCK_DOMAIN, false);
         input_ids.push_back(node_id);
-        input_vars.push_back(var);
 
         //Record the mapping from blif netlist to timing graph nodes
         port_to_node_lookup[input_port] = node_id;
     }
 
-    BDD f = create_func_from_names(names, input_vars);
-
     const BlifPort* output_port = names->ports[names->ports.size()-1];
-    NodeId output_node_id = tg.add_node(TN_Type::PRIMITIVE_OPIN, INVALID_CLOCK_DOMAIN, false, f);
+    NodeId output_node_id = tg.add_node(TN_Type::PRIMITIVE_OPIN, INVALID_CLOCK_DOMAIN, false);
 
     //Record the mapping from blif netlist to timing graph nodes
     port_to_node_lookup[output_port] = output_node_id;
@@ -222,11 +207,85 @@ void BlifTimingGraphBuilder::create_net_edges(TimingGraph& tg) {
     tg.levelize();
 
 
-    //Print the updated logic
-    cout << "Orig Logic:" << "\n";
-    for(NodeId id = 0; id < tg.num_nodes(); id++) {
-        cout << "Node " << id << ": " << tg.node_func(id) << "\n";
+}
+void BlifTimingGraphBuilder::annotate_logic_functions(TimingGraph& tg) {
+    //We walk through the graph in a levelized manner propogating logic functions
+    //TODO: parallelize?
+    
+    //Build the inverse lookup form node_id to BlifPort*
+    for(auto& kv : port_to_node_lookup) {
+        node_to_port_lookup[kv.second] = kv.first;
     }
+    
+    //In the levelized graph the primary inputs are the actual variables
+    //so initialize them first
+    for(NodeId pi_id : tg.primary_inputs()) {
+        tg.set_node_func(pi_id, g_cudd.bddVar());
+    }
+
+    for(int i = 1; i < tg.num_levels(); i++) {
+        for(NodeId node_id : tg.level(i)) {
+            TN_Type node_type = tg.node_type(node_id);
+
+            switch(node_type) {
+                case TN_Type::INPAD_OPIN: {         //Fallthrough
+                } case TN_Type::OUTPAD_SINK: {      //Fallthrough
+                } case TN_Type::FF_SINK: {          //Fallthrough
+                } case TN_Type::PRIMITIVE_IPIN: {   //Fallthrough
+                } case TN_Type::OUTPAD_IPIN: {      //Fallthrough
+                } case TN_Type::FF_OPIN: {     
+                    //Single input node with identity logic function
+                    assert(tg.num_node_in_edges(node_id) == 1);
+
+                    EdgeId in_edge = tg.node_in_edge(node_id, 0);
+                    NodeId upstream_node_id = tg.edge_src_node(in_edge);
+
+                    //We just copy the upstream varirable
+                    const BDD& upstream_var = tg.node_func(upstream_node_id);
+                    tg.set_node_func(node_id, upstream_var);
+                    break;
+                } case TN_Type::PRIMITIVE_OPIN: {
+                    //Multiple in put node with non-identity logic function
+
+                    //Collect the upstream variables/functions
+                    //
+                    //NOTE: we are assuming that the input edges are in the same order as the
+                    //      inputs in the netlist description.  This should be true since we
+                    //      build the input edges in netlist order previously
+                    std::vector<BDD> upstream_vars;
+                    for(int edge_idx = 0; edge_idx < tg.num_node_in_edges(node_id); edge_idx++) {
+                        EdgeId in_edge = tg.node_in_edge(node_id, edge_idx);
+                        NodeId upstream_node_id = tg.edge_src_node(in_edge);
+                        const BDD& upstream_var = tg.node_func(upstream_node_id);
+
+                        upstream_vars.push_back(upstream_var);
+                    }
+
+                    /*
+                     *Find the blif logic function
+                     */
+                    //Get the netlist port
+                    auto iter = node_to_port_lookup.find(node_id);
+                    assert(iter != node_to_port_lookup.end());
+                    const BlifPort* port = iter->second;
+
+                    //Trace back to the primitive
+                    assert(port->node_type == BlifNodeType::NAMES); //Currenlty we only support .names primitives
+                    const BlifNames* names = port->names;
+
+                    //Build the logic function
+                    BDD f = create_func_from_names(names, upstream_vars);
+
+                    //Annotate the node
+                    tg.set_node_func(node_id, f);
+                    break;
+                } default: {
+                    assert(0);
+                }
+            }
+        }
+    }
+#if 0
 
     //Now we need to walk through the graph and identify which BDD
     //vars are redundant (i.e. equivalent with others due to nets -- which are identity logic functions)
@@ -358,21 +417,22 @@ void BlifTimingGraphBuilder::create_net_edges(TimingGraph& tg) {
  *    }
  */
 
-    cout << "Updated Logic:" << "\n";
-    for(NodeId id = 0; id < tg.num_nodes(); id++) {
-        cout << "Node " << id << ": " << tg.node_func(id) << "\n";
-    }
-
     /*
      *cout << "Vars to replace: \n";
      *for(auto kv : vars_to_replace) {
      *    cout << "\t" << kv.first << " -> " << kv.second << "\n";
      *}
      */
+#endif
+    
+    cout << "Updated Logic:" << "\n";
+    for(NodeId id = 0; id < tg.num_nodes(); id++) {
+        cout << "Node " << id << ": " << tg.node_func(id) << "\n";
+    }
 
 }
 
-BDD BlifTimingGraphBuilder::create_func_from_names(const BlifNames* names, std::vector<BDD> input_vars) {
+BDD BlifTimingGraphBuilder::create_func_from_names(const BlifNames* names, const std::vector<BDD>& input_vars) {
     //Convert the single-output cover representing the .names logic function
     //into a BDD function of the input variables.
     //

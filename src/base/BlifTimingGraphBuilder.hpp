@@ -14,9 +14,11 @@ class BlifTimingGraphBuilder : public TimingGraphBuilder {
         virtual void create_latch(TimingGraph& tg, const BlifLatch* latch);
         virtual void create_subckt(TimingGraph& tg, const BlifSubckt* subckt);
         virtual void create_net_edges(TimingGraph& tg);
-        BDD create_func_from_names(const BlifNames* names, std::vector<BDD> input_vars);
+        virtual void annotate_logic_functions(TimingGraph& tg);
+        BDD create_func_from_names(const BlifNames* names, const std::vector<BDD>& input_vars);
 
     protected:
         const BlifData* blif_data_;
         std::unordered_map<const BlifPort*,NodeId> port_to_node_lookup;
+        std::unordered_map<NodeId,const BlifPort*> node_to_port_lookup;
 };

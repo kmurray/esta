@@ -23,7 +23,7 @@ TE_Type TimingGraph::edge_type(const EdgeId id) const {
     return TE_Type::UNKOWN;
 }
 
-NodeId TimingGraph::add_node(const TN_Type type, const DomainId clock_domain, const bool is_clk_src, const BDD& f) {
+NodeId TimingGraph::add_node(const TN_Type type, const DomainId clock_domain, const bool is_clk_src) {
     //Type
     node_types_.push_back(type);
 
@@ -33,7 +33,10 @@ NodeId TimingGraph::add_node(const TN_Type type, const DomainId clock_domain, co
     //Clock source
     node_is_clock_source_.push_back(is_clk_src);
 
-    node_funcs_.push_back(f);
+    //Ensure there is space to store the logic function
+    if(node_funcs_.size() != (size_t) num_nodes()) {
+        node_funcs_.resize(num_nodes());
+    }
 
     //Edges
     node_out_edges_.push_back(std::vector<EdgeId>());

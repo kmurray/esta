@@ -204,7 +204,7 @@ class TimingGraph {
         ///\param is_clk_src Identifies if the node to be added is the source of a clock
         ///\param f logic function/variable representing this node
         ///\warning Graph will likely need to be re-levelized after modification
-        NodeId add_node(const TN_Type type, const DomainId clock_domain, const bool is_clk_src, const BDD& f);
+        NodeId add_node(const TN_Type type, const DomainId clock_domain, const bool is_clk_src);
 
         ///Adds an edge to the timing graph
         ///\param src_node The node id of the edge's driving node
@@ -212,6 +212,11 @@ class TimingGraph {
         ///\pre The src_node and sink_node must have been already added to the graph
         ///\warning Graph will likely need to be re-levelized after modification
         EdgeId add_edge(const NodeId src_node, const NodeId sink_node);
+
+        ///Sets the logic function for a node in the graph
+        ///\param node_id The id of the node to update
+        ///\param f The logic function
+        void set_node_func(const NodeId node_id, const BDD& f) { node_funcs_[node_id] = f; }
 
         /*
          * Graph-level modification operations
