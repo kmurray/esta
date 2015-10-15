@@ -1,9 +1,57 @@
 #pragma once
 
 #include <vector>
+#include <unordered_map>
+#include <map>
 #include <iosfwd>
 
 #include "timing_graph_fwd.hpp"
+
+#include "cuddObj.hh"
+
+/**
+ * Potential types for nodes in the timing graph
+ */
+enum class TN_Type {
+	INPAD_SOURCE, //Driver of an input I/O pad
+	INPAD_OPIN, //Output pin of an input I/O pad
+	OUTPAD_IPIN, //Input pin of an output I/O pad
+	OUTPAD_SINK, //Sink of an output I/O pad
+	PRIMITIVE_IPIN, //Input pin to a primitive (e.g. LUT)
+	PRIMITIVE_OPIN, //Output pin from a primitive (e.g. LUT)
+	FF_IPIN, //Input pin to a flip-flop - goes to FF_SINK
+	FF_OPIN, //Output pin from a flip-flop - comes from FF_SOURCE
+	FF_SINK, //Sink (D) pin of flip-flop
+	FF_SOURCE, //Source (Q) pin of flip-flop
+	FF_CLOCK, //Clock pin of flip-flop
+    CLOCK_SOURCE, //A clock generator such as a PLL
+    CLOCK_OPIN, //Output pin from an on-chip clock source - comes from CLOCK_SOURCE
+	CONSTANT_GEN_SOURCE, //Source of a constant logic 1 or 0
+    UNKOWN //Unrecognized type, if encountered this is almost certainly an error
+};
+inline bool is_ipin(const TN_Type t) { return (t == TN_Type::OUTPAD_IPIN || t == TN_Type::PRIMITIVE_IPIN || t == TN_Type::FF_IPIN); }
+inline bool is_opin(const TN_Type t) { return (t == TN_Type::INPAD_OPIN || t == TN_Type::PRIMITIVE_OPIN || t == TN_Type::FF_OPIN || t == TN_Type::CLOCK_OPIN); }
+
+//Stream operators for TN_Type
+std::ostream& operator<<(std::ostream& os, const TN_Type type);
+std::istream& operator>>(std::istream& os, TN_Type& type);
+
+/**
+ * Potential types for edges in the timing graph
+ */
+enum class TE_Type {
+    INPAD_INTERNAL, //INPAD_SOURCE -> INPAD_OPIN
+    OUTPAD_INTERNAL, //OUTPAD_IPIN -> OUTPAD_SINK
+    PRIMITIVE_INTERNAL, //PRIMITIVE_IPIN -> PRIMITIVE_OPIN
+    FF_IPIN_SINK, //FF_IPIN -> FF_SINK
+    FF_SOURCE_OPIN, //FF_SOURCE -> FF_OPIN
+    FF_CLOCK_SINK, //FF_CLOCK -> FF_SINK
+    FF_CLOCK_SOURCE, //FF_CLOCK -> FF_SOURCE
+    CLOCK_SOURCE_INTERNAL, //CLOCK_SOURCE -> CLOCK_OPIN
+    CONSTANT, //CONST_GEN_SOURCE -> *
+    NET, // *_OPIN -> *_IPIN
+    UNKOWN //Unrecognized, if encountered almost certainly an error
+};
 
 /**
  * The 'TimingGraph' class represents a timing graph.
@@ -76,6 +124,11 @@ class TimingGraph {
         ///\returns Whether the is the source of a clock
         bool node_is_clock_source(const NodeId id) const { return node_is_clock_source_[id]; }
 
+        ///\param id The id of a node
+        ///\returns The logic function/variable prepresenting this node
+        BDD& node_func(const NodeId id) { return node_funcs_[id]; }
+        const BDD& node_func(const NodeId id) const { return node_funcs_[id]; }
+
         /*
          * Node edge accessors
          */
@@ -107,6 +160,8 @@ class TimingGraph {
         ///\param id The id of an edge
         ///\returns The node id of the edge's source (driver)
         NodeId edge_src_node(const EdgeId id) const { return edge_src_nodes_[id]; }
+
+        TE_Type edge_type(const EdgeId id) const;
 
         /*
          * Graph accessors
@@ -147,8 +202,9 @@ class TimingGraph {
         ///\param type The type of the node to be added
         ///\param clock_domain The clock domain id of the node to be added
         ///\param is_clk_src Identifies if the node to be added is the source of a clock
+        ///\param f logic function/variable representing this node
         ///\warning Graph will likely need to be re-levelized after modification
-        NodeId add_node(const TN_Type type, const DomainId clock_domain, const bool is_clk_src);
+        NodeId add_node(const TN_Type type, const DomainId clock_domain, const bool is_clk_src, const BDD& f);
 
         ///Adds an edge to the timing graph
         ///\param src_node The node id of the edge's driving node
@@ -195,6 +251,7 @@ class TimingGraph {
         std::vector<std::vector<EdgeId>> node_out_edges_; //Out going edge IDs for node 'node_id' [0..num_nodes()-1][0..num_node_out_edges(node_id)-1]
         std::vector<std::vector<EdgeId>> node_in_edges_; //Incomiing edge IDs for node 'node_id' [0..num_nodes()-1][0..num_node_in_edges(node_id)-1]
         std::vector<bool> node_is_clock_source_; //Indicates if a node is the start of clock [0..num_nodes()-1]
+        std::vector<BDD> node_funcs_;
 
         //Edge data
         std::vector<NodeId> edge_sink_nodes_; //Sink node for each edge [0..num_edges()-1]
@@ -205,29 +262,5 @@ class TimingGraph {
         std::vector<NodeId> primary_outputs_; //Primary output nodes of the timing graph.
                                               //NOTE: we track this separetely (unlike Primary Inputs) since these are
                                               //      scattered through the graph and do not exist on a single level
-};
 
-/**
- * Potential types for nodes in the timing graph
- */
-enum class TN_Type {
-	INPAD_SOURCE, //Driver of an input I/O pad
-	INPAD_OPIN, //Output pin of an input I/O pad
-	OUTPAD_IPIN, //Input pin of an output I/O pad
-	OUTPAD_SINK, //Sink of an output I/O pad
-	PRIMITIVE_IPIN, //Input pin to a primitive (e.g. LUT)
-	PRIMITIVE_OPIN, //Output pin from a primitive (e.g. LUT)
-	FF_IPIN, //Input pin to a flip-flop - goes to FF_SINK
-	FF_OPIN, //Output pin from a flip-flop - comes from FF_SOURCE
-	FF_SINK, //Sink (D) pin of flip-flop
-	FF_SOURCE, //Source (Q) pin of flip-flop
-	FF_CLOCK, //Clock pin of flip-flop
-    CLOCK_SOURCE, //A clock generator such as a PLL
-    CLOCK_OPIN, //Output pin from an on-chip clock source - comes from CLOCK_SOURCE
-	CONSTANT_GEN_SOURCE, //Source of a constant logic 1 or 0
-    UNKOWN //Unrecognized type, if encountered this is almost certainly an error
 };
-
-//Stream operators for TN_Type
-std::ostream& operator<<(std::ostream& os, const TN_Type type);
-std::istream& operator>>(std::istream& os, TN_Type& type);

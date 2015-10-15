@@ -2,9 +2,7 @@
 /*
  *
  */
-
-#include "cuddObj.hh"
-extern Cudd g_cudd;
+#include <iostream>
 
 enum class TransitionType {
     RISE,
@@ -12,6 +10,7 @@ enum class TransitionType {
     HIGH,
     LOW
 };
+std::ostream& operator<<(std::ostream& os, const TransitionType& trans);
 
 class ExtTimingTag {
     public:
@@ -24,7 +23,7 @@ class ExtTimingTag {
         ///\param req_time_val The tagged required time
         ///\param domain The clock domain the arrival/required times were launched from
         ///\param node The original launch node's id (i.e. primary input that originally launched this tag)
-        ExtTimingTag(const Time& arr_time_val, const Time& req_time_val, DomainId domain, NodeId node, TransitionType trans, const BDD& f);
+        ExtTimingTag(const Time& arr_time_val, const Time& req_time_val, DomainId domain, NodeId node, TransitionType trans);
 
         ///\param arr_time_val The tagged arrival time
         ///\param req_time_val The tagged required time
@@ -49,9 +48,6 @@ class ExtTimingTag {
         ///\returns This tag's associated transition type
         TransitionType trans_type() const { return trans_type_; }
 
-        ///\returns This tag's associated logic function
-        const BDD& func() const { return func_; }
-
         ///\returns The next ExtTimingTag in the current set of ExtTimingTags (i.e. the next tag at a specific nonde in the TimingGraph)
         ExtTimingTag* next() const { return next_; }
 
@@ -72,9 +68,6 @@ class ExtTimingTag {
 
         ///\param new_trans The new value to set as the tag's transition type
         void set_trans_type(const TransitionType& new_trans_type) { trans_type_ = new_trans_type; }
-
-        ///\param new_func The new value to set as the tag's logic function
-        void set_func(const BDD& new_func) { func_ = new_func; }
 
         ///\param new_next The new timing tag to insert in the current set of ExtTimingTags
         void set_next(ExtTimingTag* new_next) { next_ = new_next; }
@@ -130,9 +123,9 @@ class ExtTimingTag {
         DomainId clock_domain_; //Clock domain for arr/req times
         NodeId launch_node_; //Node which launched this arrival time
         TransitionType trans_type_;
-        BDD func_; //The logic function
-
 };
+
+std::ostream& operator<<(std::ostream& os, const ExtTimingTag& tag);
 
 inline ExtTimingTag::ExtTimingTag()
     : next_(nullptr)
@@ -141,17 +134,15 @@ inline ExtTimingTag::ExtTimingTag()
     , clock_domain_(INVALID_CLOCK_DOMAIN)
     , launch_node_(-1)
     , trans_type_(TransitionType::RISE)
-    , func_(g_cudd.bddOne())
     {}
 
-inline ExtTimingTag::ExtTimingTag(const Time& arr_time_val, const Time& req_time_val, DomainId domain, NodeId node, TransitionType trans, const BDD& f)
+inline ExtTimingTag::ExtTimingTag(const Time& arr_time_val, const Time& req_time_val, DomainId domain, NodeId node, TransitionType trans)
     : next_(nullptr)
     , arr_time_(arr_time_val)
     , req_time_(req_time_val)
     , clock_domain_(domain)
     , launch_node_(node)
     , trans_type_(trans)
-    , func_(f)
     {}
 
 inline ExtTimingTag::ExtTimingTag(const Time& arr_time_val, const Time& req_time_val, const ExtTimingTag& base_tag)
@@ -161,7 +152,6 @@ inline ExtTimingTag::ExtTimingTag(const Time& arr_time_val, const Time& req_time
     , clock_domain_(base_tag.clock_domain())
     , launch_node_(base_tag.launch_node())
     , trans_type_(base_tag.trans_type())
-    , func_(base_tag.func())
     {}
 
 
@@ -171,7 +161,6 @@ inline void ExtTimingTag::update_arr(const Time& new_arr_time, const ExtTimingTa
     set_arr_time(new_arr_time);
     set_launch_node(base_tag.launch_node());
     set_trans_type(base_tag.trans_type());
-    set_func(base_tag.func());
 }
 
 inline void ExtTimingTag::update_req(const Time& new_req_time, const ExtTimingTag& base_tag) {
@@ -218,4 +207,22 @@ inline void ExtTimingTag::max_req(const Time& new_req_time, const ExtTimingTag& 
 }
 inline bool ExtTimingTag::matches(const ExtTimingTag& other) const {
     return (clock_domain() == other.clock_domain()) && (trans_type() == other.trans_type());    
+}
+
+std::ostream& operator<<(std::ostream& os, const TransitionType& trans) {
+    if(trans == TransitionType::RISE) os << "RISE";
+    else if (trans == TransitionType::FALL) os << "FALL";
+    else if (trans == TransitionType::HIGH) os << "HIGH";
+    else if (trans == TransitionType::LOW) os << "LOW";
+    else assert(0);
+    return os;
+}
+
+std::ostream& operator<<(std::ostream& os, const ExtTimingTag& tag) {
+    os << "Domain: " << tag.clock_domain();
+    os << " Launch Node: " << tag.launch_node();
+    os << " Trans: " << tag.trans_type();
+    os << " Arr: " << tag.arr_time().value();
+    os << " Req: " << tag.req_time().value();
+    return os;
 }

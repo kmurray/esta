@@ -4,7 +4,26 @@
 
 #include "TimingGraph.hpp"
 
-NodeId TimingGraph::add_node(const TN_Type type, const DomainId clock_domain, const bool is_clk_src) {
+TE_Type TimingGraph::edge_type(const EdgeId id) const {
+    //TODO: faster as a LUT?
+    TN_Type src = node_type(edge_src_node(id));
+    TN_Type sink = node_type(edge_sink_node(id));
+
+    if(is_opin(src) && is_ipin(sink)) return TE_Type::NET;
+    if(src == TN_Type::PRIMITIVE_IPIN && sink == TN_Type::PRIMITIVE_OPIN) return TE_Type::PRIMITIVE_INTERNAL;
+    if(src == TN_Type::FF_IPIN && sink == TN_Type::FF_SINK) return TE_Type::FF_IPIN_SINK;
+    if(src == TN_Type::FF_SOURCE && sink == TN_Type::FF_OPIN) return TE_Type::FF_SOURCE_OPIN;
+    if(src == TN_Type::FF_CLOCK && sink == TN_Type::FF_SINK) return TE_Type::FF_CLOCK_SINK;
+    if(src == TN_Type::FF_CLOCK && sink == TN_Type::FF_SOURCE) return TE_Type::FF_CLOCK_SOURCE;
+    if(src == TN_Type::INPAD_SOURCE && sink == TN_Type::INPAD_OPIN) return TE_Type::INPAD_INTERNAL;
+    if(src == TN_Type::OUTPAD_IPIN && sink == TN_Type::OUTPAD_SINK) return TE_Type::OUTPAD_INTERNAL;
+    if(src == TN_Type::CLOCK_SOURCE && sink == TN_Type::CLOCK_OPIN) return TE_Type::CLOCK_SOURCE_INTERNAL;
+    if(src == TN_Type::CONSTANT_GEN_SOURCE) return TE_Type::CONSTANT;
+
+    return TE_Type::UNKOWN;
+}
+
+NodeId TimingGraph::add_node(const TN_Type type, const DomainId clock_domain, const bool is_clk_src, const BDD& f) {
     //Type
     node_types_.push_back(type);
 
@@ -13,6 +32,8 @@ NodeId TimingGraph::add_node(const TN_Type type, const DomainId clock_domain, co
 
     //Clock source
     node_is_clock_source_.push_back(is_clk_src);
+
+    node_funcs_.push_back(f);
 
     //Edges
     node_out_edges_.push_back(std::vector<EdgeId>());

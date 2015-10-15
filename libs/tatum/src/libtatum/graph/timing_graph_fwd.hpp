@@ -8,6 +8,7 @@ class TimingGraph;
 
 //Potential node types in the timing graph
 enum class TN_Type;
+enum class TE_Type;
 
 //Various IDs used by the timing graph
 typedef int NodeId;

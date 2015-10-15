@@ -15,6 +15,7 @@
 #include "PreCalcDelayCalculator.hpp"
 
 #include "ExtTimingTags.hpp"
+#include "ExtSetupAnalysisMode.hpp"
 
 using std::cout;
 using std::cerr;
@@ -64,6 +65,12 @@ int main(int argc, char** argv) {
         print_timing_graph(timing_graph);
 
         cout << "\n";
+        cout << "TimingGraph logic functions: " << "\n";
+        for(NodeId id = 0; id < timing_graph.num_nodes(); id++) {
+            cout << "Node " << id << ": " << timing_graph.node_func(id) << "\n";
+        }
+
+        cout << "\n";
         cout << "TimingGraph Levelization: " << "\n";
         print_levelization(timing_graph);
 
@@ -73,7 +80,7 @@ int main(int argc, char** argv) {
             timing_constraints.add_input_constraint(id, 0.);
         }
 
-        using AnalysisType = SetupAnalysisMode<BaseAnalysisMode,ExtTimingTags>;
+        using AnalysisType = ExtSetupAnalysisMode<BaseAnalysisMode,ExtTimingTags>;
 
         using DelayCalcType = PreCalcDelayCalculator;
 
@@ -91,7 +98,8 @@ int main(int argc, char** argv) {
         for(NodeId i = 0; i < timing_graph.num_nodes(); i++) {
             cout << "Node: " << i << "\n";
             for(auto tag : analyzer->setup_data_tags(i)) {
-                 cout << "\t ArrTime: " << tag.arr_time().value() << "\n";
+                 //cout << "\t ArrTime: " << tag.arr_time().value() << "\n";
+                 cout << "\t" << tag << "\n";
             }
         }
 
