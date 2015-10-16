@@ -47,7 +47,7 @@ void SerialTimingAnalyzer<AnalysisType,DelayCalcType>::pre_traversal() {
      *   - Initialize arrival times on primary inputs
      */
     for(NodeId node_id : tg_.primary_inputs()) {
-        AnalysisType::pre_traverse_node(tg_, tc_, node_id);
+        AnalysisType::pre_traverse_node(tg_, tc_, dc_, node_id);
     }
 }
 
@@ -93,10 +93,10 @@ void SerialTimingAnalyzer<AnalysisType,DelayCalcType>::forward_traverse_node(con
     for(int edge_idx = 0; edge_idx < tg_.num_node_in_edges(node_id); edge_idx++) {
         EdgeId edge_id = tg_.node_in_edge(node_id, edge_idx);
 
-        AnalysisType::forward_traverse_edge(tg_, dc_, node_id, edge_id);
+        AnalysisType::forward_traverse_edge(tg_, tc_, dc_, node_id, edge_id);
     }
 
-    AnalysisType::forward_traverse_finalize_node(tg_, tc_, node_id);
+    AnalysisType::forward_traverse_finalize_node(tg_, tc_, dc_, node_id);
 }
 
 template<class AnalysisType, class DelayCalcType>
@@ -115,9 +115,9 @@ void SerialTimingAnalyzer<AnalysisType,DelayCalcType>::backward_traverse_node(co
     for(int edge_idx = 0; edge_idx < tg_.num_node_out_edges(node_id); edge_idx++) {
         EdgeId edge_id = tg_.node_out_edge(node_id, edge_idx);
 
-        AnalysisType::backward_traverse_edge(tg_, dc_, node_id, edge_id);
+        AnalysisType::backward_traverse_edge(tg_, tc_, dc_, node_id, edge_id);
     }
 
-    AnalysisType::backward_traverse_finalize_node(tg_, tc_, node_id);
+    AnalysisType::backward_traverse_finalize_node(tg_, tc_, dc_, node_id);
 }
 

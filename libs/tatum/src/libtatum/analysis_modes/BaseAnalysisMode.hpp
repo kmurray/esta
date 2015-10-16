@@ -30,7 +30,8 @@ class BaseAnalysisMode {
         ///\param tg The timing graph to be analyzed
         ///\param tc The timing constraints to apply
         ///\param node_id The node to operate on
-        void pre_traverse_node(const TimingGraph& tg, const TimingConstraints& tc, const NodeId node_id) {}
+        template<class DelayCalc>
+        void pre_traverse_node(const TimingGraph& tg, const TimingConstraints& tc, const DelayCalc& dc, const NodeId node_id) {}
 
         ///Operations performed whenever an edge is traversed in the forward direction
         ///\param tg The timing graph to be analyzed
@@ -38,13 +39,14 @@ class BaseAnalysisMode {
         ///\param node_id The node to operate on
         ///\param edge_id The edge to operate on
         template<class DelayCalc>
-        void forward_traverse_edge(const TimingGraph& tg, const DelayCalc& dc, const NodeId node_id, const EdgeId edge_id) {}
+        void forward_traverse_edge(const TimingGraph& tg, const TimingConstraints& tc, const DelayCalc& dc, const NodeId node_id, const EdgeId edge_id) {}
 
         ///Operations performed once a nodes incoming edges (on a forward traversal) have been traversed
         ///\param tg The timing graph to be analyzed
         ///\param tc The timing constraints to apply
         ///\param node_id The node to operate on
-        void forward_traverse_finalize_node(const TimingGraph& tg, const TimingConstraints& tc, const NodeId node_id) {}
+        template<class DelayCalc>
+        void forward_traverse_finalize_node(const TimingGraph& tg, const TimingConstraints& tc, const DelayCalc& dc, const NodeId node_id) {}
 
         ///Operations performed whenever an edge is traversed in the backward direction
         ///\param tg The timing graph to be analyzed
@@ -52,12 +54,13 @@ class BaseAnalysisMode {
         ///\param node_id The node to operate on
         ///\param edge_id The edge to operate on
         template<class DelayCalc>
-        void backward_traverse_edge(const TimingGraph& tg, const DelayCalc& dc, const NodeId node_id, const EdgeId edge_id) {}
+        void backward_traverse_edge(const TimingGraph& tg, const TimingConstraints& tc, const DelayCalc& dc, const NodeId node_id, const EdgeId edge_id) {}
 
         ///Operations performed once a nodes outgoing edges (on a backward traversal) have been traversed
         ///\param tg The timing graph to be analyzed
         ///\param tc The timing constraints to apply
         ///\param node_id The node to operate on
-        void backward_traverse_finalize_node(const TimingGraph& tg, const TimingConstraints& tc, const NodeId node_id) {}
+        template<class DelayCalc>
+        void backward_traverse_finalize_node(const TimingGraph& tg, const TimingConstraints& tc, const DelayCalc& dc, const NodeId node_id) {}
 };
 
