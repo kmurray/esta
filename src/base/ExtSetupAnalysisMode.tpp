@@ -140,7 +140,7 @@ void ExtSetupAnalysisMode<BaseAnalysisMode,Tags>::forward_traverse_finalize_node
             EdgeId edge_id = tg.node_in_edge(node_id, edge_idx);
             const Tag& src_tag = src_tags[edge_idx];
 
-            Time edge_delay = dc.max_edge_delay(tg, edge_id, src_tag.trans_type());
+            Time edge_delay = dc.max_edge_delay(tg, edge_id, output_transition);
 
             Time new_arr = src_tag.arr_time() + edge_delay;
 
