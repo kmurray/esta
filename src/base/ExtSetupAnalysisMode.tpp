@@ -107,26 +107,11 @@ void ExtSetupAnalysisMode<BaseAnalysisMode,Tags>::forward_traverse_finalize_node
     std::vector<std::vector<Tag>> src_tag_perms = gen_tag_permutations(src_tag_sets);
 
     const BDD& node_func = tg.node_func(node_id);
-    std::cout << "Evaluating Node: " << node_id << " (" << node_func << ")\n";
 
-    int iscenario = 0;
     for(const auto& src_tags : src_tag_perms) {
-
-        //Print case
-        std::cout << "\tScenario #" << iscenario << "\n";
-        std::cout << "\t\tinput: {";
-        for(int edge_idx = 0; edge_idx < tg.num_node_in_edges(node_id); edge_idx++) {
-            const auto& tag = src_tags[edge_idx];
-            std::cout << tag.trans_type();
-            if(edge_idx < tg.num_node_in_edges(node_id) - 1) {
-                std::cout << ", ";
-            }
-        }
-        std::cout << "}\n";
 
         //Calculate the output transition type
         TransitionType output_transition = evaluate_transition(src_tags, node_func);
-        std::cout << "\t\toutput: " << output_transition << "\n";
 
         //We get the associated output transition when all the transitions in each tag
         //of this input set occur -- that is when all the input switch functions evaluate
@@ -153,19 +138,32 @@ void ExtSetupAnalysisMode<BaseAnalysisMode,Tags>::forward_traverse_finalize_node
             assert(scenario_tag.trans_type() == output_transition);
         }
         scenario_tag.set_switch_func(scenario_switch_func);
-        std::cout << "\t\tScenario Func: " << scenario_switch_func << " #SAT: " << scenario_switch_func.CountMinterm(2*tg.primary_inputs().size()) << "\n";
         
         //Now we need to merge the scenario into the output tags
         sink_tags.max_arr(scenario_tag); 
 
+#ifdef TAG_DEBUG
+        std::cout << "Evaluating Node: " << node_id << " (" << node_func << ")\n";
+        std::cout << "\tCase\n";
+        std::cout << "\t\tinput: {";
+        for(int edge_idx = 0; edge_idx < tg.num_node_in_edges(node_id); edge_idx++) {
+            const auto& tag = src_tags[edge_idx];
+            std::cout << tag.trans_type();
+            if(edge_idx < tg.num_node_in_edges(node_id) - 1) {
+                std::cout << ", ";
+            }
+        }
+        std::cout << "}\n";
+
+        std::cout << "\t\toutput: " << output_transition << "\n";
+        std::cout << "\t\tScenario Func: " << scenario_switch_func << " #SAT: " << scenario_switch_func.CountMinterm(2*tg.primary_inputs().size()) << "\n";
         auto pred = [output_transition](const Tag& tag) {
             return tag.trans_type() == output_transition;
         };
         auto iter = std::find_if(sink_tags.begin(), sink_tags.end(), pred);
         assert(iter != sink_tags.end());
         std::cout << "\t\tSink " << iter->trans_type() << " Func: " << iter->switch_func() << " #SAT: " << iter->switch_func().CountMinterm(2*tg.primary_inputs().size()) << "\n";
-
-        iscenario++;
+#endif
     }
 }
 
