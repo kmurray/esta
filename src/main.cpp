@@ -13,6 +13,7 @@
 #include "sta_util.hpp"
 #include "SerialTimingAnalyzer.hpp"
 #include "PreCalcDelayCalculator.hpp"
+#include "PreCalcTransDelayCalc.hpp"
 
 #include "ExtTimingTags.hpp"
 #include "ExtSetupAnalysisMode.hpp"
@@ -82,10 +83,20 @@ int main(int argc, char** argv) {
 
         using AnalysisType = ExtSetupAnalysisMode<BaseAnalysisMode,ExtTimingTags>;
 
-        using DelayCalcType = PreCalcDelayCalculator;
+        using DelayCalcType = PreCalcTransDelayCalculator;
 
         //The actual delay calculator
-        auto delay_calc = PreCalcDelayCalculator(std::vector<float>(timing_graph.num_edges(), 1.));
+        std::map<TransitionType,std::vector<float>> delays;
+        delays[TransitionType::RISE] = std::vector<float>(timing_graph.num_edges(), 1.);
+        delays[TransitionType::FALL] = std::vector<float>(timing_graph.num_edges(), 1.);
+        delays[TransitionType::HIGH] = std::vector<float>(timing_graph.num_edges(), 0.1);
+        delays[TransitionType::LOW] = std::vector<float>(timing_graph.num_edges(), 0.1);
+        /*
+         *delays[TransitionType::SWITCH] = std::vector<float>(timing_graph.num_edges(), 1.);
+         *delays[TransitionType::STEADY] = std::vector<float>(timing_graph.num_edges(), 0.1);
+         */
+
+        auto delay_calc = DelayCalcType(delays);
 
         using AnalyzerType = SerialTimingAnalyzer<AnalysisType,DelayCalcType>;
 
