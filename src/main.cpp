@@ -3,6 +3,7 @@
 #include <string>
 #include <cassert>
 #include <cstdio>
+#include <cmath>
 
 #include "bdd.hpp"
 
@@ -110,7 +111,7 @@ int main(int argc, char** argv) {
         for(auto& tag : analyzer->setup_data_tags(i)) {
              //cout << "\t ArrTime: " << tag.arr_time().value() << "\n";
             double sat_cnt = tag.switch_func().CountMinterm(2*timing_graph.primary_inputs().size());
-            cout << "\t" << tag << ", #SAT: " << sat_cnt << "\n";
+            cout << "\t" << tag << ", #SAT: " << sat_cnt << " (" << sat_cnt / pow(2, 2*timing_graph.primary_inputs().size()) << ")\n";
         }
     }
 
