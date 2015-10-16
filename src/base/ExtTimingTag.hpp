@@ -3,8 +3,20 @@
  *
  */
 #include <iostream>
+#include "bdd.hpp"
 
-extern Cudd g_cudd;
+/*
+ * These defines control how a tag is said to 'match' another
+ * tag.
+ *
+ * For example, defining TAG_MATCH_TRANSITION will require that
+ * the transition type be the same in two matching tags.
+ *
+ * For more detail see ExtTimingTag::matches()
+ */
+#define TAG_MATCH_TRANSITION
+#define TAG_MATCH_DELAY
+/*#define TAG_MATCH_SWITCH_FUNC*/
 
 enum class TransitionType {
     RISE,
@@ -225,7 +237,23 @@ inline void ExtTimingTag::max_arr(const Time new_arr, const ExtTimingTag& base_t
  *}
  */
 inline bool ExtTimingTag::matches(const ExtTimingTag& other) const {
-    return (clock_domain() == other.clock_domain()) && (trans_type() == other.trans_type());    
+    //If a tag 'matches' it is typically collapsed into the matching tag.
+
+    bool match = (clock_domain() == other.clock_domain());
+
+#ifdef TAG_MATCH_TRANSITION
+    match &= (trans_type() == other.trans_type());    
+#endif
+
+#ifdef TAG_MATCH_DELAY
+    match &= (arr_time() == other.arr_time());    
+#endif
+
+#ifdef TAG_MATCH_SWITCH_FUNC
+    match &= (switch_func() == other.switch_func());
+#endif
+
+    return match;
 }
 
 std::ostream& operator<<(std::ostream& os, const TransitionType& trans) {
