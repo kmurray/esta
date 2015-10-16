@@ -31,7 +31,7 @@ class ExtTimingTags {
          */
         ///Adds a TimingTag to the current set provided it has a valid clock domain
         ///\param src_tag The source tag who is inserted. Note that the src_tag is copied when inserted (the original is unchanged)
-        void add_tag(const Tag& src_tag);
+        iterator add_tag(const Tag& src_tag);
 
         /*
          * Setup operations
@@ -40,13 +40,13 @@ class ExtTimingTags {
         ///\param new_time The new arrival time to compare against
         ///\param base_tag The associated metat-data for new_time
         ///\remark Finds (or creates) the tag with the same clock domain as base_tag and update the arrival time if new_time is larger
-        void max_arr(const Time& new_time, const Tag& base_tag);
+        void max_arr(const Tag& base_tag);
 
         ///Updates the required time of this set of tags to be the minimum.
         ///\param new_time The new arrival time to compare against
         ///\param base_tag The associated metat-data for new_time
         ///\remark Finds (or creates) the tag with the same clock domain as base_tag and update the required time if new_time is smaller
-        void min_req(const Time& new_time, const Tag& base_tag);
+        //void min_req(const Time& new_time, const Tag& base_tag);
 
         /*
          * Hold operations
@@ -55,13 +55,13 @@ class ExtTimingTags {
         ///\param new_time The new arrival time to compare against
         ///\param base_tag The associated metat-data for new_time
         ///\remark Finds (or creates) the tag with the same clock domain as base_tag and update the arrival time if new_time is smaller
-        void min_arr(const Time& new_time, const Tag& base_tag);
+        //void min_arr(const Time& new_time, const Tag& base_tag);
 
         ///Updates the required time of this set of tags to be the maximum.
         ///\param new_time The new arrival time to compare against
         ///\param base_tag The associated metat-data for new_time
         ///\remark Finds (or creates) the tag with the same clock domain as base_tag and update the required time if new_time is larger
-        void max_req(const Time& new_time, const Tag& base_tag);
+        //void max_req(const Time& new_time, const Tag& base_tag);
 
         ///Clears the tags in the current set
         void clear();
@@ -85,18 +85,23 @@ class ExtTimingTags {
  */
 
 //Modifiers
-inline void ExtTimingTags::add_tag(const Tag& tag) {
+inline ExtTimingTags::iterator ExtTimingTags::add_tag(const Tag& tag) {
     ASSERT_MSG(tag.next() == nullptr, "Attempted to add new timing tag which is already part of a Linked List");
 
     //Don't add invalid clock domains
     //Some sources like constant generators may yeild illegal clock domains
     if(tag.clock_domain() == INVALID_CLOCK_DOMAIN) {
-        return;
+        return end();;
     }
+
+    Tag* new_tag = nullptr;
 
     if(num_tags_ < (int) head_tags_.max_size()) {
         //Store it as a head tag
         head_tags_[num_tags_] = tag;
+
+        new_tag = &head_tags_[num_tags_];
+
         if(num_tags_ != 0) {
             //Link from previous if it exists
             head_tags_[num_tags_-1].set_next(&head_tags_[num_tags_]);
@@ -104,7 +109,7 @@ inline void ExtTimingTags::add_tag(const Tag& tag) {
     } else {
         //Store it in a linked list from head tags
 
-        auto* new_tag = new ExtTimingTags::Tag(tag);
+        new_tag = new ExtTimingTags::Tag(tag);
 
         //Insert one-after the last head in O(1) time
         //Note that we don't maintain the tags in any order since we expect a relatively small number of tags
@@ -113,54 +118,62 @@ inline void ExtTimingTags::add_tag(const Tag& tag) {
         head_tags_[head_tags_.max_size()-1].set_next(new_tag); //Tag is now in the list
         new_tag->set_next(next_tag); //Attach tail of the list
     }
+    assert(new_tag != nullptr);
 
     //Tag has been added
     num_tags_++;
+
+    return iterator(new_tag);
 }
 
-inline void ExtTimingTags::max_arr(const Time& new_time, const Tag& base_tag) {
-    auto iter = find_matching_tag(base_tag);
+inline void ExtTimingTags::max_arr(const Tag& tag) {
+    auto iter = find_matching_tag(tag);
     if(iter == end()) {
-        //First time we've seen this domain
-        auto tag = ExtTimingTags::Tag(new_time, Time(NAN), base_tag);
-        add_tag(tag);
+        //First time we've seen this tag
+        iter = add_tag(tag);
     } else {
-        iter->max_arr(new_time, base_tag);
+        iter->max_arr(tag.arr_time(), tag);
     }
+
+    assert(iter != end());
+
+    iter->set_switch_func(iter->switch_func() | tag.switch_func());
 }
 
-inline void ExtTimingTags::min_req(const Time& new_time, const Tag& base_tag) {
-    auto iter = find_matching_tag(base_tag);
-    if(iter == end()) {
-        //First time we've seen this domain
-        auto tag = ExtTimingTags::Tag(Time(NAN), new_time, base_tag);
-        add_tag(tag);
-    } else {
-        iter->min_req(new_time, base_tag);
-    }
-}
-
-inline void ExtTimingTags::min_arr(const Time& new_time, const Tag& base_tag) {
-    auto iter = find_matching_tag(base_tag);
-    if(iter == end()) {
-        //First time we've seen this domain
-        auto tag = ExtTimingTags::Tag(new_time, Time(NAN), base_tag);
-        add_tag(tag);
-    } else {
-        iter->min_arr(new_time, base_tag);
-    }
-}
-
-inline void ExtTimingTags::max_req(const Time& new_time, const Tag& base_tag) {
-    auto iter = find_matching_tag(base_tag);
-    if(iter == end()) {
-        //First time we've seen this domain
-        auto tag = ExtTimingTags::Tag(new_time, Time(NAN), base_tag);
-        add_tag(tag);
-    } else {
-        iter->max_req(new_time, base_tag);
-    }
-}
+/*
+ *inline void ExtTimingTags::min_req(const Time& new_time, const Tag& base_tag) {
+ *    auto iter = find_matching_tag(base_tag);
+ *    if(iter == end()) {
+ *        //First time we've seen this domain
+ *        auto tag = ExtTimingTags::Tag(Time(NAN), new_time, base_tag);
+ *        add_tag(tag);
+ *    } else {
+ *        iter->min_req(new_time, base_tag);
+ *    }
+ *}
+ *
+ *inline void ExtTimingTags::min_arr(const Time& new_time, const Tag& base_tag) {
+ *    auto iter = find_matching_tag(base_tag);
+ *    if(iter == end()) {
+ *        //First time we've seen this domain
+ *        auto tag = ExtTimingTags::Tag(new_time, Time(NAN), base_tag);
+ *        add_tag(tag);
+ *    } else {
+ *        iter->min_arr(new_time, base_tag);
+ *    }
+ *}
+ *
+ *inline void ExtTimingTags::max_req(const Time& new_time, const Tag& base_tag) {
+ *    auto iter = find_matching_tag(base_tag);
+ *    if(iter == end()) {
+ *        //First time we've seen this domain
+ *        auto tag = ExtTimingTags::Tag(new_time, Time(NAN), base_tag);
+ *        add_tag(tag);
+ *    } else {
+ *        iter->max_req(new_time, base_tag);
+ *    }
+ *}
+ */
 
 inline void ExtTimingTags::clear() {
     //TODO: handle memory leaks...

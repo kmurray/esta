@@ -14,7 +14,9 @@ class BlifTimingGraphBuilder : public TimingGraphBuilder {
         virtual void create_latch(TimingGraph& tg, const BlifLatch* latch);
         virtual void create_subckt(TimingGraph& tg, const BlifSubckt* subckt);
         virtual void create_net_edges(TimingGraph& tg);
-        virtual void annotate_logic_functions(TimingGraph& tg);
+        /*
+         *virtual void annotate_logic_functions(TimingGraph& tg);
+         */
         BDD create_func_from_names(const BlifNames* names, const std::vector<BDD>& input_vars);
 
     protected:

@@ -10,9 +10,10 @@ enum class TransitionType {
     RISE,
     FALL,
     HIGH,
-    LOW
+    LOW,
     //STEADY,
     //SWITCH
+    UNKOWN
 };
 std::ostream& operator<<(std::ostream& os, const TransitionType& trans);
 
@@ -93,25 +94,25 @@ class ExtTimingTag {
         ///If the arrival time is updated, meta-data is also updated from base_tag
         ///\param new_arr_time The arrival time to compare against
         ///\param base_tag The tag from which meta-data is copied
-        void max_arr(const Time& new_arr_time, const ExtTimingTag& base_tag);
+        void max_arr(const Time new_arr, const ExtTimingTag& tag);
 
         ///Updates the tag's arrival time if new_arr_time is smaller than the current arrival time.
         ///If the arrival time is updated, meta-data is also updated from base_tag
         ///\param new_arr_time The arrival time to compare against
         ///\param base_tag The tag from which meta-data is copied
-        void min_arr(const Time& new_arr_time, const ExtTimingTag& base_tag);
+        //void min_arr(const Time& new_arr_time, const ExtTimingTag& base_tag);
 
         ///Updates the tag's required time if new_req_time is smaller than the current required time.
         ///If the required time is updated, meta-data is also updated from base_tag
         ///\param new_arr_time The arrival time to compare against
         ///\param base_tag The tag from which meta-data is copied
-        void min_req(const Time& new_req_time, const ExtTimingTag& base_tag);
+        //void min_req(const Time& new_req_time, const ExtTimingTag& base_tag);
 
         ///Updates the tag's required time if new_req_time is larger than the current required time.
         ///If the required time is updated, meta-data is also updated from base_tag
         ///\param new_arr_time The arrival time to compare against
         ///\param base_tag The tag from which meta-data is copied
-        void max_req(const Time& new_req_time, const ExtTimingTag& base_tag);
+        //void max_req(const Time& new_req_time, const ExtTimingTag& base_tag);
 
         /*
          * Comparison
@@ -121,8 +122,8 @@ class ExtTimingTag {
         bool matches(const ExtTimingTag& other) const;
 
     private:
-        void update_arr(const Time& new_arr_time, const ExtTimingTag& base_tag);
-        void update_req(const Time& new_req_time, const ExtTimingTag& base_tag);
+        void update_arr(const Time new_arr, const ExtTimingTag& tag);
+        //void update_req(const Time& new_req_time, const ExtTimingTag& base_tag);
 
         /*
          * Data
@@ -144,7 +145,7 @@ inline ExtTimingTag::ExtTimingTag()
     , req_time_(NAN)
     , clock_domain_(INVALID_CLOCK_DOMAIN)
     , launch_node_(-1)
-    , trans_type_(TransitionType::RISE)
+    , trans_type_(TransitionType::UNKOWN)
     , switch_func_(g_cudd.bddZero())
     {}
 
@@ -169,58 +170,60 @@ inline ExtTimingTag::ExtTimingTag(const Time& arr_time_val, const Time& req_time
     {}
 
 
-inline void ExtTimingTag::update_arr(const Time& new_arr_time, const ExtTimingTag& base_tag) {
+inline void ExtTimingTag::update_arr(const Time new_arr, const ExtTimingTag& base_tag) {
     //NOTE: leave next alone, since we want to keep the linked list intact
     ASSERT(clock_domain() == base_tag.clock_domain()); //Domain must be the same
-    set_arr_time(new_arr_time);
+    set_arr_time(new_arr);
     set_launch_node(base_tag.launch_node());
-    set_trans_type(base_tag.trans_type());
 
-    //TODO: handle merging of switch functions: OR them together?
 }
 
-inline void ExtTimingTag::update_req(const Time& new_req_time, const ExtTimingTag& base_tag) {
-    //NOTE: We only update the req time, since everything else is determined by the arrival
-    //TODO: remove base tag argument?
-    ASSERT(clock_domain() == base_tag.clock_domain()); //Domain must be the same
-    set_req_time(new_req_time);
-}
+/*
+ *inline void ExtTimingTag::update_req(const Time& new_req_time, const ExtTimingTag& base_tag) {
+ *    //NOTE: We only update the req time, since everything else is determined by the arrival
+ *    //TODO: remove base tag argument?
+ *    ASSERT(clock_domain() == base_tag.clock_domain()); //Domain must be the same
+ *    set_req_time(new_req_time);
+ *}
+ */
 
-inline void ExtTimingTag::max_arr(const Time& new_arr_time, const ExtTimingTag& base_tag) {
+inline void ExtTimingTag::max_arr(const Time new_arr, const ExtTimingTag& base_tag) {
     //Need to min with existing value
-    if(!arr_time().valid() || new_arr_time.value() > arr_time().value()) {
+    if(!arr_time().valid() || new_arr.value() > arr_time().value()) {
         //New value is smaller, or no previous valid value existed
         //Update min
-        update_arr(new_arr_time, base_tag);
+        update_arr(new_arr, base_tag);
     }
 }
 
-inline void ExtTimingTag::min_req(const Time& new_req_time, const ExtTimingTag& base_tag) {
-    //Need to min with existing value
-    if(!req_time().valid() || new_req_time.value() < req_time().value()) {
-        //New value is smaller, or no previous valid value existed
-        //Update min
-        update_req(new_req_time, base_tag);
-    }
-}
-
-inline void ExtTimingTag::min_arr(const Time& new_arr_time, const ExtTimingTag& base_tag) {
-    //Need to min with existing value
-    if(!arr_time().valid() || new_arr_time.value() < arr_time().value()) {
-        //New value is smaller, or no previous valid value existed
-        //Update min
-        update_arr(new_arr_time, base_tag);
-    }
-}
-
-inline void ExtTimingTag::max_req(const Time& new_req_time, const ExtTimingTag& base_tag) {
-    //Need to min with existing value
-    if(!req_time().valid() || new_req_time.value() > req_time().value()) {
-        //New value is smaller, or no previous valid value existed
-        //Update min
-        update_req(new_req_time, base_tag);
-    }
-}
+/*
+ *inline void ExtTimingTag::min_req(const Time& new_req_time, const ExtTimingTag& base_tag) {
+ *    //Need to min with existing value
+ *    if(!req_time().valid() || new_req_time.value() < req_time().value()) {
+ *        //New value is smaller, or no previous valid value existed
+ *        //Update min
+ *        update_req(new_req_time, base_tag);
+ *    }
+ *}
+ *
+ *inline void ExtTimingTag::min_arr(const Time& new_arr_time, const ExtTimingTag& base_tag) {
+ *    //Need to min with existing value
+ *    if(!arr_time().valid() || new_arr_time.value() < arr_time().value()) {
+ *        //New value is smaller, or no previous valid value existed
+ *        //Update min
+ *        update_arr(new_arr_time, base_tag);
+ *    }
+ *}
+ *
+ *inline void ExtTimingTag::max_req(const Time& new_req_time, const ExtTimingTag& base_tag) {
+ *    //Need to min with existing value
+ *    if(!req_time().valid() || new_req_time.value() > req_time().value()) {
+ *        //New value is smaller, or no previous valid value existed
+ *        //Update min
+ *        update_req(new_req_time, base_tag);
+ *    }
+ *}
+ */
 inline bool ExtTimingTag::matches(const ExtTimingTag& other) const {
     return (clock_domain() == other.clock_domain()) && (trans_type() == other.trans_type());    
 }

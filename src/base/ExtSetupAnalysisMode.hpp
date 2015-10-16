@@ -17,24 +17,26 @@ class ExtSetupAnalysisMode : public BaseAnalysisMode {
         //Internal operations for performing setup analysis to satisfy the BaseAnalysisMode interface
         void initialize_traversal(const TimingGraph& tg);
 
-        void pre_traverse_node(const TimingGraph& tg, const TimingConstraints& tc, const NodeId node_id);
+        template<class DelayCalc>
+        void pre_traverse_node(const TimingGraph& tg, const TimingConstraints& tc, const DelayCalc& dc, const NodeId node_id);
 
         /*
          *template<class DelayCalc>
          *void forward_traverse_edge(const TimingGraph& tg, const DelayCalc& dc, const NodeId node_id, const EdgeId edge_id);
          */
 
-        void forward_traverse_finalize_node(const TimingGraph& tg, const TimingConstraints& tc, const NodeId node_id);
+        template<class DelayCalc>
+        void forward_traverse_finalize_node(const TimingGraph& tg, const TimingConstraints& tc, const DelayCalc& dc, const NodeId node_id);
 
         /*
          *template<class DelayCalc>
          *void backward_traverse_edge(const TimingGraph& tg, const DelayCalc& dc, const NodeId node_id, const EdgeId edge_id);
          */
 
-        BDD generate_switch_func(const BDD& node_func, TransitionType trans);
+        BDD generate_pi_switch_func(NodeId node_id, TransitionType trans);
 
-        std::vector<std::vector<Tag>> gen_input_tag_permutations(const std::vector<Tags>& input_tags);
-        void gen_input_tag_permutations_helper(const std::vector<Tags>& input_tags, size_t var_idx, const std::vector<Tag>& partial_perm, std::vector<std::vector<Tag>>& permutations);
+        std::vector<std::vector<Tag>> gen_tag_permutations(const std::vector<Tags>& input_tags);
+        void gen_tag_permutations_recurr(const std::vector<Tags>& input_tags, size_t var_idx, const std::vector<Tag>& partial_perm, std::vector<std::vector<Tag>>& permutations);
         TransitionType evaluate_transition(const std::vector<Tag>& input_tags_scenario, const BDD& node_func);
 
         //Setup tag data storage
@@ -42,8 +44,8 @@ class ExtSetupAnalysisMode : public BaseAnalysisMode {
         std::vector<Tags> setup_clock_tags_; //Clock tags for each node [0..timing_graph.num_nodes()-1]
 
         //BDD variable information
-        std::vector<BDD> curr_bdd_vars_;
-        std::vector<BDD> next_bdd_vars_;
+        std::unordered_map<NodeId,BDD> pi_curr_bdd_vars_;
+        std::unordered_map<NodeId,BDD> pi_next_bdd_vars_;
 };
 
 

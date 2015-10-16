@@ -9,32 +9,23 @@ void ExtSetupAnalysisMode<BaseAnalysisMode,Tags>::initialize_traversal(const Tim
 
     //We have a unique logic variable for each Primary Input
     //
-    //We assume the variables used in the timing graph logic function represent the 'current' logic values
-    //We will need a similar set of variables representing the 'next' logic values in order to calculate
-    //switching functions.
-    //
-    //To generate these 'next' logic functions we just replace the variables in the current function.
-    //To do so requries we know the mapping from 'curr' to 'next' variables. To generate this mapping
-    //we walk the primary inputs.
-    curr_bdd_vars_.clear();
-    next_bdd_vars_.clear();
+    //To represent transitions we have both a 'curr' and 'next' variable
+    pi_curr_bdd_vars_.clear();
+    pi_next_bdd_vars_.clear();
     for(NodeId node_id : tg.primary_inputs()) {
-        BDD node_func = tg.node_func(node_id);
-        //Should be just a single variable
-        assert(node_func.nodeCount() == 2); //Terminal + variable = 2
-
-        //Record the current variable
-        curr_bdd_vars_.push_back(node_func);
+        //Generate the current variable
+        pi_curr_bdd_vars_[node_id] = g_cudd.bddVar();
 
         //We need to generate and record a new 'next' variable
-        next_bdd_vars_.push_back(g_cudd.bddVar());
+        pi_next_bdd_vars_[node_id] = g_cudd.bddVar();
     }
 }
 
 template<class BaseAnalysisMode, class Tags>
-void ExtSetupAnalysisMode<BaseAnalysisMode,Tags>::pre_traverse_node(const TimingGraph& tg, const TimingConstraints& tc, const NodeId node_id) {
+template<class DelayCalc>
+void ExtSetupAnalysisMode<BaseAnalysisMode,Tags>::pre_traverse_node(const TimingGraph& tg, const TimingConstraints& tc, const DelayCalc& dc, const NodeId node_id) {
     //Chain to base class
-    BaseAnalysisMode::pre_traverse_node(tg, tc, node_id);
+    BaseAnalysisMode::pre_traverse_node(tg, tc, dc, node_id);
 
     //Primary Input
     ASSERT_MSG(tg.num_node_in_edges(node_id) == 0, "Primary input has input edges: timing graph not levelized.");
@@ -72,7 +63,7 @@ void ExtSetupAnalysisMode<BaseAnalysisMode,Tags>::pre_traverse_node(const Timing
         //Initialize a data tag with zero arrival, invalid required time
         for(auto trans : {TransitionType::RISE, TransitionType::FALL, TransitionType::HIGH, TransitionType::LOW}) {
 
-            BDD switch_func = generate_switch_func(tg.node_func(node_id), trans);
+            BDD switch_func = generate_pi_switch_func(node_id, trans);
 
             Tag input_tag = Tag(Time(0.), Time(NAN), tg.node_clock_domain(node_id), node_id, trans, switch_func);
 
@@ -91,131 +82,103 @@ void ExtSetupAnalysisMode<BaseAnalysisMode,Tags>::pre_traverse_node(const Timing
     }
 }
 
-#if 0
 template<class BaseAnalysisMode, class Tags>
 template<class DelayCalcType>
-void ExtSetupAnalysisMode<BaseAnalysisMode,Tags>::forward_traverse_edge(const TimingGraph& tg, const DelayCalcType& dc, const NodeId node_id, const EdgeId edge_id) {
+void ExtSetupAnalysisMode<BaseAnalysisMode,Tags>::forward_traverse_finalize_node(const TimingGraph& tg, const TimingConstraints& tc, const DelayCalcType& dc, const NodeId node_id) {
     //Chain to base class
-    BaseAnalysisMode::forward_traverse_edge(tg, dc, node_id, edge_id);
-
-    //We must use the tags by reference so we don't accidentally wipe-out any
-    //existing tags
-    Tags& node_data_tags = setup_data_tags_[node_id];
-    Tags& node_clock_tags = setup_clock_tags_[node_id];
-
-    //Pulling values from upstream source node
-    NodeId src_node_id = tg.edge_src_node(edge_id);
-
-    /*
-     * Clock tags
-     */
-    if(tg.node_type(src_node_id) != TN_Type::FF_SOURCE) {
-        //We do not propagate clock tags from an FF_SOURCE.
-        //The clock arrival will have already been converted to a
-        //data tag when the previous level was traversed.
-
-        const Tags& src_clk_tags = setup_clock_tags_[src_node_id];
-        for(const Tag& src_clk_tag : src_clk_tags) {
-            //Standard propagation through the clock network
-            TransitionType trans = src_clk_tag.trans_type();
-            const Time& edge_delay = dc.max_edge_delay(tg, edge_id, trans);
-
-            node_clock_tags.max_arr(src_clk_tag.arr_time() + edge_delay, src_clk_tag);
-
-
-            if(tg.node_type(node_id) == TN_Type::FF_SOURCE) {
-                //We are traversing a clock to data launch edge.
-                //
-                //We convert the clock arrival time to a data
-                //arrival time at this node (since the clock
-                //arrival launches the data).
-
-                //Make a copy of the tag
-                Tag launch_tag = src_clk_tag;
-
-                //Update the launch node, since the data is
-                //launching from this node
-                launch_tag.set_launch_node(node_id);
-                ASSERT(launch_tag.next() == nullptr);
-
-                //Mark propagated launch time as a DATA tag
-                node_data_tags.max_arr(launch_tag.arr_time() + edge_delay, launch_tag);
-            }
-        }
-    }
-
-    /*
-     * Data tags
-     */
-    const Tags& src_data_tags = setup_data_tags_[src_node_id];
-
-    for(const Tag& src_data_tag : src_data_tags) {
-        //Standard data-path propagation
-
-        TransitionType trans = src_data_tag.trans_type();
-
-        const Time& edge_delay = dc.max_edge_delay(tg, edge_id, trans);
-
-        node_data_tags.max_arr(src_data_tag.arr_time() + edge_delay, src_data_tag);
-    }
-}
-#endif
-
-template<class BaseAnalysisMode, class Tags>
-void ExtSetupAnalysisMode<BaseAnalysisMode,Tags>::forward_traverse_finalize_node(const TimingGraph& tg, const TimingConstraints& tc, const NodeId node_id) {
-    //Chain to base class
-    BaseAnalysisMode::forward_traverse_finalize_node(tg, tc, node_id);
+    BaseAnalysisMode::forward_traverse_finalize_node(tg, tc, dc, node_id);
 
     //Grab the tags from all inputs
-    std::vector<Tags> input_tag_sets;
+    std::vector<Tags> src_tag_sets;
     for(int edge_idx = 0; edge_idx < tg.num_node_in_edges(node_id); edge_idx++) {
         EdgeId edge_id = tg.node_in_edge(node_id, edge_idx);
 
         NodeId src_node = tg.edge_src_node(edge_id);
 
-        const Tags& input_data_tags = setup_data_tags_[src_node];
-        input_tag_sets.push_back(input_data_tags);
+        const Tags& src_data_tags = setup_data_tags_[src_node];
+        src_tag_sets.push_back(src_data_tags);
     }
 
-    //Generate all tag transition permutations
-    std::vector<std::vector<Tag>> input_tag_perms = gen_input_tag_permutations(input_tag_sets);
+    //The output tag set
+    Tags& sink_tags = setup_data_tags_[node_id];
 
-    std::cout << "Evaluating Node: " << node_id << "\n";
+    //Generate all tag transition permutations
+    //TODO: use a generater rather than pre-compute
+    std::vector<std::vector<Tag>> src_tag_perms = gen_tag_permutations(src_tag_sets);
+
+    const BDD& node_func = tg.node_func(node_id);
+    std::cout << "Evaluating Node: " << node_id << " (" << node_func << ")\n";
 
     int iscenario = 0;
-    for(const auto& input_tags_scenario : input_tag_perms) {
+    for(const auto& src_tags : src_tag_perms) {
 
         //Print case
         std::cout << "\tScenario #" << iscenario << "\n";
-        for(size_t i = 0; i < input_tags_scenario.size(); i++) {
-            auto& tag = input_tags_scenario[i];
-            std::cout << "\t\tinput #"<< i << ": " << tag.trans_type() << ", ";
+        std::cout << "\t\tinput: {";
+        for(int edge_idx = 0; edge_idx < tg.num_node_in_edges(node_id); edge_idx++) {
+            const auto& tag = src_tags[edge_idx];
+            std::cout << tag.trans_type();
+            if(edge_idx < tg.num_node_in_edges(node_id) - 1) {
+                std::cout << ", ";
+            }
         }
-        std::cout << "\n";
+        std::cout << "}\n";
 
         //Calculate the output transition type
-        const BDD& node_func = tg.node_func(node_id);
-        TransitionType output_transition = evaluate_transition(input_tags_scenario, node_func);
-        std::cout << "\t\toutput " << output_transition << "\n";
+        TransitionType output_transition = evaluate_transition(src_tags, node_func);
+        std::cout << "\t\toutput: " << output_transition << "\n";
 
-        //Determine the switching function
-        /*BDD switch_func = generate_switch_func(input_tags_scenario, node_func);*/
+        //We get the associated output transition when all the transitions in each tag
+        //of this input set occur -- that is when all the input switch functions evaluate
+        //true
+        assert(src_tags.size() > 0);
+        Tag scenario_tag;
+        scenario_tag.set_trans_type(output_transition);
 
-/*
- *        //Collect up the input switching functions
- *        std::vector<BDD> input_switch_funcs;
- *
- *        output_switch_func = node_func.VectorCompose(input_switch_funcs);
- */
+        BDD scenario_switch_func = g_cudd.bddOne();
+        for(int edge_idx = 0; edge_idx < tg.num_node_in_edges(node_id); edge_idx++) {
+            EdgeId edge_id = tg.node_in_edge(node_id, edge_idx);
+            const Tag& src_tag = src_tags[edge_idx];
+
+            Time edge_delay = dc.max_edge_delay(tg, edge_id, src_tag.trans_type());
+
+            Time new_arr = src_tag.arr_time() + edge_delay;
+
+            if(edge_idx == 0) {
+                scenario_tag.set_clock_domain(src_tag.clock_domain());
+            }
+            scenario_tag.max_arr(new_arr, src_tag);
+
+            scenario_switch_func &= src_tag.switch_func();
+            assert(scenario_tag.trans_type() == output_transition);
+        }
+        scenario_tag.set_switch_func(scenario_switch_func);
+        std::cout << "\t\tScenario Func: " << scenario_switch_func << " #SAT: " << scenario_switch_func.CountMinterm(2*tg.primary_inputs().size()) << "\n";
         
+        //Now we need to merge the scenario into the output tags
+        sink_tags.max_arr(scenario_tag); 
+
+        auto pred = [output_transition](const Tag& tag) {
+            return tag.trans_type() == output_transition;
+        };
+        auto iter = std::find_if(sink_tags.begin(), sink_tags.end(), pred);
+        assert(iter != sink_tags.end());
+        std::cout << "\t\tSink " << iter->trans_type() << " Func: " << iter->switch_func() << " #SAT: " << iter->switch_func().CountMinterm(2*tg.primary_inputs().size()) << "\n";
+
         iscenario++;
     }
 }
 
 template<class BaseAnalysisMode, class Tags>
-BDD ExtSetupAnalysisMode<BaseAnalysisMode,Tags>::generate_switch_func(const BDD& node_func, TransitionType trans) {
-    BDD f_curr = node_func;
-    BDD f_next = node_func.SwapVariables(curr_bdd_vars_, next_bdd_vars_);
+BDD ExtSetupAnalysisMode<BaseAnalysisMode,Tags>::generate_pi_switch_func(NodeId node_id, TransitionType trans) {
+    auto curr_iter = pi_curr_bdd_vars_.find(node_id);
+    assert(curr_iter != pi_curr_bdd_vars_.end());
+
+    auto next_iter = pi_next_bdd_vars_.find(node_id);
+    assert(next_iter != pi_next_bdd_vars_.end());
+
+    BDD f_curr = curr_iter->second;
+    BDD f_next = next_iter->second;
 
     BDD switch_func;
     switch(trans) {
@@ -246,33 +209,33 @@ BDD ExtSetupAnalysisMode<BaseAnalysisMode,Tags>::generate_switch_func(const BDD&
 }
 
 template<class BaseAnalysisMode, class Tags>
-std::vector<std::vector<typename Tags::Tag>> ExtSetupAnalysisMode<BaseAnalysisMode,Tags>::gen_input_tag_permutations(const std::vector<Tags>& input_tags) {
-    std::vector<std::vector<Tag>> permuations;
+std::vector<std::vector<typename Tags::Tag>> ExtSetupAnalysisMode<BaseAnalysisMode,Tags>::gen_tag_permutations(const std::vector<Tags>& tags) {
+    std::vector<std::vector<Tag>> tag_permuations;
 
-    gen_input_tag_permutations_helper(input_tags, 0, std::vector<Tag>(), permuations);
+    gen_tag_permutations_recurr(tags, 0, std::vector<Tag>(), tag_permuations);
 
-    return permuations;
+    return tag_permuations;
 }
 
 template<class BaseAnalysisMode, class Tags>
-void ExtSetupAnalysisMode<BaseAnalysisMode,Tags>::gen_input_tag_permutations_helper(const std::vector<Tags>& input_tags, size_t var_idx, const std::vector<Tag>& partial_perm, std::vector<std::vector<Tag>>& permutations) {
+void ExtSetupAnalysisMode<BaseAnalysisMode,Tags>::gen_tag_permutations_recurr(const std::vector<Tags>& tags, size_t var_idx, const std::vector<Tag>& partial_perm, std::vector<std::vector<Tag>>& tag_permutations) {
     
-    for(const Tag& tag : input_tags[var_idx]) {
+    for(const Tag& tag : tags[var_idx]) {
         //Make a copy since we will be adding our values
         auto new_perm = partial_perm;
         new_perm.push_back(tag);
 
-        if(var_idx < input_tags.size() - 1) {
+        if(var_idx < tags.size() - 1) {
             //Recursive case, other variables remain.
             //Fill in permuations of remaining variables
-            gen_input_tag_permutations_helper(input_tags, var_idx+1, new_perm, permutations);
+            gen_tag_permutations_recurr(tags, var_idx+1, new_perm, tag_permutations);
         } else {
             //Base case -- last variarble
-            assert(var_idx == input_tags.size() - 1);
+            assert(var_idx == tags.size() - 1);
 
             //Add the final permutation
-            assert(new_perm.size() == input_tags.size());
-            permutations.push_back(new_perm);
+            assert(new_perm.size() == tags.size());
+            tag_permutations.push_back(new_perm);
         }
     }
 }
@@ -314,9 +277,6 @@ TransitionType ExtSetupAnalysisMode<BaseAnalysisMode,Tags>::evaluate_transition(
                 assert(0);
         }
     }
-
-    std::cout << node_func << "\n";
-
 #if 0
     std::cout << "Init input: ";
     for(auto val : initial_inputs) {

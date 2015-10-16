@@ -4,8 +4,7 @@
 #include <cassert>
 #include <cstdio>
 
-#include "cudd.h"
-#include "cuddObj.hh"
+#include "bdd.hpp"
 
 #include "blif_parse.hpp"
 
@@ -26,7 +25,6 @@ using std::string;
 //XXX: global variable
 //TODO: Clean up and pass appropriately....
 BlifData* g_blif_data = nullptr;
-Cudd g_cudd;
 
 int main(int argc, char** argv) {
     if(argc != 2) {
@@ -47,76 +45,76 @@ int main(int argc, char** argv) {
         return 1;
     }
 
-    if(g_blif_data != nullptr) {
-        cout << "\tOK" << endl;
+    assert(g_blif_data != nullptr);
 
-        //Create the builder
-        BlifTimingGraphBuilder tg_builder(g_blif_data);
+    cout << "\tOK" << endl;
 
-        TimingGraph timing_graph;
+    //Create the builder
+    BlifTimingGraphBuilder tg_builder(g_blif_data);
 
-        cout << "Building Timing Graph..." << "\n";
-        tg_builder.build(timing_graph);
+    TimingGraph timing_graph;
 
-        cout << "Levelizing Timing Graph..." << "\n";
-        timing_graph.levelize();
+    cout << "Building Timing Graph..." << "\n";
+    tg_builder.build(timing_graph);
 
-        cout << "\n";
-        cout << "TimingGraph: " << "\n";
-        print_timing_graph(timing_graph);
+    cout << "Levelizing Timing Graph..." << "\n";
+    timing_graph.levelize();
 
-        cout << "\n";
-        cout << "TimingGraph logic functions: " << "\n";
-        for(NodeId id = 0; id < timing_graph.num_nodes(); id++) {
-            cout << "Node " << id << ": " << timing_graph.node_func(id) << "\n";
-        }
+    cout << "\n";
+    cout << "TimingGraph: " << "\n";
+    print_timing_graph(timing_graph);
 
-        cout << "\n";
-        cout << "TimingGraph Levelization: " << "\n";
-        print_levelization(timing_graph);
-
-        //Initialize PIs with zero input delay
-        TimingConstraints timing_constraints;
-        for(NodeId id : timing_graph.primary_inputs()) {
-            timing_constraints.add_input_constraint(id, 0.);
-        }
-
-        using AnalysisType = ExtSetupAnalysisMode<BaseAnalysisMode,ExtTimingTags>;
-
-        using DelayCalcType = PreCalcTransDelayCalculator;
-
-        //The actual delay calculator
-        std::map<TransitionType,std::vector<float>> delays;
-        delays[TransitionType::RISE] = std::vector<float>(timing_graph.num_edges(), 1.);
-        delays[TransitionType::FALL] = std::vector<float>(timing_graph.num_edges(), 1.);
-        delays[TransitionType::HIGH] = std::vector<float>(timing_graph.num_edges(), 0.1);
-        delays[TransitionType::LOW] = std::vector<float>(timing_graph.num_edges(), 0.1);
-        /*
-         *delays[TransitionType::SWITCH] = std::vector<float>(timing_graph.num_edges(), 1.);
-         *delays[TransitionType::STEADY] = std::vector<float>(timing_graph.num_edges(), 0.1);
-         */
-
-        auto delay_calc = DelayCalcType(delays);
-
-        using AnalyzerType = SerialTimingAnalyzer<AnalysisType,DelayCalcType>;
-
-        //The actual analyzer
-        auto analyzer = std::make_shared<AnalyzerType>(timing_graph, timing_constraints, delay_calc);
-
-        cout << "Analyzing...\n";
-        analyzer->calculate_timing();
-
-        for(NodeId i = 0; i < timing_graph.num_nodes(); i++) {
-            cout << "Node: " << i << "\n";
-            for(auto tag : analyzer->setup_data_tags(i)) {
-                 //cout << "\t ArrTime: " << tag.arr_time().value() << "\n";
-                 cout << "\t" << tag << "\n";
-            }
-        }
-
-        delete g_blif_data;
+    cout << "\n";
+    cout << "TimingGraph logic functions: " << "\n";
+    for(NodeId id = 0; id < timing_graph.num_nodes(); id++) {
+        cout << "Node " << id << ": " << timing_graph.node_func(id) << "\n";
     }
+
+    cout << "\n";
+    cout << "TimingGraph Levelization: " << "\n";
+    print_levelization(timing_graph);
+
+    //Initialize PIs with zero input delay
+    TimingConstraints timing_constraints;
+    for(NodeId id : timing_graph.primary_inputs()) {
+        timing_constraints.add_input_constraint(id, 0.);
+    }
+
+    using AnalysisType = ExtSetupAnalysisMode<BaseAnalysisMode,ExtTimingTags>;
+
+    using DelayCalcType = PreCalcTransDelayCalculator;
+
+    //The actual delay calculator
+    std::map<TransitionType,std::vector<float>> delays;
+    delays[TransitionType::RISE] = std::vector<float>(timing_graph.num_edges(), 1.0);
+    delays[TransitionType::FALL] = std::vector<float>(timing_graph.num_edges(), 1.0);
+    delays[TransitionType::HIGH] = std::vector<float>(timing_graph.num_edges(), 0.0);
+    delays[TransitionType::LOW] = std::vector<float>(timing_graph.num_edges(), 0.0);
+    /*
+     *delays[TransitionType::SWITCH] = std::vector<float>(timing_graph.num_edges(), 1.);
+     *delays[TransitionType::STEADY] = std::vector<float>(timing_graph.num_edges(), 0.1);
+     */
+
+    auto delay_calc = DelayCalcType(delays);
+
+    using AnalyzerType = SerialTimingAnalyzer<AnalysisType,DelayCalcType>;
+
+    //The actual analyzer
+    auto analyzer = std::make_shared<AnalyzerType>(timing_graph, timing_constraints, delay_calc);
+
+    cout << "Analyzing...\n";
+    analyzer->calculate_timing();
+
+    for(NodeId i = 0; i < timing_graph.num_nodes(); i++) {
+        cout << "Node: " << i << "\n";
+        for(auto& tag : analyzer->setup_data_tags(i)) {
+             //cout << "\t ArrTime: " << tag.arr_time().value() << "\n";
+            double sat_cnt = tag.switch_func().CountMinterm(2*timing_graph.primary_inputs().size());
+            cout << "\t" << tag << ", #SAT: " << sat_cnt << "\n";
+        }
+    }
+
+    delete g_blif_data;
 
     return 0;
 }
-
