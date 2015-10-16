@@ -70,20 +70,3 @@
 
 #endif //TIME_VEC_WIDTH
 
-/*
- * External functions
- */
-
-inline Time operator+(Time lhs, const Time& rhs) {
-    return lhs += rhs;
-}
-
-inline Time operator-(Time lhs, const Time& rhs) {
-    return lhs -= rhs;
-}
-
-inline std::ostream& operator<<(std::ostream& os, const Time& time) {
-    os << time.value();
-    return os;
-}
-

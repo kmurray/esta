@@ -2,7 +2,7 @@
 
 #include <cmath>
 #include <array>
-#include <iosfwd>
+#include <iostream>
 #include <x86intrin.h>
 
 #ifndef TIME_VEC_WIDTH
@@ -46,7 +46,10 @@ class Time {
         Time& operator+=(const Time& rhs);
         Time& operator-=(const Time& rhs);
 
-        friend bool operator==(const Time& lhs, const Time& rhs);
+        friend bool operator==(const Time& lhs, const Time& rhs) { return lhs.time_ == rhs.time_; }
+        friend Time operator+(Time lhs, const Time& rhs) { return lhs += rhs; }
+        friend Time operator-(Time lhs, const Time& rhs) { return lhs -= rhs; }
+        friend std::ostream& operator<<(std::ostream& os, const Time& time) { return os << time.value(); }
 
     private:
 #if TIME_VEC_WIDTH > 1
