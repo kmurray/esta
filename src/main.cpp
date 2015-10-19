@@ -17,6 +17,7 @@
 
 #include "ExtTimingTags.hpp"
 #include "ExtSetupAnalysisMode.hpp"
+#include "sta_util.hpp"
 
 using std::cout;
 using std::cerr;
@@ -32,6 +33,9 @@ int main(int argc, char** argv) {
         std::cout << "Usage: " << argv[0] << " filename1.blif" << endl;
         return 1;
     }
+
+    //Initialize the auto-reorder in CUDD
+    g_cudd.AutodynEnable(CUDD_REORDER_SIFT);
 
     cout << "Parsing file: " << argv[1] << endl;
 
@@ -61,19 +65,30 @@ int main(int argc, char** argv) {
     cout << "Levelizing Timing Graph..." << "\n";
     timing_graph.levelize();
 
-    cout << "\n";
-    cout << "TimingGraph: " << "\n";
-    print_timing_graph(timing_graph);
+    /*
+     *cout << "\n";
+     *cout << "TimingGraph: " << "\n";
+     *print_timing_graph(timing_graph);
+     */
 
     cout << "\n";
-    cout << "TimingGraph logic functions: " << "\n";
-    for(NodeId id = 0; id < timing_graph.num_nodes(); id++) {
-        cout << "Node " << id << ": " << timing_graph.node_func(id) << "\n";
-    }
+    /*
+     *cout << "TimingGraph logic functions: " << "\n";
+     *for(NodeId id = 0; id < timing_graph.num_nodes(); id++) {
+     *    cout << "Node " << id << ": " << timing_graph.node_func(id) << "\n";
+     *}
+     */
 
     cout << "\n";
-    cout << "TimingGraph Levelization: " << "\n";
-    print_levelization(timing_graph);
+    /*
+     *cout << "TimingGraph Levelization: " << "\n";
+     *print_levelization(timing_graph);
+     */
+
+    cout << "Level Histogram:\n";
+    print_level_histogram(timing_graph, 10);
+    cout << "\n";
+    
 
     //Initialize PIs with zero input delay
     TimingConstraints timing_constraints;
@@ -126,7 +141,8 @@ int main(int argc, char** argv) {
     cout << "Analyzing...\n";
     analyzer->calculate_timing();
 
-    for(NodeId i = 0; i < timing_graph.num_nodes(); i++) {
+    //for(NodeId i = 0; i < timing_graph.num_nodes(); i++) {
+    for(NodeId i : timing_graph.primary_outputs()) {
         cout << "Node: " << i << "\n";
         for(auto& tag : analyzer->setup_data_tags(i)) {
              //cout << "\t ArrTime: " << tag.arr_time().value() << "\n";
