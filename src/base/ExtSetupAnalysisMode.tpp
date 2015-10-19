@@ -103,7 +103,7 @@ void ExtSetupAnalysisMode<BaseAnalysisMode,Tags>::forward_traverse_finalize_node
     Tags& sink_tags = setup_data_tags_[node_id];
 
     //Generate all tag transition permutations
-    //TODO: use a generater rather than pre-compute
+    //TODO: use a generator rather than pre-compute
     std::vector<std::vector<Tag>> src_tag_perms = gen_tag_permutations(src_tag_sets);
 
     const BDD& node_func = tg.node_func(node_id);
@@ -134,7 +134,10 @@ void ExtSetupAnalysisMode<BaseAnalysisMode,Tags>::forward_traverse_finalize_node
             }
             scenario_tag.max_arr(new_arr, src_tag);
 
+            //This is the most expensive operation, since at lower levels of the timing graph
+            //this becomes a large operation
             scenario_switch_func &= src_tag.switch_func();
+
             assert(scenario_tag.trans_type() == output_transition);
         }
         scenario_tag.set_switch_func(scenario_switch_func);
@@ -244,15 +247,26 @@ TransitionType ExtSetupAnalysisMode<BaseAnalysisMode,Tags>::evaluate_transition(
     //so we need to allocate a vector atleast as large as the highest index.
     //To do this we query the support indicies and take the max + 1 of these as the size.
     //The vectors and then initialized (all values false) to this size.
-    //Note that cudd will only read the indicies associated with the variables in the bdd, so the values of variablse not in the bdd don't matter
+    //Note that cudd will only read the indicies associated with the variables in the bdd, 
+    //so the values of variablse not in the bdd don't matter
+    /*std::cout << "Eval Transition Func: " << node_func << "\n";*/
     auto support_indicies = node_func.SupportIndices();
     size_t max_var_index = *std::max_element(support_indicies.begin(), support_indicies.end());
     std::vector<int> initial_inputs(max_var_index+1, 0);
     std::vector<int> final_inputs(max_var_index+1, 0);
-    
-    for(size_t i = 0; i < input_tags_scenario.size(); i++) {
-        const Tag& tag = input_tags_scenario[i];
+
+    for(size_t i = 0; i < support_indicies.size(); i++) {
+        //It is entirely possible that the support of a function may be
+        //less than the number of inputs (e.g. a useless input to a
+        //logic function).
+        //As a result we only fill in the variables which are explicitly
+        //listed in the support
         size_t var_idx = support_indicies[i];
+
+        //We do expect the node inputs to be a superset of
+        //the support
+        assert(var_idx < input_tags_scenario.size());
+        const Tag& tag = input_tags_scenario[var_idx];
         switch(tag.trans_type()) {
             case TransitionType::RISE:
                 initial_inputs[var_idx] = 0;
