@@ -53,10 +53,10 @@ void BlifTimingGraphBuilder::build(TimingGraph& tg) {
      */
     create_net_edges(tg);
 
+    //Now that we have all the edges in the graph we can levelize it
+    tg.levelize();
 
-    /*
-     *annotate_logic_functions(tg);
-     */
+    verify(tg);
 }
 
 void BlifTimingGraphBuilder::create_input(TimingGraph& tg, const BlifPort* input_port) {
@@ -167,7 +167,26 @@ void BlifTimingGraphBuilder::create_names(TimingGraph& tg, const BlifNames* name
     }
 
     const BlifPort* output_port = names->ports[names->ports.size()-1];
-    NodeId output_node_id = tg.add_node(TN_Type::PRIMITIVE_OPIN, INVALID_CLOCK_DOMAIN, false);
+    NodeId output_node_id;
+    if(input_ids.size() == 0) {
+        //Constant generator
+        output_node_id = tg.add_node(TN_Type::CONSTANT_GEN_SOURCE, INVALID_CLOCK_DOMAIN, false);
+    } else {
+        //Regular combinational primitive
+        output_node_id = tg.add_node(TN_Type::PRIMITIVE_OPIN, INVALID_CLOCK_DOMAIN, false);
+    }
+#if 0
+    if(output_node_id == 27) {
+        std::cout << "FOUND IT\n";
+        for(auto row_ptr : names->cover_rows) {
+            for(auto val : *row_ptr) {
+                std::cout << val;
+            }
+            std::cout << std::endl;
+        }
+        std::cout << "\n";
+    }
+#endif
 
     //Record the mapping from blif netlist to timing graph nodes
     port_to_node_lookup[output_port] = output_node_id;
@@ -196,7 +215,7 @@ void BlifTimingGraphBuilder::create_net_edges(TimingGraph& tg) {
      */
 
     for(const BlifNet* net : blif_data_->nets) {
-        cout << "Net: " << *net->name << "\n";
+        //cout << "Net: " << *net->name << "\n";
         assert(net->drivers.size() == 1);
         const BlifPort* driver_port= net->drivers[0]->port;
         
@@ -220,93 +239,7 @@ void BlifTimingGraphBuilder::create_net_edges(TimingGraph& tg) {
         }
     }
 
-    //Now that we have all the edges in the graph we can levelize it
-    tg.levelize();
-
-
 }
-
-/*
- *void BlifTimingGraphBuilder::annotate_logic_functions(TimingGraph& tg) {
- *    //We walk through the graph in a levelized manner propogating logic functions
- *    //TODO: parallelize? --> need to be careful with cudd
- *    
- *    //Build the inverse lookup form node_id to BlifPort*
- *    for(auto& kv : port_to_node_lookup) {
- *        node_to_port_lookup[kv.second] = kv.first;
- *    }
- *    
- *    //In the levelized graph the primary inputs are the actual variables
- *    //so initialize them first
- *    for(NodeId pi_id : tg.primary_inputs()) {
- *        tg.set_node_func(pi_id, g_cudd.bddVar());
- *    }
- *
- *    for(int i = 1; i < tg.num_levels(); i++) {
- *        for(NodeId node_id : tg.level(i)) {
- *            TN_Type node_type = tg.node_type(node_id);
- *
- *            switch(node_type) {
- *                case TN_Type::INPAD_OPIN: {         //Fallthrough
- *                } case TN_Type::OUTPAD_SINK: {      //Fallthrough
- *                } case TN_Type::FF_SINK: {          //Fallthrough
- *                } case TN_Type::PRIMITIVE_IPIN: {   //Fallthrough
- *                } case TN_Type::OUTPAD_IPIN: {      //Fallthrough
- *                } case TN_Type::FF_OPIN: {     
- *                    //Single input node with identity logic function
- *                    assert(tg.num_node_in_edges(node_id) == 1);
- *
- *                    EdgeId in_edge = tg.node_in_edge(node_id, 0);
- *                    NodeId upstream_node_id = tg.edge_src_node(in_edge);
- *
- *                    //We just copy the upstream varirable
- *                    const BDD& upstream_var = tg.node_func(upstream_node_id);
- *                    tg.set_node_func(node_id, upstream_var);
- *                    break;
- *                } case TN_Type::PRIMITIVE_OPIN: {
- *                    //Multiple in put node with non-identity logic function
- *
- *                    //Collect the upstream variables/functions
- *                    //
- *                    //NOTE: we are assuming that the input edges are in the same order as the
- *                    //      inputs in the netlist description.  This should be true since we
- *                    //      build the input edges in netlist order previously
- *                    std::vector<BDD> upstream_vars;
- *                    for(int edge_idx = 0; edge_idx < tg.num_node_in_edges(node_id); edge_idx++) {
- *                        EdgeId in_edge = tg.node_in_edge(node_id, edge_idx);
- *                        NodeId upstream_node_id = tg.edge_src_node(in_edge);
- *                        const BDD& upstream_var = tg.node_func(upstream_node_id);
- *
- *                        upstream_vars.push_back(upstream_var);
- *                    }
- *
- *                    //
- *                    //Find the blif logic function
- *                    //
- *                    
- *                    //Get the netlist port
- *                    auto iter = node_to_port_lookup.find(node_id);
- *                    assert(iter != node_to_port_lookup.end());
- *                    const BlifPort* port = iter->second;
- *
- *                    //Trace back to the primitive
- *                    assert(port->node_type == BlifNodeType::NAMES); //Currenlty we only support .names primitives
- *                    const BlifNames* names = port->names;
- *
- *                    //Build the logic function
- *                    BDD f = create_func_from_names(names, upstream_vars);
- *
- *                    //Annotate the node
- *                    tg.set_node_func(node_id, f);
- *                    break;
- *                } default: {
- *                    assert(0);
- *                }
- *            }
- *        }
- *    }
- *}
- */
 
 BDD BlifTimingGraphBuilder::create_func_from_names(const BlifNames* names, const std::vector<BDD>& input_vars) {
     //Convert the single-output cover representing the .names logic function
@@ -367,3 +300,28 @@ BDD BlifTimingGraphBuilder::create_func_from_names(const BlifNames* names, const
 
     return f;
 }
+
+void BlifTimingGraphBuilder::verify(const TimingGraph& tg) {
+    for(NodeId node_id : tg.primary_inputs()) {
+        assert(tg.num_node_in_edges(node_id) == 0);
+
+        auto node_type = tg.node_type(node_id);
+        if(!(node_type == TN_Type::INPAD_SOURCE 
+               || node_type == TN_Type::FF_SOURCE
+               || node_type == TN_Type::CLOCK_SOURCE
+               || node_type == TN_Type::CONSTANT_GEN_SOURCE)) {
+            
+            auto iter = node_to_port_lookup.find(node_id);
+            assert(0);
+        }
+    }
+
+    for(NodeId node_id : tg.primary_outputs()) {
+        assert(tg.num_node_out_edges(node_id) == 0);
+
+        auto node_type = tg.node_type(node_id);
+        assert(node_type == TN_Type::OUTPAD_SINK 
+               || node_type == TN_Type::FF_SINK);
+    }
+}
+

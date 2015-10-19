@@ -19,6 +19,8 @@ class BlifTimingGraphBuilder : public TimingGraphBuilder {
          */
         BDD create_func_from_names(const BlifNames* names, const std::vector<BDD>& input_vars);
 
+        virtual void verify(const TimingGraph& tg);
+
     protected:
         const BlifData* blif_data_;
         std::unordered_map<const BlifPort*,NodeId> port_to_node_lookup;
