@@ -15,8 +15,8 @@
  * For more detail see ExtTimingTag::matches()
  */
 #define TAG_MATCH_TRANSITION
-#define TAG_MATCH_DELAY
-/*#define TAG_MATCH_SWITCH_FUNC*/
+//#define TAG_MATCH_DELAY
+//#define TAG_MATCH_SWITCH_FUNC
 
 enum class TransitionType {
     RISE,
@@ -271,6 +271,6 @@ std::ostream& operator<<(std::ostream& os, const ExtTimingTag& tag) {
     os << ", Trans: " << tag.trans_type();
     os << ", Arr: " << tag.arr_time().value();
     os << ", Req: " << tag.req_time().value();
-    os << ", Xfunc: " << tag.switch_func();
+    //os << ", Xfunc: " << tag.switch_func();
     return os;
 }
