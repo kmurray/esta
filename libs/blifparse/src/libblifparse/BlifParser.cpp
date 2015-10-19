@@ -26,7 +26,13 @@ BlifData* BlifParser::parse(std::string filename) {
     //Resolve internal references to nets
     blif_data_->resolve_nets();
 
-    blif_data_->clean_nets();
+    if(clean_nets_) {
+        blif_data_->clean_nets();
+    }
+
+    if(sweep_dangling_ios_) {
+        blif_data_->sweep_dangling_ios(blif_data_->get_top_module());
+    }
 
     return blif_data_;
 }

@@ -217,6 +217,8 @@ struct BlifData {
         }
     }
 
+    BlifModel* get_top_module() { return models[0]; }
+
     void resolve_nets() {
         //Walk through all the ports on all primitives
         //adding the terminals (as drivers/sinks) to
@@ -325,6 +327,32 @@ struct BlifData {
 
         //Update the original set of nets with only the set we are keeping
         nets = nets_to_keep;
+    }
+
+    void sweep_dangling_ios(BlifModel* model) {
+        std::vector<BlifPort*> inputs_to_keep;
+        for(BlifPort* in_port : model->inputs) {
+            if(in_port->port_conn) {
+                //This input drives a net, keep it     
+                inputs_to_keep.push_back(in_port);
+            } else {
+                //This input does NOT drive a net, remove it     
+                delete in_port;
+            }
+        }
+        model->inputs = inputs_to_keep;
+
+        std::vector<BlifPort*> outputs_to_keep;
+        for(BlifPort* out_port : model->outputs) {
+            if(out_port->port_conn) {
+                //This input drives a net, keep it     
+                outputs_to_keep.push_back(out_port);
+            } else {
+                //This input does NOT drive a net, remove it     
+                delete out_port;
+            }
+        }
+        model->outputs = outputs_to_keep;
     }
 
     BlifModel* find_model(std::string* model_name) {
