@@ -34,7 +34,8 @@ target_include_directories(eta PRIVATE
 
 #Executable links to the library
 #target_link_libraries(eta blifparse tatum cudd_mtr cudd_st cudd_epd cudd_util cudd_obj cudd)
-target_link_libraries(eta blifparse tatum 
+target_link_libraries(eta 
+                      cpp-argparse blifparse tatum 
                       #NOTE: the link order of the various CUDD sub-libraries is very important!
                       #      incorrect ordering will case linker errors!
                       cudd_obj cudd cudd_mtr cudd_st cudd_util cudd_epd )

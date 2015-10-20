@@ -5,6 +5,8 @@
 #include <cstdio>
 #include <cmath>
 
+#include "OptionParser.h"
+
 #include "bdd.hpp"
 
 #include "blif_parse.hpp"
@@ -28,23 +30,59 @@ using std::string;
 //TODO: Clean up and pass appropriately....
 BlifData* g_blif_data = nullptr;
 
-int main(int argc, char** argv) {
-    if(argc != 2) {
-        std::cout << "Usage: " << argv[0] << " filename1.blif" << endl;
-        return 1;
+optparse::Values parse_args(int argc, char** argv);
+
+optparse::Values parse_args(int argc, char** argv) {
+    auto parser = optparse::OptionParser()
+        .description("Performs Extended Timing Analysis on a blif netlist.")
+        ;
+
+    parser.add_option("-b", "--blif")
+          .dest("blif_file")
+          .metavar("BLIF_FILE")
+          .help("The blif file to load and analyze.")
+          ;
+
+    parser.add_option("--reorder_method")
+          .dest("bdd_reorder_method")
+          .metavar("CUDD_REORDER_METHOD")
+          .set_default("CUDD_REORDER_SIFT")
+          .help("The method to use for dynamic BDD variable re-ordering. Default: %default")
+          ;
+
+    auto options = parser.parse_args(argc, argv);
+
+    if(!options.is_set("blif_file")) {
+        cout << "Missing required argument for blif file\n";
+        cout << "\n";
+        parser.print_help();
+        std::exit(1);
     }
 
-    //Initialize the auto-reorder in CUDD
-    g_cudd.AutodynEnable(CUDD_REORDER_SIFT);
+    return options;
+}
 
-    cout << "Parsing file: " << argv[1] << endl;
+int main(int argc, char** argv) {
+    auto options = parse_args(argc, argv);
+
+    /*
+     *if(argc != 2) {
+     *    std::cout << "Usage: " << argv[0] << " filename1.blif" << endl;
+     *    return 1;
+     *}
+     */
+
+    //Initialize the auto-reorder in CUDD
+    g_cudd.AutodynEnable(options.get_as<Cudd_ReorderingType>("bdd_reorder_method"));
+
+    cout << "Parsing file: " << options.get_as<string>("blif_file") << endl;
 
     //Create the parser
     BlifParser parser;
 
     //Load the file
     try {
-        g_blif_data = parser.parse(argv[1]);
+        g_blif_data = parser.parse(options.get_as<string>("blif_file"));
     } catch (BlifParseError& e) {
         cerr << argv[1] << ":" << e.line_num << " " << e.what() << " (near text '" << e.near_text << "')" << endl; 
         return 1;

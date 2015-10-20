@@ -13,4 +13,7 @@ namespace std {
     };
 }
 
-double sharpSat(const BDD& bdd);
+double sharpSat(const BDD& bdd, const int nvars);
+
+std::istream& operator>>(std::istream& is, Cudd_ReorderingType& type);
+std::ostream& operator<<(std::ostream& os, const Cudd_ReorderingType& type);
