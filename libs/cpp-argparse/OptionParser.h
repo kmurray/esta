@@ -100,6 +100,12 @@ class Value {
     operator float() { float t; return (valid && (std::istringstream(str) >> t)) ? t : 0; }
     operator double() { double t; return (valid && (std::istringstream(str) >> t)) ? t : 0; }
     operator long double() { long double t; return (valid && (std::istringstream(str) >> t)) ? t : 0; }
+    template<typename T>
+    T as() {
+        T t;
+        std::istringstream(str) >> t;
+        return t;
+    }
  private:
     const std::string str;
     bool valid;
@@ -114,6 +120,8 @@ class Values {
     bool is_set_by_user(const std::string& d) const { return _userSet.find(d) != _userSet.end(); }
     void is_set_by_user(const std::string& d, bool yes);
     Value get(const std::string& d) const { return (is_set(d)) ? Value((*this)[d]) : Value(); }
+    template<class T>
+    T get_as(const std::string& d) const { auto value = (is_set(d)) ? Value((*this)[d]) : Value(); return value.as<T>(); }
 
     typedef std::list<std::string>::iterator iterator;
     typedef std::list<std::string>::const_iterator const_iterator;
