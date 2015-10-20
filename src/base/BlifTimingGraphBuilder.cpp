@@ -306,14 +306,10 @@ void BlifTimingGraphBuilder::verify(const TimingGraph& tg) {
         assert(tg.num_node_in_edges(node_id) == 0);
 
         auto node_type = tg.node_type(node_id);
-        if(!(node_type == TN_Type::INPAD_SOURCE 
+        assert(node_type == TN_Type::INPAD_SOURCE 
                || node_type == TN_Type::FF_SOURCE
                || node_type == TN_Type::CLOCK_SOURCE
-               || node_type == TN_Type::CONSTANT_GEN_SOURCE)) {
-            
-            auto iter = node_to_port_lookup.find(node_id);
-            assert(0);
-        }
+               || node_type == TN_Type::CONSTANT_GEN_SOURCE);
     }
 
     for(NodeId node_id : tg.primary_outputs()) {
