@@ -1,5 +1,6 @@
 #include <cassert>
 #include <unordered_map>
+#include <set>
 #include "BlifTimingGraphBuilder.hpp"
 
 #include <iostream>
@@ -25,6 +26,8 @@ void BlifTimingGraphBuilder::build(TimingGraph& tg) {
     assert(blif_data_->models.size() > 0);
 
     BlifModel* top_model = blif_data_->models[0];
+
+    identify_clock_drivers();
 
     for(auto* input_port : top_model->inputs) {
         create_input(tg, input_port);
@@ -62,9 +65,15 @@ void BlifTimingGraphBuilder::build(TimingGraph& tg) {
 void BlifTimingGraphBuilder::create_input(TimingGraph& tg, const BlifPort* input_port) {
     //An input becomes the following in the timing graph:
     //    INPAD_SOURCE ---> INPAD_OPIN
+    bool is_clock_source = false;
+    DomainId clk_domain = 0; //Default to 1st clock domain
+    auto iter = clock_driver_to_domain_.find(input_port);
+    if(iter != clock_driver_to_domain_.end()) {
+        is_clock_source = true;
+        clk_domain = iter->second;
+    }
 
-
-    NodeId src = tg.add_node(TN_Type::INPAD_SOURCE, 0, false); //Default to 1st clock domain
+    NodeId src = tg.add_node(TN_Type::INPAD_SOURCE, clk_domain, is_clock_source); //Default to 1st clock domain
     NodeId opin = tg.add_node(TN_Type::INPAD_OPIN, INVALID_CLOCK_DOMAIN, false);
 
     //Add the edge between them
@@ -75,8 +84,8 @@ void BlifTimingGraphBuilder::create_input(TimingGraph& tg, const BlifPort* input
     tg.set_node_func(opin, g_cudd.bddVar(0));
 
     //Record the mapping from blif netlist to timing graph nodes
-    assert(port_to_node_lookup.find(input_port) == port_to_node_lookup.end()); //No found
-    port_to_node_lookup[input_port] = opin;
+    assert(port_to_node_lookup_.find(input_port) == port_to_node_lookup_.end()); //No found
+    port_to_node_lookup_[input_port] = opin;
 }
 
 void BlifTimingGraphBuilder::create_output(TimingGraph& tg, const BlifPort* output_port) {
@@ -94,8 +103,8 @@ void BlifTimingGraphBuilder::create_output(TimingGraph& tg, const BlifPort* outp
     tg.set_node_func(sink, g_cudd.bddVar(0));
 
     //Record the mapping from blif netlist to timing graph nodes
-    assert(port_to_node_lookup.find(output_port) == port_to_node_lookup.end()); //No found
-    port_to_node_lookup[output_port] = ipin;
+    assert(port_to_node_lookup_.find(output_port) == port_to_node_lookup_.end()); //No found
+    port_to_node_lookup_[output_port] = ipin;
 }
 
 void BlifTimingGraphBuilder::create_latch(TimingGraph& tg, const BlifLatch* latch) {
@@ -117,6 +126,19 @@ void BlifTimingGraphBuilder::create_latch(TimingGraph& tg, const BlifLatch* latc
     NodeId opin = tg.add_node(TN_Type::FF_OPIN, INVALID_CLOCK_DOMAIN, false);
     NodeId clock = tg.add_node(TN_Type::FF_CLOCK, INVALID_CLOCK_DOMAIN, false); 
 
+#if 0
+    if(src == 27) {
+        std::cout << "FOUND IT\n";
+        for(auto row_ptr : names->cover_rows) {
+            for(auto val : *row_ptr) {
+                std::cout << val;
+            }
+            std::cout << std::endl;
+        }
+        std::cout << "\n";
+    }
+#endif
+
     //The edges
     tg.add_edge(ipin, sink);
     tg.add_edge(src, opin);
@@ -125,15 +147,17 @@ void BlifTimingGraphBuilder::create_latch(TimingGraph& tg, const BlifLatch* latc
 
 
     //Identity logic function from ipin -> sink
+    tg.set_node_func(ipin, g_cudd.bddVar(0));
     tg.set_node_func(sink, g_cudd.bddVar(0));
 
     //Identity logic function from source -> opin
+    tg.set_node_func(src, g_cudd.bddVar(0));
     tg.set_node_func(opin, g_cudd.bddVar(0));
 
     //Record the mapping from blif netlist to timing graph nodes
-    port_to_node_lookup[latch->input] = ipin;
-    port_to_node_lookup[latch->output] = opin;
-    port_to_node_lookup[latch->control] = clock;
+    port_to_node_lookup_[latch->input] = ipin;
+    port_to_node_lookup_[latch->output] = opin;
+    port_to_node_lookup_[latch->control] = clock;
 }
 
 void BlifTimingGraphBuilder::create_names(TimingGraph& tg, const BlifNames* names) {
@@ -163,7 +187,7 @@ void BlifTimingGraphBuilder::create_names(TimingGraph& tg, const BlifNames* name
         input_vars.push_back(g_cudd.bddVar(i));
 
         //Record the mapping from blif netlist to timing graph nodes
-        port_to_node_lookup[input_port] = node_id;
+        port_to_node_lookup_[input_port] = node_id;
     }
 
     const BlifPort* output_port = names->ports[names->ports.size()-1];
@@ -189,7 +213,7 @@ void BlifTimingGraphBuilder::create_names(TimingGraph& tg, const BlifNames* name
 #endif
 
     //Record the mapping from blif netlist to timing graph nodes
-    port_to_node_lookup[output_port] = output_node_id;
+    port_to_node_lookup_[output_port] = output_node_id;
 
     //Define the opin logic function in terms of its input edges
     BDD opin_node_func = create_func_from_names(names, input_vars);
@@ -219,16 +243,16 @@ void BlifTimingGraphBuilder::create_net_edges(TimingGraph& tg) {
         assert(net->drivers.size() == 1);
         const BlifPort* driver_port= net->drivers[0]->port;
         
-        auto iter_driver = port_to_node_lookup.find(driver_port);
-        assert(iter_driver != port_to_node_lookup.end());
+        auto iter_driver = port_to_node_lookup_.find(driver_port);
+        assert(iter_driver != port_to_node_lookup_.end());
 
         NodeId driver_node = iter_driver->second;
 
         for(const BlifPortConn* sink_conn : net->sinks) {
             const BlifPort* sink_port = sink_conn->port;
 
-            auto iter_sink = port_to_node_lookup.find(sink_port);
-            assert(iter_sink != port_to_node_lookup.end());
+            auto iter_sink = port_to_node_lookup_.find(sink_port);
+            assert(iter_sink != port_to_node_lookup_.end());
 
             NodeId sink_node = iter_sink->second;        
 
@@ -318,6 +342,33 @@ void BlifTimingGraphBuilder::verify(const TimingGraph& tg) {
         auto node_type = tg.node_type(node_id);
         assert(node_type == TN_Type::OUTPAD_SINK 
                || node_type == TN_Type::FF_SINK);
+    }
+}
+
+void BlifTimingGraphBuilder::identify_clock_drivers() {
+    BlifModel* top = blif_data_->get_top_model();
+
+    std::set<BlifNet*> clock_nets;
+    for(BlifLatch* latch : top->latches) {
+        BlifPort* clk_port = latch->control;
+        BlifPortConn* clk_port_conn = clk_port->port_conn;
+        assert(clk_port_conn != nullptr);
+        BlifNet* clk_net = clk_port_conn->net;
+        clock_nets.insert(clk_net);
+    }
+
+
+    DomainId domain_id = 0;
+    for(BlifNet* net : clock_nets) {
+        assert(net->drivers.size() == 1);
+
+        BlifPortConn* driver_conn = net->drivers[0];
+        BlifPort* driver = driver_conn->port;
+        std::cout << "Clock Net: " << *net->name << " DomainId: " << domain_id << " Driver: " << *driver->name << "\n";
+        auto result = clock_driver_to_domain_.insert({driver, domain_id});
+        assert(result.second); //Was inserted
+
+        domain_id++;
     }
 }
 
