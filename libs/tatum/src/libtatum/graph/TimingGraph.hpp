@@ -175,6 +175,9 @@ class TimingGraph {
         ///\returns The total number of levels in the graph
         LevelId num_levels() const { return node_levels_.size(); }
 
+        ///\returns The total number of circuit inputs (i.e. INPAD_SOURCES) and FFs (i.e. FF_SOURCES)
+        int num_logical_inputs() const;
+
         /*
          * Node collection accessors
          */

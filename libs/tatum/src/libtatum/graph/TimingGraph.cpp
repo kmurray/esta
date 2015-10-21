@@ -4,6 +4,18 @@
 
 #include "TimingGraph.hpp"
 
+int TimingGraph::num_logical_inputs() const {
+    //TODO: pre-calculate
+    int cnt = 0;
+    for(NodeId node_id = 0; node_id < num_nodes(); node_id++) {
+        auto node_type_val = node_type(node_id);
+        if(node_type_val == TN_Type::INPAD_SOURCE || node_type_val == TN_Type::FF_SOURCE) {
+            cnt++;
+        }
+    }
+    return cnt;
+}
+
 TE_Type TimingGraph::edge_type(const EdgeId id) const {
     //TODO: faster as a LUT?
     TN_Type src = node_type(edge_src_node(id));
