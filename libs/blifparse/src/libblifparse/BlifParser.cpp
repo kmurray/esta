@@ -31,7 +31,7 @@ BlifData* BlifParser::parse(std::string filename) {
     }
 
     if(sweep_dangling_ios_) {
-        blif_data_->sweep_dangling_ios(blif_data_->get_top_module());
+        blif_data_->sweep_dangling_ios(blif_data_->get_top_model());
     }
 
     return blif_data_;

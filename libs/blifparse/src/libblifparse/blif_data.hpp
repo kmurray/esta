@@ -217,7 +217,8 @@ struct BlifData {
         }
     }
 
-    BlifModel* get_top_module() { return models[0]; }
+    BlifModel* get_top_model() const { return models[0]; };
+    BlifModel* get_top_model() { return models[0]; }
 
     void resolve_nets() {
         //Walk through all the ports on all primitives
