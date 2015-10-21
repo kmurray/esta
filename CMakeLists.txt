@@ -151,12 +151,20 @@ add_library(cudd_obj STATIC IMPORTED GLOBAL)
 set_property(TARGET cudd_obj PROPERTY IMPORTED_LOCATION ${install_dir}/src/project_cudd/obj/libobj.a)
 add_dependencies(cudd_obj project_cudd)
 
+#Collect up all the cudd libraries
+set(CUDD_LIBS
+    #NOTE: the link order of the various CUDD sub-libraries is very important!
+    #      incorrect ordering will case linker errors!
+    cudd_obj cudd cudd_mtr cudd_st cudd_util cudd_epd )
+
 message(STATUS "CUDD INSTALL DIR: ${install_dir}")
 
 #Export include dirs to we can compile against CUDD
 include_directories(${install_dir}/src/project_cudd/include/ ${install_dir}/src/project_cudd/obj/)
 
+enable_testing()
 
 add_subdirectory(src)
 add_subdirectory(libs)
+add_subdirectory(tests)
 

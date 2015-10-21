@@ -8,12 +8,10 @@
 #
 #
 
-#Demo executable
-#set(EXEC_NAME tatum_sta)
-
-#Source files for the demo executable (not generated)
-file(GLOB_RECURSE ETA_SOURCES *.cpp)
-file(GLOB_RECURSE ETA_HEADERS *.hpp)
+#Source files
+file(GLOB_RECURSE ETA_SOURCES */*.cpp)
+file(GLOB_RECURSE ETA_HEADERS */*.hpp)
+file(GLOB ETA_MAIN main.cpp)
 
 #Include directories
 foreach(header ${ETA_HEADERS})
@@ -23,20 +21,25 @@ endforeach()
 #Remove duplicate include directories
 list(REMOVE_DUPLICATES ETA_INCLUDE_DIRS)
 
+#Define library
+add_library(libeta STATIC ${ETA_SOURCES} ${ETA_HEADERS})
+target_link_libraries(libeta
+                      tatum
+                      blifparse
+                      ${CUDD_LIBS})
+
+#Library Includes
+target_include_directories(libeta PUBLIC
+                           ${ETA_INCLUDE_DIRS})
+
+
 #Define Executable
 add_executable(eta
-               ${ETA_SOURCES}
-               ${ETA_HEADERS})
-
-#Exectuable Includes
-target_include_directories(eta PRIVATE
-                           ${ETA_INCLUDE_DIRS})
+               ${ETA_MAIN})
 
 #Executable links to the library
 #target_link_libraries(eta blifparse tatum cudd_mtr cudd_st cudd_epd cudd_util cudd_obj cudd)
 target_link_libraries(eta 
-                      cpp-argparse blifparse tatum 
-                      #NOTE: the link order of the various CUDD sub-libraries is very important!
-                      #      incorrect ordering will case linker errors!
-                      cudd_obj cudd cudd_mtr cudd_st cudd_util cudd_epd )
+                      cpp-argparse 
+                      libeta)
 
