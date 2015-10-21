@@ -14,7 +14,7 @@ class PreCalcTransDelayCalculator {
         ///Initializes the edge delays
         ///\param edge_delays A vector specifying the delay for every edge
         PreCalcTransDelayCalculator(std::map<TransitionType,std::vector<float>>& edge_delays) {
-            for(auto trans : {TransitionType::RISE, TransitionType::FALL, TransitionType::HIGH, TransitionType::LOW}) {
+            for(auto trans : {TransitionType::RISE, TransitionType::FALL, TransitionType::HIGH, TransitionType::LOW, TransitionType::CLOCK}) {
                 edge_delays_[trans].reserve(edge_delays.size());
                 for(float delay : edge_delays[trans]) {
                     edge_delays_[trans].emplace_back(delay);

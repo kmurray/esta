@@ -109,8 +109,8 @@ int main(int argc, char** argv) {
      *print_timing_graph(timing_graph);
      */
 
-    cout << "\n";
     /*
+     *cout << "\n";
      *cout << "TimingGraph logic functions: " << "\n";
      *for(NodeId id = 0; id < timing_graph.num_nodes(); id++) {
      *    cout << "Node " << id << ": " << timing_graph.node_func(id) << "\n";
@@ -141,7 +141,7 @@ int main(int argc, char** argv) {
     //The actual delay calculator
     std::map<TransitionType,std::vector<float>> delays;
     //Initialize all edge delays to zero
-    for(auto trans : {TransitionType::RISE, TransitionType::FALL, TransitionType::HIGH, TransitionType::LOW}) {
+    for(auto trans : {TransitionType::RISE, TransitionType::FALL, TransitionType::HIGH, TransitionType::LOW, TransitionType::CLOCK}) {
         delays[trans] = std::vector<float>(timing_graph.num_edges(), 0.0);
     }
 
@@ -158,17 +158,6 @@ int main(int argc, char** argv) {
         }
     }
 
-    /*
-     *delays[TransitionType::RISE] = std::vector<float>(timing_graph.num_edges(), 1.0);
-     *delays[TransitionType::FALL] = std::vector<float>(timing_graph.num_edges(), 1.0);
-     *delays[TransitionType::HIGH] = std::vector<float>(timing_graph.num_edges(), 0.0);
-     *delays[TransitionType::LOW] = std::vector<float>(timing_graph.num_edges(), 0.0);
-     */
-    /*
-     *delays[TransitionType::SWITCH] = std::vector<float>(timing_graph.num_edges(), 1.);
-     *delays[TransitionType::STEADY] = std::vector<float>(timing_graph.num_edges(), 0.1);
-     */
-
     auto delay_calc = DelayCalcType(delays);
 
     using AnalyzerType = SerialTimingAnalyzer<AnalysisType,DelayCalcType>;
@@ -179,13 +168,22 @@ int main(int argc, char** argv) {
     cout << "Analyzing...\n";
     analyzer->calculate_timing();
 
-    //for(NodeId i = 0; i < timing_graph.num_nodes(); i++) {
-    for(NodeId i : timing_graph.primary_outputs()) {
-        cout << "Node: " << i << "\n";
-        for(auto& tag : analyzer->setup_data_tags(i)) {
-             //cout << "\t ArrTime: " << tag.arr_time().value() << "\n";
-            double sat_cnt = tag.switch_func().CountMinterm(2*timing_graph.primary_inputs().size());
-            cout << "\t" << tag << ", #SAT: " << sat_cnt << " (" << sat_cnt / pow(2, 2*timing_graph.primary_inputs().size()) << ")\n";
+    auto nvars = timing_graph.num_logical_inputs();
+    auto nassigns = pow(2, nvars);
+    for(int i = 0; i < timing_graph.num_levels(); i++) {
+        for(NodeId node_id : timing_graph.level(i)) {
+        //for(NodeId node_id : timing_graph.primary_outputs()) {
+            cout << "Node: " << node_id << " (" << timing_graph.node_type(node_id) << ")\n";
+            cout << "   Clk Tag:\n";
+            for(auto& tag : analyzer->setup_clock_tags(node_id)) {
+                cout << "\t" << tag << "\n";
+            }
+            cout << "   Data Tag:\n";
+            for(auto& tag : analyzer->setup_data_tags(node_id)) {
+                 //cout << "\t ArrTime: " << tag.arr_time().value() << "\n";
+                double sat_cnt = tag.switch_func().CountMinterm(2*timing_graph.primary_inputs().size());
+                cout << "\t" << tag << ", #SAT: " << sat_cnt << " (" << sat_cnt / nassigns << ")\n";
+            }
         }
     }
 

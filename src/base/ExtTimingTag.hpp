@@ -23,6 +23,7 @@ enum class TransitionType {
     FALL,
     HIGH,
     LOW,
+    CLOCK,
     //STEADY,
     //SWITCH
     UNKOWN
@@ -261,6 +262,7 @@ std::ostream& operator<<(std::ostream& os, const TransitionType& trans) {
     else if (trans == TransitionType::FALL) os << "FALL";
     else if (trans == TransitionType::HIGH) os << "HIGH";
     else if (trans == TransitionType::LOW) os << "LOW";
+    else if (trans == TransitionType::CLOCK) os << "CLOCK";
     else assert(0);
     return os;
 }

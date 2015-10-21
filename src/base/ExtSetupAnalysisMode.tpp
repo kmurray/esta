@@ -1,3 +1,5 @@
+/*#define TAG_DEBUG*/
+
 template<class BaseAnalysisMode, class Tags>
 void ExtSetupAnalysisMode<BaseAnalysisMode,Tags>::initialize_traversal(const TimingGraph& tg) {
     //Chain to base class
@@ -12,12 +14,15 @@ void ExtSetupAnalysisMode<BaseAnalysisMode,Tags>::initialize_traversal(const Tim
     //To represent transitions we have both a 'curr' and 'next' variable
     pi_curr_bdd_vars_.clear();
     pi_next_bdd_vars_.clear();
-    for(NodeId node_id : tg.primary_inputs()) {
-        //Generate the current variable
-        pi_curr_bdd_vars_[node_id] = g_cudd.bddVar();
+    for(NodeId node_id = 0; node_id < tg.num_nodes(); node_id++) {
+        auto node_type = tg.node_type(node_id);
+        if(node_type == TN_Type::INPAD_SOURCE || node_type == TN_Type::FF_SOURCE) {
+            //Generate the current variable
+            pi_curr_bdd_vars_[node_id] = g_cudd.bddVar();
 
-        //We need to generate and record a new 'next' variable
-        pi_next_bdd_vars_[node_id] = g_cudd.bddVar();
+            //We need to generate and record a new 'next' variable
+            pi_next_bdd_vars_[node_id] = g_cudd.bddVar();
+        }
     }
 }
 
@@ -43,14 +48,12 @@ void ExtSetupAnalysisMode<BaseAnalysisMode,Tags>::pre_traverse_node(const Timing
     } else if(node_type == TN_Type::CLOCK_SOURCE) {
         ASSERT_MSG(setup_clock_tags_[node_id].num_tags() == 0, "Clock source already has clock tags");
         assert(0);
-/*
- *
- *        //Initialize a clock tag with zero arrival, invalid required time
- *        Tag clock_tag = Tag(Time(0.), Time(NAN), tg.node_clock_domain(node_id), node_id);
- *
- *        //Add the tag
- *        setup_clock_tags_[node_id].add_tag(clock_tag);
- */
+
+        //Initialize a clock tag with zero arrival, invalid required time
+        Tag clock_tag = Tag(Time(0.), Time(NAN), tg.node_clock_domain(node_id), node_id, TransitionType::CLOCK, g_cudd.bddOne());
+
+        //Add the tag
+        setup_clock_tags_[node_id].add_tag(clock_tag);
 
     } else {
         ASSERT(node_type == TN_Type::INPAD_SOURCE);
@@ -60,22 +63,19 @@ void ExtSetupAnalysisMode<BaseAnalysisMode,Tags>::pre_traverse_node(const Timing
         //We assume input delays are on the arc from INPAD_SOURCE to INPAD_OPIN,
         //so we do not need to account for it directly in the arrival time of INPAD_SOURCES
 
-        //Initialize a data tag with zero arrival, invalid required time
-        for(auto trans : {TransitionType::RISE, TransitionType::FALL, TransitionType::HIGH, TransitionType::LOW}) {
-
-            BDD switch_func = generate_pi_switch_func(node_id, trans);
-
-            Tag input_tag = Tag(Time(0.), Time(NAN), tg.node_clock_domain(node_id), node_id, trans, switch_func);
-
+        if(tg.node_is_clock_source(node_id)) {
             //Figure out if we are an input which defines a clock
-            if(tg.node_is_clock_source(node_id)) {
-                /*ASSERT_MSG(setup_clock_tags_[node_id].num_tags() == 0, "Primary input already has clock tags");*/
-                assert(0);
-
+            for(auto trans : {TransitionType::CLOCK}) {
+                Tag input_tag = Tag(Time(0.), Time(NAN), tg.node_clock_domain(node_id), node_id, trans, g_cudd.bddOne());
                 setup_clock_tags_[node_id].add_tag(input_tag);
-            } else {
-                /*ASSERT_MSG(setup_clock_tags_[node_id].num_tags() == 0, "Primary input already has data tags");*/
+            }
+        } else {
+            //Initialize a data tag with zero arrival, invalid required time
+            for(auto trans : {TransitionType::RISE, TransitionType::FALL, TransitionType::HIGH, TransitionType::LOW}) {
 
+                BDD switch_func = generate_pi_switch_func(node_id, trans);
+
+                Tag input_tag = Tag(Time(0.), Time(NAN), tg.node_clock_domain(node_id), node_id, trans, switch_func);
                 setup_data_tags_[node_id].add_tag(input_tag);
             }
         }
@@ -89,14 +89,49 @@ void ExtSetupAnalysisMode<BaseAnalysisMode,Tags>::forward_traverse_finalize_node
     BaseAnalysisMode::forward_traverse_finalize_node(tg, tc, dc, node_id);
 
     //Grab the tags from all inputs
-    std::vector<Tags> src_tag_sets;
+    std::vector<Tags> src_data_tag_sets;
     for(int edge_idx = 0; edge_idx < tg.num_node_in_edges(node_id); edge_idx++) {
         EdgeId edge_id = tg.node_in_edge(node_id, edge_idx);
 
         NodeId src_node = tg.edge_src_node(edge_id);
 
+        //Handle data tags
         const Tags& src_data_tags = setup_data_tags_[src_node];
-        src_tag_sets.push_back(src_data_tags);
+        src_data_tag_sets.push_back(src_data_tags);
+
+        //Handle clock tags
+        const Tags& src_clock_tags = setup_clock_tags_[src_node];
+        if(tg.node_type(node_id) == TN_Type::FF_SOURCE) {
+            assert(tg.node_type(src_node) == TN_Type::FF_CLOCK);
+
+            /*
+             * Convert the clock tag into a data tag at this node
+             */
+            //Edge delay for the clock
+            const Time& edge_delay = dc.max_edge_delay(tg, edge_id, TransitionType::CLOCK);
+
+            Tags& sink_data_tags = setup_data_tags_[node_id];
+            for(const Tag& clk_tag : src_clock_tags) {
+                //Determine the new data tag based on the arriving clock tag
+                Time new_arr = clk_tag.arr_time() + edge_delay;
+                for(auto trans : {TransitionType::RISE, TransitionType::FALL, TransitionType::HIGH, TransitionType::LOW}) {
+                    auto switch_func = generate_pi_switch_func(node_id, trans);
+                    Tag launch_data_tag = Tag(new_arr, Time(NAN), clk_tag.clock_domain(), node_id, trans, switch_func);
+                    sink_data_tags.max_arr(launch_data_tag);
+                }
+            }
+        } else {
+            //Standard clock tag propogation
+            const Time& edge_delay = dc.max_edge_delay(tg, edge_id, TransitionType::CLOCK);
+            Tags& sink_clock_tags = setup_clock_tags_[node_id];
+
+            for(const Tag& clk_tag : src_clock_tags) {
+                //Determine the new data tag based on the arriving clock tag
+                Time new_arr = clk_tag.arr_time() + edge_delay;
+                Tag new_clk_tag = Tag(new_arr, Time(NAN), clk_tag);
+                sink_clock_tags.max_arr(new_clk_tag);
+            }
+        }
     }
 
     //The output tag set
@@ -104,10 +139,13 @@ void ExtSetupAnalysisMode<BaseAnalysisMode,Tags>::forward_traverse_finalize_node
 
     //Generate all tag transition permutations
     //TODO: use a generator rather than pre-compute
-    std::vector<std::vector<Tag>> src_tag_perms = gen_tag_permutations(src_tag_sets);
+    std::vector<std::vector<Tag>> src_tag_perms = gen_tag_permutations(src_data_tag_sets);
 
     const BDD& node_func = tg.node_func(node_id);
 
+#ifdef TAG_DEBUG
+    std::cout << "Evaluating Node: " << node_id << " " << tg.node_type(node_id) << " (" << node_func << ")\n";
+#endif
     for(const auto& src_tags : src_tag_perms) {
 
         //Calculate the output transition type
@@ -146,7 +184,6 @@ void ExtSetupAnalysisMode<BaseAnalysisMode,Tags>::forward_traverse_finalize_node
         sink_tags.max_arr(scenario_tag); 
 
 #ifdef TAG_DEBUG
-        std::cout << "Evaluating Node: " << node_id << " (" << node_func << ")\n";
         std::cout << "\tCase\n";
         std::cout << "\t\tinput: {";
         for(int edge_idx = 0; edge_idx < tg.num_node_in_edges(node_id); edge_idx++) {
@@ -159,13 +196,15 @@ void ExtSetupAnalysisMode<BaseAnalysisMode,Tags>::forward_traverse_finalize_node
         std::cout << "}\n";
 
         std::cout << "\t\toutput: " << output_transition << "\n";
-        std::cout << "\t\tScenario Func: " << scenario_switch_func << " #SAT: " << scenario_switch_func.CountMinterm(2*tg.primary_inputs().size()) << "\n";
+        /*std::cout << "\t\tScenario Func: " << scenario_switch_func << " #SAT: " << scenario_switch_func.CountMinterm(2*tg.primary_inputs().size()) << "\n";*/
         auto pred = [output_transition](const Tag& tag) {
             return tag.trans_type() == output_transition;
         };
         auto iter = std::find_if(sink_tags.begin(), sink_tags.end(), pred);
         assert(iter != sink_tags.end());
-        std::cout << "\t\tSink " << iter->trans_type() << " Func: " << iter->switch_func() << " #SAT: " << iter->switch_func().CountMinterm(2*tg.primary_inputs().size()) << "\n";
+        std::cout << "\t\tSink " << iter->trans_type() << "\n";
+        /*<< " Func: " << iter->switch_func() << "\n";*/
+        /*std::cout << " #SAT: " << iter->switch_func().CountMinterm(2*tg.primary_inputs().size()) << "\n";*/
 #endif
     }
 }
@@ -250,79 +289,87 @@ TransitionType ExtSetupAnalysisMode<BaseAnalysisMode,Tags>::evaluate_transition(
     //Note that cudd will only read the indicies associated with the variables in the bdd, 
     //so the values of variablse not in the bdd don't matter
     /*std::cout << "Eval Transition Func: " << node_func << "\n";*/
-    auto support_indicies = node_func.SupportIndices();
-    size_t max_var_index = *std::max_element(support_indicies.begin(), support_indicies.end());
-    std::vector<int> initial_inputs(max_var_index+1, 0);
-    std::vector<int> final_inputs(max_var_index+1, 0);
 
-    for(size_t i = 0; i < support_indicies.size(); i++) {
-        //It is entirely possible that the support of a function may be
-        //less than the number of inputs (e.g. a useless input to a
-        //logic function).
-        //As a result we only fill in the variables which are explicitly
-        //listed in the support
-        size_t var_idx = support_indicies[i];
-
-        //We do expect the node inputs to be a superset of
-        //the support
-        assert(var_idx < input_tags_scenario.size());
-        const Tag& tag = input_tags_scenario[var_idx];
-        switch(tag.trans_type()) {
-            case TransitionType::RISE:
-                initial_inputs[var_idx] = 0;
-                final_inputs[var_idx] = 1;
-                break;
-            case TransitionType::FALL:
-                initial_inputs[var_idx] = 1;
-                final_inputs[var_idx] = 0;
-                break;
-            case TransitionType::HIGH:
-                initial_inputs[var_idx] = 1;
-                final_inputs[var_idx] = 1;
-                break;
-            case TransitionType::LOW:
-                initial_inputs[var_idx] = 0;
-                final_inputs[var_idx] = 0;
-                break;
-
-            default:
-                assert(0);
-        }
-    }
-#if 0
-    std::cout << "Init input: ";
-    for(auto val : initial_inputs) {
-        std::cout << val;
-    }
-    std::cout << "\n";
-    std::cout << "Init output: ";
-    for(auto val : final_inputs) {
-        std::cout << val;
-    }
-    std::cout << "\n";
-#endif
-
-    BDD init_output = node_func.Eval(initial_inputs.data());
-    BDD final_output = node_func.Eval(final_inputs.data());
-
-#if 0
-    std::cout << "output: " << init_output << " -> " << final_output << "\n";
-#endif
-
-    if(init_output.IsOne()) {
-        if(final_output.IsOne()) {
-            return TransitionType::HIGH;
-        } else {
-            assert(final_output.IsZero());
-            return TransitionType::FALL;
-        }
+    if(node_func == g_cudd.bddZero()) {
+        return TransitionType::LOW;
+    } else if (node_func == g_cudd.bddOne()) {
+        return TransitionType::HIGH;
     } else {
-        assert(init_output.IsZero());
-        if(final_output.IsOne()) {
-            return TransitionType::RISE;
+        auto support_indicies = node_func.SupportIndices();
+        assert(support_indicies.size() > 0);
+        size_t max_var_index = *std::max_element(support_indicies.begin(), support_indicies.end());
+        std::vector<int> initial_inputs(max_var_index+1, 0);
+        std::vector<int> final_inputs(max_var_index+1, 0);
+
+        for(size_t i = 0; i < support_indicies.size(); i++) {
+            //It is entirely possible that the support of a function may be
+            //less than the number of inputs (e.g. a useless input to a
+            //logic function).
+            //As a result we only fill in the variables which are explicitly
+            //listed in the support
+            size_t var_idx = support_indicies[i];
+
+            //We do expect the node inputs to be a superset of
+            //the support
+            assert(var_idx < input_tags_scenario.size());
+            const Tag& tag = input_tags_scenario[var_idx];
+            switch(tag.trans_type()) {
+                case TransitionType::RISE:
+                    initial_inputs[var_idx] = 0;
+                    final_inputs[var_idx] = 1;
+                    break;
+                case TransitionType::FALL:
+                    initial_inputs[var_idx] = 1;
+                    final_inputs[var_idx] = 0;
+                    break;
+                case TransitionType::HIGH:
+                    initial_inputs[var_idx] = 1;
+                    final_inputs[var_idx] = 1;
+                    break;
+                case TransitionType::LOW:
+                    initial_inputs[var_idx] = 0;
+                    final_inputs[var_idx] = 0;
+                    break;
+
+                default:
+                    assert(0);
+            }
+        }
+#if 0
+        std::cout << "Init input: ";
+        for(auto val : initial_inputs) {
+            std::cout << val;
+        }
+        std::cout << "\n";
+        std::cout << "Init output: ";
+        for(auto val : final_inputs) {
+            std::cout << val;
+        }
+        std::cout << "\n";
+#endif
+
+        BDD init_output = node_func.Eval(initial_inputs.data());
+        BDD final_output = node_func.Eval(final_inputs.data());
+
+#if 0
+        std::cout << "output: " << init_output << " -> " << final_output << "\n";
+#endif
+
+        if(init_output.IsOne()) {
+            if(final_output.IsOne()) {
+                return TransitionType::HIGH;
+            } else {
+                assert(final_output.IsZero());
+                return TransitionType::FALL;
+            }
         } else {
-            assert(final_output.IsZero());
-            return TransitionType::LOW;
+            assert(init_output.IsZero());
+            if(final_output.IsOne()) {
+                return TransitionType::RISE;
+            } else {
+                assert(final_output.IsZero());
+                return TransitionType::LOW;
+            }
         }
     }
 
