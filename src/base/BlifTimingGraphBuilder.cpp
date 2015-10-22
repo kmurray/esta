@@ -25,7 +25,15 @@ void BlifTimingGraphBuilder::build(TimingGraph& tg) {
      */
     assert(blif_data_->models.size() > 0);
 
-    BlifModel* top_model = blif_data_->models[0];
+    BlifModel* top_model = blif_data_->get_top_model();
+
+    cout << "Blif Info: \n";
+    cout << "\tInputs : " << top_model->inputs.size() << "\n";
+    cout << "\tOutputs: " << top_model->outputs.size() << "\n";
+    cout << "\tNames  : " << top_model->names.size() << "\n";
+    cout << "\tLatches: " << top_model->latches.size() << "\n";
+    cout << "\tSubckts: " << top_model->subckts.size() << "\n";
+    cout << "\tNets   : " << blif_data_->nets.size() << "\n";
 
     identify_clock_drivers();
 
