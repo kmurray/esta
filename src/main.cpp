@@ -35,7 +35,7 @@ using AnalyzerType = SerialTimingAnalyzer<AnalysisType,DelayCalcType>;
 BlifData* g_blif_data = nullptr;
 
 optparse::Values parse_args(int argc, char** argv);
-void print_tags(TimingGraph& tg, std::shared_ptr<AnalyzerType> analyzer, std::function<bool(TimingGraph&,NodeId)> node_pred);
+void print_tags(TimingGraph& tg, std::shared_ptr<AnalyzerType> analyzer, bool print_tag_switch, std::function<bool(TimingGraph&,NodeId)> node_pred);
 
 optparse::Values parse_args(int argc, char** argv) {
     auto parser = optparse::OptionParser()
@@ -64,12 +64,20 @@ optparse::Values parse_args(int argc, char** argv) {
           .help("What node tags to print. Must be one of {'po', 'pi', 'all'} (primary inputs, primary outputs, all nodes). Default: %default")
           ;
 
+    parser.add_option("--print_tag_switch")
+          .dest("print_tag_switch_fucn")
+          .action("store_true")
+          .set_default("false")
+          .help("Print swithc function of each tag. Default %default")
+          ;
+
     parser.add_option("--bdd_stats")
           .dest("show_bdd_stats")
           .action("store_true")
           .set_default("false")
           .help("Print out BDD package statistics. Default: %default")
           ;
+
     auto options = parser.parse_args(argc, argv);
 
     if(!options.is_set("blif_file")) {
@@ -185,19 +193,19 @@ int main(int argc, char** argv) {
     analyzer->calculate_timing();
 
     if(options.get_as<string>("print_tags") == "pi") {
-        print_tags(timing_graph, analyzer, 
+        print_tags(timing_graph, analyzer, options.get_as<bool>("print_tag_switch_func"),
                     [] (TimingGraph& tg, NodeId node_id) {
                         return tg.num_node_in_edges(node_id) == 0; 
                     }
                 );
     } else if(options.get_as<string>("print_tags") == "po") {
-        print_tags(timing_graph, analyzer, 
+        print_tags(timing_graph, analyzer, options.get_as<bool>("print_tag_switch_func"),
                     [](TimingGraph& tg, NodeId node_id) {
                         return tg.num_node_out_edges(node_id) == 0; 
                     }
                 );
     } else if(options.get_as<string>("print_tags") == "all") {
-        print_tags(timing_graph, analyzer, 
+        print_tags(timing_graph, analyzer, options.get_as<bool>("print_tag_switch_func"),
                     [](TimingGraph& tg, NodeId node_id) {
                         return true; 
                     }
@@ -209,15 +217,19 @@ int main(int argc, char** argv) {
     delete g_blif_data;
 
     if(options.get_as<bool>("show_bdd_stats")) {
+        cout << endl;
         g_cudd.info();
     }
+
+    cout << endl;
 
     return 0;
 }
 
-void print_tags(TimingGraph& tg, std::shared_ptr<AnalyzerType> analyzer, std::function<bool(TimingGraph&,NodeId)> node_pred) {
+void print_tags(TimingGraph& tg, std::shared_ptr<AnalyzerType> analyzer, bool print_tag_switch, std::function<bool(TimingGraph&,NodeId)> node_pred) {
     auto nvars = tg.num_logical_inputs();
-    auto nassigns = pow(4,nvars); //4 types of transitions
+    auto nassigns = pow(2,2*nvars); //4 types of transitions
+    const double epsilon = 1e-10;
 
     cout << "Num Vars: " << nvars << " Num Possible Assignments: " << nassigns << endl;
 
@@ -226,15 +238,36 @@ void print_tags(TimingGraph& tg, std::shared_ptr<AnalyzerType> analyzer, std::fu
         //for(NodeId node_id : timing_graph.primary_outputs()) {
             if(node_pred(tg, node_id)) { //Primary output
                 cout << "Node: " << node_id << " (" << tg.node_type(node_id) << ")\n";
-                cout << "   Clk Tag:\n";
-                for(auto& tag : analyzer->setup_clock_tags(node_id)) {
-                    cout << "\t" << tag << "\n";
+                cout << "   Clk Tags:\n";
+                auto& clk_tags = analyzer->setup_clock_tags(node_id);
+                if(clk_tags.num_tags() > 0) {
+                    for(auto& tag : clk_tags) {
+                        cout << "\t" << tag;
+                        if(print_tag_switch) {
+                            cout << " " << tag.switch_func(); 
+                        }
+                        cout << "\n";
+                    }
                 }
-                cout << "   Data Tag:\n";
-                for(auto& tag : analyzer->setup_data_tags(node_id)) {
-                     //cout << "\t ArrTime: " << tag.arr_time().value() << "\n";
-                    double sat_cnt = tag.switch_func().CountMinterm(2*nvars);
-                    cout << "\t" << tag << ", #SAT: " << sat_cnt << " (" << sat_cnt / nassigns << ")\n";
+                cout << "   Data Tags:\n";
+                auto& data_tags = analyzer->setup_data_tags(node_id);
+                if(data_tags.num_tags() > 0) {
+                    double data_switch_prob_sum = 0;
+                    for(auto& tag : data_tags) {
+                         //cout << "\t ArrTime: " << tag.arr_time().value() << "\n";
+                        double sat_cnt = tag.switch_func().CountMinterm(2*nvars);
+                        double switch_prob = sat_cnt / nassigns;
+                        data_switch_prob_sum += switch_prob;
+                        cout << "\t" << tag;
+                        cout << ", #SAT: " << sat_cnt << " (" << switch_prob << ")";
+                        if(print_tag_switch) {
+                            cout << ", xfunc: " << tag.switch_func();
+                        }
+                        cout << "\n";
+                    }
+
+                    assert(data_switch_prob_sum > 1.0 - epsilon);
+                    assert(data_switch_prob_sum < 1.0 + epsilon);
                 }
             }
         }
