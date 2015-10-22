@@ -97,7 +97,9 @@ void ExtSetupAnalysisMode<BaseAnalysisMode,Tags>::forward_traverse_finalize_node
 
         //Handle data tags
         const Tags& src_data_tags = setup_data_tags_[src_node];
-        src_data_tag_sets.push_back(src_data_tags);
+        if(src_data_tags.num_tags() != 0) {
+            src_data_tag_sets.push_back(src_data_tags);
+        }
 
         //Handle clock tags
         const Tags& src_clock_tags = setup_clock_tags_[src_node];
@@ -120,6 +122,8 @@ void ExtSetupAnalysisMode<BaseAnalysisMode,Tags>::forward_traverse_finalize_node
                     sink_data_tags.max_arr(launch_data_tag);
                 }
             }
+        } else if(tg.node_type(node_id) == TN_Type::FF_SINK) {
+            //TODO: annotate required time
         } else {
             //Standard clock tag propogation
             const Time& edge_delay = dc.max_edge_delay(tg, edge_id, TransitionType::CLOCK);
@@ -133,79 +137,88 @@ void ExtSetupAnalysisMode<BaseAnalysisMode,Tags>::forward_traverse_finalize_node
             }
         }
     }
+    if(src_data_tag_sets.size() > 0) {
 
-    //The output tag set
-    Tags& sink_tags = setup_data_tags_[node_id];
+        //The output tag set
+        Tags& sink_tags = setup_data_tags_[node_id];
 
-    //Generate all tag transition permutations
-    //TODO: use a generator rather than pre-compute
-    std::vector<std::vector<Tag>> src_tag_perms = gen_tag_permutations(src_data_tag_sets);
+        //Generate all tag transition permutations
+        //TODO: use a generator rather than pre-compute
+        std::vector<std::vector<Tag>> src_tag_perms = gen_tag_permutations(src_data_tag_sets);
 
-    const BDD& node_func = tg.node_func(node_id);
-
-#ifdef TAG_DEBUG
-    std::cout << "Evaluating Node: " << node_id << " " << tg.node_type(node_id) << " (" << node_func << ")\n";
-#endif
-    for(const auto& src_tags : src_tag_perms) {
-
-        //Calculate the output transition type
-        TransitionType output_transition = evaluate_transition(src_tags, node_func);
-
-        //We get the associated output transition when all the transitions in each tag
-        //of this input set occur -- that is when all the input switch functions evaluate
-        //true
-        assert(src_tags.size() > 0);
-        Tag scenario_tag;
-        scenario_tag.set_trans_type(output_transition);
-
-        BDD scenario_switch_func = g_cudd.bddOne();
-        for(int edge_idx = 0; edge_idx < tg.num_node_in_edges(node_id); edge_idx++) {
-            EdgeId edge_id = tg.node_in_edge(node_id, edge_idx);
-            const Tag& src_tag = src_tags[edge_idx];
-
-            Time edge_delay = dc.max_edge_delay(tg, edge_id, output_transition);
-
-            Time new_arr = src_tag.arr_time() + edge_delay;
-
-            if(edge_idx == 0) {
-                scenario_tag.set_clock_domain(src_tag.clock_domain());
-            }
-            scenario_tag.max_arr(new_arr, src_tag);
-
-            //This is the most expensive operation, since at lower levels of the timing graph
-            //this becomes a large operation
-            scenario_switch_func &= src_tag.switch_func();
-
-            assert(scenario_tag.trans_type() == output_transition);
-        }
-        scenario_tag.set_switch_func(scenario_switch_func);
-        
-        //Now we need to merge the scenario into the output tags
-        sink_tags.max_arr(scenario_tag); 
+        const BDD& node_func = tg.node_func(node_id);
 
 #ifdef TAG_DEBUG
-        std::cout << "\tCase\n";
-        std::cout << "\t\tinput: {";
-        for(int edge_idx = 0; edge_idx < tg.num_node_in_edges(node_id); edge_idx++) {
-            const auto& tag = src_tags[edge_idx];
-            std::cout << tag.trans_type();
-            if(edge_idx < tg.num_node_in_edges(node_id) - 1) {
-                std::cout << ", ";
-            }
-        }
-        std::cout << "}\n";
-
-        std::cout << "\t\toutput: " << output_transition << "\n";
-        /*std::cout << "\t\tScenario Func: " << scenario_switch_func << " #SAT: " << scenario_switch_func.CountMinterm(2*tg.primary_inputs().size()) << "\n";*/
-        auto pred = [output_transition](const Tag& tag) {
-            return tag.trans_type() == output_transition;
-        };
-        auto iter = std::find_if(sink_tags.begin(), sink_tags.end(), pred);
-        assert(iter != sink_tags.end());
-        std::cout << "\t\tSink " << iter->trans_type() << "\n";
-        /*<< " Func: " << iter->switch_func() << "\n";*/
-        /*std::cout << " #SAT: " << iter->switch_func().CountMinterm(2*tg.primary_inputs().size()) << "\n";*/
+        std::cout << "Evaluating Node: " << node_id << " " << tg.node_type(node_id) << " (" << node_func << ")\n";
 #endif
+        for(const auto& src_tags : src_tag_perms) {
+
+            //Calculate the output transition type
+            TransitionType output_transition = evaluate_transition(src_tags, node_func);
+
+            //We get the associated output transition when all the transitions in each tag
+            //of this input set occur -- that is when all the input switch functions evaluate
+            //true
+            assert(src_tags.size() > 0);
+            Tag scenario_tag;
+            scenario_tag.set_trans_type(output_transition);
+
+            BDD scenario_switch_func = g_cudd.bddOne();
+            assert((int) src_tags.size() <= tg.num_node_in_edges(node_id)); //May be less than if we are ignoring non-data edges like those from FF_CLOCK to FF_SINK
+            /*for(int edge_idx = 0; edge_idx < (int) src_tags.size(); edge_idx++) {*/
+            for(int edge_idx = 0; edge_idx < tg.num_node_in_edges(node_id); edge_idx++) {
+                EdgeId edge_id = tg.node_in_edge(node_id, edge_idx);
+                NodeId src_node_id = tg.edge_src_node(edge_id);
+                if(tg.node_type(src_node_id) == TN_Type::FF_CLOCK) {
+                    continue; //We skip edges from FF_CLOCK since they never carry data arrivals
+                }
+
+                const Tag& src_tag = src_tags[edge_idx];
+
+                Time edge_delay = dc.max_edge_delay(tg, edge_id, output_transition);
+
+                Time new_arr = src_tag.arr_time() + edge_delay;
+
+                if(edge_idx == 0) {
+                    scenario_tag.set_clock_domain(src_tag.clock_domain());
+                }
+                scenario_tag.max_arr(new_arr, src_tag);
+
+                //This is the most expensive operation, since at lower levels of the timing graph
+                //this becomes a large operation
+                scenario_switch_func &= src_tag.switch_func();
+
+                assert(scenario_tag.trans_type() == output_transition);
+            }
+            scenario_tag.set_switch_func(scenario_switch_func);
+            
+            //Now we need to merge the scenario into the output tags
+            sink_tags.max_arr(scenario_tag); 
+
+#ifdef TAG_DEBUG
+            std::cout << "\tCase\n";
+            std::cout << "\t\tinput: {";
+            for(int edge_idx = 0; edge_idx < tg.num_node_in_edges(node_id); edge_idx++) {
+                const auto& tag = src_tags[edge_idx];
+                std::cout << tag.trans_type();
+                if(edge_idx < tg.num_node_in_edges(node_id) - 1) {
+                    std::cout << ", ";
+                }
+            }
+            std::cout << "}\n";
+
+            std::cout << "\t\toutput: " << output_transition << "\n";
+            /*std::cout << "\t\tScenario Func: " << scenario_switch_func << " #SAT: " << scenario_switch_func.CountMinterm(2*tg.primary_inputs().size()) << "\n";*/
+            auto pred = [output_transition](const Tag& tag) {
+                return tag.trans_type() == output_transition;
+            };
+            auto iter = std::find_if(sink_tags.begin(), sink_tags.end(), pred);
+            assert(iter != sink_tags.end());
+            std::cout << "\t\tSink " << iter->trans_type() << "\n";
+            /*<< " Func: " << iter->switch_func() << "\n";*/
+            /*std::cout << " #SAT: " << iter->switch_func().CountMinterm(2*tg.primary_inputs().size()) << "\n";*/
+#endif
+        }
     }
 }
 
