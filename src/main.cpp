@@ -26,11 +26,16 @@ using std::cerr;
 using std::endl;
 using std::string;
 
+using AnalysisType = ExtSetupAnalysisMode<BaseAnalysisMode,ExtTimingTags>;
+using DelayCalcType = PreCalcTransDelayCalculator;
+using AnalyzerType = SerialTimingAnalyzer<AnalysisType,DelayCalcType>;
+
 //XXX: global variable
 //TODO: Clean up and pass appropriately....
 BlifData* g_blif_data = nullptr;
 
 optparse::Values parse_args(int argc, char** argv);
+void print_tags(TimingGraph& tg, std::shared_ptr<AnalyzerType> analyzer, std::function<bool(TimingGraph&,NodeId)> node_pred);
 
 optparse::Values parse_args(int argc, char** argv) {
     auto parser = optparse::OptionParser()
@@ -50,6 +55,21 @@ optparse::Values parse_args(int argc, char** argv) {
           .help("The method to use for dynamic BDD variable re-ordering. Default: %default")
           ;
 
+    std::vector<std::string> print_tags_choices = {"po", "pi", "all"};
+    parser.add_option("-p", "--print_tags")
+          .dest("print_tags")
+          .choices(print_tags_choices.begin(), print_tags_choices.end())
+          .metavar("VALUE")
+          .set_default("po")
+          .help("What node tags to print. Must be one of {'po', 'pi', 'all'} (primary inputs, primary outputs, all nodes). Default: %default")
+          ;
+
+    parser.add_option("--bdd_stats")
+          .dest("show_bdd_stats")
+          .action("store_true")
+          .set_default("false")
+          .help("Print out BDD package statistics. Default: %default")
+          ;
     auto options = parser.parse_args(argc, argv);
 
     if(!options.is_set("blif_file")) {
@@ -134,9 +154,7 @@ int main(int argc, char** argv) {
         timing_constraints.add_input_constraint(id, 0.);
     }
 
-    using AnalysisType = ExtSetupAnalysisMode<BaseAnalysisMode,ExtTimingTags>;
 
-    using DelayCalcType = PreCalcTransDelayCalculator;
 
     //The actual delay calculator
     std::map<TransitionType,std::vector<float>> delays;
@@ -160,34 +178,65 @@ int main(int argc, char** argv) {
 
     auto delay_calc = DelayCalcType(delays);
 
-    using AnalyzerType = SerialTimingAnalyzer<AnalysisType,DelayCalcType>;
-
     //The actual analyzer
     auto analyzer = std::make_shared<AnalyzerType>(timing_graph, timing_constraints, delay_calc);
 
     cout << "Analyzing...\n";
     analyzer->calculate_timing();
 
-    auto nvars = timing_graph.num_logical_inputs();
-    auto nassigns = pow(2, nvars);
-    for(int i = 0; i < timing_graph.num_levels(); i++) {
-        for(NodeId node_id : timing_graph.level(i)) {
-        //for(NodeId node_id : timing_graph.primary_outputs()) {
-            cout << "Node: " << node_id << " (" << timing_graph.node_type(node_id) << ")\n";
-            cout << "   Clk Tag:\n";
-            for(auto& tag : analyzer->setup_clock_tags(node_id)) {
-                cout << "\t" << tag << "\n";
-            }
-            cout << "   Data Tag:\n";
-            for(auto& tag : analyzer->setup_data_tags(node_id)) {
-                 //cout << "\t ArrTime: " << tag.arr_time().value() << "\n";
-                double sat_cnt = tag.switch_func().CountMinterm(2*timing_graph.primary_inputs().size());
-                cout << "\t" << tag << ", #SAT: " << sat_cnt << " (" << sat_cnt / nassigns << ")\n";
-            }
-        }
+    if(options.get_as<string>("print_tags") == "pi") {
+        print_tags(timing_graph, analyzer, 
+                    [] (TimingGraph& tg, NodeId node_id) {
+                        return tg.num_node_in_edges(node_id) == 0; 
+                    }
+                );
+    } else if(options.get_as<string>("print_tags") == "po") {
+        print_tags(timing_graph, analyzer, 
+                    [](TimingGraph& tg, NodeId node_id) {
+                        return tg.num_node_out_edges(node_id) == 0; 
+                    }
+                );
+    } else if(options.get_as<string>("print_tags") == "all") {
+        print_tags(timing_graph, analyzer, 
+                    [](TimingGraph& tg, NodeId node_id) {
+                        return true; 
+                    }
+                );
+    } else {
+        assert(0);
     }
 
     delete g_blif_data;
 
+    if(options.get_as<bool>("show_bdd_stats")) {
+        g_cudd.info();
+    }
+
     return 0;
+}
+
+void print_tags(TimingGraph& tg, std::shared_ptr<AnalyzerType> analyzer, std::function<bool(TimingGraph&,NodeId)> node_pred) {
+    auto nvars = tg.num_logical_inputs();
+    auto nassigns = pow(4,nvars); //4 types of transitions
+
+    cout << "Num Vars: " << nvars << " Num Possible Assignments: " << nassigns << endl;
+
+    for(int i = 0; i < tg.num_levels(); i++) {
+        for(NodeId node_id : tg.level(i)) {
+        //for(NodeId node_id : timing_graph.primary_outputs()) {
+            if(node_pred(tg, node_id)) { //Primary output
+                cout << "Node: " << node_id << " (" << tg.node_type(node_id) << ")\n";
+                cout << "   Clk Tag:\n";
+                for(auto& tag : analyzer->setup_clock_tags(node_id)) {
+                    cout << "\t" << tag << "\n";
+                }
+                cout << "   Data Tag:\n";
+                for(auto& tag : analyzer->setup_data_tags(node_id)) {
+                     //cout << "\t ArrTime: " << tag.arr_time().value() << "\n";
+                    double sat_cnt = tag.switch_func().CountMinterm(2*nvars);
+                    cout << "\t" << tag << ", #SAT: " << sat_cnt << " (" << sat_cnt / nassigns << ")\n";
+                }
+            }
+        }
+    }
 }
