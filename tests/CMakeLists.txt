@@ -1,5 +1,4 @@
 #The gtest code is not warning clean so we need to suppress some warnings
-set(GTEST_WARN_SUPPRESS_FLAGS "")
 set(GTEST_WARN_SUPPRESS_FLAGS_TO_CHECK
     "-Wno-undef"
     "-Wno-missing-declarations"
@@ -8,13 +7,9 @@ foreach(flag ${GTEST_WARN_SUPPRESS_FLAGS_TO_CHECK})
     CHECK_CXX_COMPILER_FLAG(${flag} COMPILER_SUPPORTS_${flag})
     if(COMPILER_SUPPORTS_${flag})
         #Flag supported, so enable it
-        set(GTEST_WARN_SUPPRESS_FLAGS "${FLEX_BISON_WARN_SUPPRESS_FLAGS} ${flag}")
+        set(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} ${flag}")
     endif()
 endforeach()
-
-#Apply the suppression flags
-set(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} ${GTEST_WARN_SUPPRESS_FLAGS}")
-
 
 #Gtest
 add_subdirectory(gtest)
