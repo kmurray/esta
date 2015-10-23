@@ -5,6 +5,7 @@
 #include "TimingTags.hpp"
 #include "BaseAnalysisMode.hpp"
 
+//#define APPROX_SWITCH_FUNC
 
 template<class BaseAnalysisMode = BaseAnalysisMode, class Tags=TimingTags>
 class ExtSetupAnalysisMode : public BaseAnalysisMode {

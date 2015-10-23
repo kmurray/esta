@@ -47,7 +47,6 @@ void ExtSetupAnalysisMode<BaseAnalysisMode,Tags>::pre_traverse_node(const Timing
 
     } else if(node_type == TN_Type::CLOCK_SOURCE) {
         ASSERT_MSG(setup_clock_tags_[node_id].num_tags() == 0, "Clock source already has clock tags");
-        assert(0);
 
         //Initialize a clock tag with zero arrival, invalid required time
         Tag clock_tag = Tag(Time(0.), Time(NAN), tg.node_clock_domain(node_id), node_id, TransitionType::CLOCK, g_cudd.bddOne());
@@ -190,7 +189,18 @@ void ExtSetupAnalysisMode<BaseAnalysisMode,Tags>::forward_traverse_finalize_node
 
                 assert(scenario_tag.trans_type() == output_transition);
             }
+#ifdef APPROX_SWITCH_FUNC
+            auto switch_func_nsat = scenario_switch_func.CountMinterm(2*tg.logical_inputs().size());
+#if 1
+            BDD approx_switch_func = gen_sharpSAT_equiv_func(g_cudd, switch_func_nsat, 2*tg.logical_inputs().size());
+#else
+            auto switch_func_nsat_norm = switch_func_nsat / exp2(2*tg.logical_inputs().size());
+            BDD approx_switch_func = gen_norm_sharpSAT_equiv_func(g_cudd, switch_func_nsat_norm, 2*tg.logical_inputs().size()).first;
+#endif
+            scenario_tag.set_switch_func(approx_switch_func);
+#else
             scenario_tag.set_switch_func(scenario_switch_func);
+#endif
             
             //Now we need to merge the scenario into the output tags
             sink_tags.max_arr(scenario_tag); 
