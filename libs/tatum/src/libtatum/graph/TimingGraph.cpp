@@ -4,18 +4,6 @@
 
 #include "TimingGraph.hpp"
 
-int TimingGraph::num_logical_inputs() const {
-    //TODO: pre-calculate
-    int cnt = 0;
-    for(NodeId node_id = 0; node_id < num_nodes(); node_id++) {
-        auto node_type_val = node_type(node_id);
-        if(node_type_val == TN_Type::INPAD_SOURCE || node_type_val == TN_Type::FF_SOURCE) {
-            cnt++;
-        }
-    }
-    return cnt;
-}
-
 TE_Type TimingGraph::edge_type(const EdgeId id) const {
     //TODO: faster as a LUT?
     TN_Type src = node_type(edge_src_node(id));
@@ -97,6 +85,7 @@ void TimingGraph::levelize() {
     //Clear any previous levelization
     node_levels_.clear();
     primary_outputs_.clear();
+    logical_inputs_.clear();
 
     //Allocate space for the first level
     node_levels_.resize(1);
@@ -109,12 +98,19 @@ void TimingGraph::levelize() {
     std::vector<int> node_fanin_remaining(num_nodes());
     for(NodeId node_id = 0; node_id < num_nodes(); node_id++) {
         int node_fanin = num_node_in_edges(node_id);
+        TN_Type node_type_val = node_type(node_id);
         node_fanin_remaining[node_id] = node_fanin;
 
         if(node_fanin == 0) {
             //Add a primary input
             node_levels_[0].push_back(node_id);
         }
+
+
+        if(node_type_val == TN_Type::INPAD_SOURCE || node_type_val == TN_Type::FF_SOURCE) {
+            logical_inputs_.push_back(node_id);
+        }
+                 
     }
 
     //Walk the graph from primary inputs (no fanin) to generate a topological sort

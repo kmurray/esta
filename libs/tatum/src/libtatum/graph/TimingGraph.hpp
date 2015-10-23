@@ -192,6 +192,11 @@ class TimingGraph {
         ///\see levelize()
         const std::vector<NodeId>& primary_inputs() const { return node_levels_[0]; } //After levelizing PIs will be 1st level
 
+        ///\pre The graph must be levelized
+        ///\returns The logical inputs of the graph (i.e. INPAD_SOURCEs and FF_SOURCEs)
+        ///\see levelize()
+        const std::vector<NodeId>& logical_inputs() const { return logical_inputs_; }
+
         ///\pre The primary outputs have been identified.
         ///\returns The nodes which are primary outputs
         ///\warning The primary outputs may be on different levels of the graph
@@ -270,5 +275,6 @@ class TimingGraph {
         std::vector<NodeId> primary_outputs_; //Primary output nodes of the timing graph.
                                               //NOTE: we track this separetely (unlike Primary Inputs) since these are
                                               //      scattered through the graph and do not exist on a single level
+        std::vector<NodeId> logical_inputs_; //INPAD_SOURCEs and FF_SOURCEs
 
 };
