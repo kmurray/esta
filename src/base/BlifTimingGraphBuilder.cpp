@@ -81,7 +81,12 @@ void BlifTimingGraphBuilder::create_input(TimingGraph& tg, const BlifPort* input
         clk_domain = iter->second;
     }
 
-    NodeId src = tg.add_node(TN_Type::INPAD_SOURCE, clk_domain, is_clock_source); //Default to 1st clock domain
+    NodeId src;
+    if(is_clock_source) {
+        src = tg.add_node(TN_Type::CLOCK_SOURCE, clk_domain, is_clock_source);
+    } else {
+        src = tg.add_node(TN_Type::INPAD_SOURCE, clk_domain, is_clock_source); //Default to 1st clock domain
+    }
     NodeId opin = tg.add_node(TN_Type::INPAD_OPIN, INVALID_CLOCK_DOMAIN, false);
 
     //Add the edge between them
