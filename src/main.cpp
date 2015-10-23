@@ -8,6 +8,7 @@
 #include "OptionParser.h"
 
 #include "bdd.hpp"
+#include "util.hpp"
 
 #include "blif_parse.hpp"
 
@@ -33,6 +34,7 @@ using AnalyzerType = SerialTimingAnalyzer<AnalysisType,DelayCalcType>;
 //XXX: global variable
 //TODO: Clean up and pass appropriately....
 BlifData* g_blif_data = nullptr;
+ActionTimer g_action_timer;
 
 optparse::Values parse_args(int argc, char** argv);
 void print_tags(TimingGraph& tg, std::shared_ptr<AnalyzerType> analyzer, bool print_tag_switch, std::function<bool(TimingGraph&,NodeId)> node_pred);
@@ -91,18 +93,22 @@ optparse::Values parse_args(int argc, char** argv) {
 }
 
 int main(int argc, char** argv) {
+    g_action_timer.push_timer("ETA Application");
+    cout << "\n";
+
     auto options = parse_args(argc, argv);
 
     //Initialize CUDD
     g_cudd.AutodynEnable(options.get_as<Cudd_ReorderingType>("bdd_reorder_method"));
     g_cudd.EnableReorderingReporting();
 
-    cout << "Parsing file: " << options.get_as<string>("blif_file") << endl;
+
+    //Load the file
+    g_action_timer.push_timer("Loading Blif");
+    cout << "\tParsing file: " << options.get_as<string>("blif_file") << endl;
 
     //Create the parser
     BlifParser parser;
-
-    //Load the file
     try {
         g_blif_data = parser.parse(options.get_as<string>("blif_file"));
     } catch (BlifParseError& e) {
@@ -112,18 +118,20 @@ int main(int argc, char** argv) {
 
     assert(g_blif_data != nullptr);
 
-    cout << "\tOK" << endl;
+    g_action_timer.pop_timer("Loading Blif");
+    cout << "\n";
 
     //Create the builder
     BlifTimingGraphBuilder tg_builder(g_blif_data);
 
     TimingGraph timing_graph;
 
-    cout << "Building Timing Graph..." << "\n";
+    g_action_timer.push_timer("Building Timing Graph");
+
     tg_builder.build(timing_graph);
 
-    cout << "Levelizing Timing Graph..." << "\n";
-    timing_graph.levelize();
+    g_action_timer.pop_timer("Building Timing Graph");
+    cout << "\n";
 
     /*
      *cout << "\n";
@@ -145,7 +153,6 @@ int main(int argc, char** argv) {
      *print_levelization(timing_graph);
      */
 
-    cout << "Level Histogram:\n";
     print_level_histogram(timing_graph, 10);
     cout << "\n";
     
@@ -183,8 +190,12 @@ int main(int argc, char** argv) {
     //The actual analyzer
     auto analyzer = std::make_shared<AnalyzerType>(timing_graph, timing_constraints, delay_calc);
 
-    cout << "Analyzing...\n";
+    g_action_timer.push_timer("Analysis");
+
     analyzer->calculate_timing();
+
+    g_action_timer.pop_timer("Analysis");
+
 
     cout << "\n";
     cout << "BDD Stats after analysis:\n";
@@ -193,6 +204,7 @@ int main(int argc, char** argv) {
     cout << "\tpeak_nnodes: " << g_cudd.ReadPeakNodeCount() << "\n";
     cout << "\n";
 
+    g_action_timer.push_timer("Output Results");
     if(options.get_as<string>("print_tags") == "pi") {
         print_tags(timing_graph, analyzer, options.get_as<bool>("print_tag_switch_func"),
                     [] (TimingGraph& tg, NodeId node_id) {
@@ -217,12 +229,35 @@ int main(int argc, char** argv) {
         assert(0);
     }
 
+    /*
+     *std::cout << "\n";
+     *std::cout << "Worst Arrival:\n";
+     *ExtTimingTags worst_tags;
+     *auto nvars = timing_graph.logical_inputs().size();
+     *auto nassigns = pow(2,2*nvars); //4 types of transitions
+     *for(auto node_id : timing_graph.primary_outputs()) {
+     *    for(const auto& tag : analyzer->setup_data_tags(node_id)) {
+     *        auto new_tag = ExtTimingTag(tag);
+     *        new_tag.set_next(nullptr);
+     *        worst_tags.max_arr(new_tag);
+     *    }
+     *}
+     *for(const auto& tag : worst_tags) {
+     *    double sat_cnt = tag.switch_func().CountMinterm(2*nvars);
+     *    double switch_prob = sat_cnt / nassigns;
+     *    cout << "\t" << tag;
+     *    cout << ", #SAT: " << sat_cnt << " (" << switch_prob << ")\n";
+     *}
+     */
+
     delete g_blif_data;
 
     if(options.get_as<bool>("show_bdd_stats")) {
         cout << endl;
         g_cudd.info();
     }
+
+    g_action_timer.pop_timer("Output Results");
 
     cout << endl;
 
@@ -232,7 +267,6 @@ int main(int argc, char** argv) {
 void print_tags(TimingGraph& tg, std::shared_ptr<AnalyzerType> analyzer, bool print_tag_switch, std::function<bool(TimingGraph&,NodeId)> node_pred) {
     auto nvars = tg.logical_inputs().size();
     auto nassigns = pow(2,2*nvars); //4 types of transitions
-    const double epsilon = 1e-10;
 
     cout << "Num Vars: " << nvars << " Num Possible Assignments: " << nassigns << endl;
 
@@ -268,9 +302,6 @@ void print_tags(TimingGraph& tg, std::shared_ptr<AnalyzerType> analyzer, bool pr
                         }
                         cout << "\n";
                     }
-
-                    assert(data_switch_prob_sum > 1.0 - epsilon);
-                    assert(data_switch_prob_sum < 1.0 + epsilon);
                 }
             }
         }
