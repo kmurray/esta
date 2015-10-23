@@ -55,13 +55,13 @@ optparse::Values parse_args(int argc, char** argv) {
           .help("The method to use for dynamic BDD variable re-ordering. Default: %default")
           ;
 
-    std::vector<std::string> print_tags_choices = {"po", "pi", "all"};
+    std::vector<std::string> print_tags_choices = {"po", "pi", "all", "none"};
     parser.add_option("-p", "--print_tags")
           .dest("print_tags")
           .choices(print_tags_choices.begin(), print_tags_choices.end())
           .metavar("VALUE")
           .set_default("po")
-          .help("What node tags to print. Must be one of {'po', 'pi', 'all'} (primary inputs, primary outputs, all nodes). Default: %default")
+          .help("What node tags to print. Must be one of {'po', 'pi', 'all', 'none'} (primary inputs, primary outputs, all nodes). Default: %default")
           ;
 
     parser.add_option("--print_tag_switch")
@@ -93,15 +93,9 @@ optparse::Values parse_args(int argc, char** argv) {
 int main(int argc, char** argv) {
     auto options = parse_args(argc, argv);
 
-    /*
-     *if(argc != 2) {
-     *    std::cout << "Usage: " << argv[0] << " filename1.blif" << endl;
-     *    return 1;
-     *}
-     */
-
-    //Initialize the auto-reorder in CUDD
+    //Initialize CUDD
     g_cudd.AutodynEnable(options.get_as<Cudd_ReorderingType>("bdd_reorder_method"));
+    g_cudd.EnableReorderingReporting();
 
     cout << "Parsing file: " << options.get_as<string>("blif_file") << endl;
 
@@ -192,6 +186,13 @@ int main(int argc, char** argv) {
     cout << "Analyzing...\n";
     analyzer->calculate_timing();
 
+    cout << "\n";
+    cout << "BDD Stats after analysis:\n";
+    cout << "\tnvars: " << g_cudd.ReadSize() << "\n";
+    cout << "\tnnodes: " << g_cudd.ReadNodeCount() << "\n";
+    cout << "\tpeak_nnodes: " << g_cudd.ReadPeakNodeCount() << "\n";
+    cout << "\n";
+
     if(options.get_as<string>("print_tags") == "pi") {
         print_tags(timing_graph, analyzer, options.get_as<bool>("print_tag_switch_func"),
                     [] (TimingGraph& tg, NodeId node_id) {
@@ -210,6 +211,8 @@ int main(int argc, char** argv) {
                         return true; 
                     }
                 );
+    } else if(options.get_as<string>("print_tags") == "none") {
+        //pass
     } else {
         assert(0);
     }
@@ -227,7 +230,7 @@ int main(int argc, char** argv) {
 }
 
 void print_tags(TimingGraph& tg, std::shared_ptr<AnalyzerType> analyzer, bool print_tag_switch, std::function<bool(TimingGraph&,NodeId)> node_pred) {
-    auto nvars = tg.num_logical_inputs();
+    auto nvars = tg.logical_inputs().size();
     auto nassigns = pow(2,2*nvars); //4 types of transitions
     const double epsilon = 1e-10;
 
