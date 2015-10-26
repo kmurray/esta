@@ -35,6 +35,7 @@ using AnalyzerType = SerialTimingAnalyzer<AnalysisType,DelayCalcType>;
 //TODO: Clean up and pass appropriately....
 BlifData* g_blif_data = nullptr;
 ActionTimer g_action_timer;
+EtaStats g_eta_stats;
 
 optparse::Values parse_args(int argc, char** argv);
 void print_tags(TimingGraph& tg, std::shared_ptr<AnalyzerType> analyzer, bool print_tag_switch, std::function<bool(TimingGraph&,NodeId)> node_pred);
@@ -55,6 +56,18 @@ optparse::Values parse_args(int argc, char** argv) {
           .metavar("CUDD_REORDER_METHOD")
           .set_default("CUDD_REORDER_SIFT")
           .help("The method to use for dynamic BDD variable re-ordering. Default: %default")
+          ;
+    parser.add_option("--sift_nswaps")
+          .set_default("2000000")
+          .help("Max number of variable swaps per reordering. Default %default")
+          ;
+    parser.add_option("--sift_nvars")
+          .set_default("1000")
+          .help("Max number of variables to be sifted per reordering. Default %default")
+          ;
+    parser.add_option("--sift_max_growth")
+          .set_default("1.2")
+          .help("Max growth in (intermediate) number of BDD nodes during sifting. Default %default")
           ;
 
     std::vector<std::string> print_tags_choices = {"po", "pi", "all", "none"};
@@ -101,6 +114,9 @@ int main(int argc, char** argv) {
     //Initialize CUDD
     g_cudd.AutodynEnable(options.get_as<Cudd_ReorderingType>("bdd_reorder_method"));
     g_cudd.EnableReorderingReporting();
+    g_cudd.SetSiftMaxSwap(options.get_as<int>("sift_nswaps"));
+    g_cudd.SetSiftMaxVar(options.get_as<int>("sift_nvars"));
+    g_cudd.SetMaxGrowth(options.get_as<double>("sift_max_growth"));
 
 
     //Load the file
@@ -153,6 +169,7 @@ int main(int argc, char** argv) {
      *print_levelization(timing_graph);
      */
 
+    cout << "Timing Graph Nodes: " << timing_graph.num_nodes() << "\n";
     print_level_histogram(timing_graph, 10);
     cout << "\n";
     
@@ -196,13 +213,6 @@ int main(int argc, char** argv) {
 
     g_action_timer.pop_timer("Analysis");
 
-
-    cout << "\n";
-    cout << "BDD Stats after analysis:\n";
-    cout << "\tnvars: " << g_cudd.ReadSize() << "\n";
-    cout << "\tnnodes: " << g_cudd.ReadNodeCount() << "\n";
-    cout << "\tpeak_nnodes: " << g_cudd.ReadPeakNodeCount() << "\n";
-    cout << "\n";
 
     g_action_timer.push_timer("Output Results");
     if(options.get_as<string>("print_tags") == "pi") {
@@ -250,7 +260,26 @@ int main(int argc, char** argv) {
      *}
      */
 
-    delete g_blif_data;
+
+    cout << "\n";
+    cout << "BDD Stats after analysis:\n";
+    cout << "\tnvars: " << g_cudd.ReadSize() << "\n";
+    cout << "\tnnodes: " << g_cudd.ReadNodeCount() << "\n";
+    cout << "\tpeak_nnodes: " << g_cudd.ReadPeakNodeCount() << "\n";
+    cout << "\tpeak_live_nnodes: " << Cudd_ReadPeakLiveNodeCount(g_cudd.getManager()) << "\n";
+    cout << "\treorderings: " << g_cudd.ReadReorderings() << "\n";
+    float reorder_time_sec = (float) g_cudd.ReadReorderingTime() / 1000;
+    cout << "\treorder time (s): " << reorder_time_sec << " (" << reorder_time_sec / g_action_timer.elapsed("ETA Application") << " total)\n";
+    cout << "\n";
+
+#ifdef APPROX_SWITCH_FUNC
+    cout << "Switch Func Approx Stats:\n";
+    cout << "\tApprox Attempts  : " << g_eta_stats.approx_attempts << "\n";
+    cout << "\tApprox Accepted  : " << g_eta_stats.approx_accepted << " (" << (float) g_eta_stats.approx_accepted / g_eta_stats.approx_attempts << ")\n";
+    cout << "\tApprox Time      : " << g_eta_stats.approx_time << " (" << g_eta_stats.approx_time / g_action_timer.elapsed("ETA Application") << " total)\n";
+    cout << "\tApprox Eval Time : " << g_eta_stats.approx_eval_time << " (" << g_eta_stats.approx_eval_time / g_action_timer.elapsed("ETA Application") << " total)\n";
+    cout << "\n";
+#endif
 
     if(options.get_as<bool>("show_bdd_stats")) {
         cout << endl;
@@ -261,6 +290,7 @@ int main(int argc, char** argv) {
 
     cout << endl;
 
+    delete g_blif_data;
     return 0;
 }
 

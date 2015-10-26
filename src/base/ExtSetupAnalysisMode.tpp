@@ -1,4 +1,8 @@
 /*#define TAG_DEBUG*/
+#include <chrono>
+#include "util.hpp"
+
+extern EtaStats g_eta_stats;
 
 template<class BaseAnalysisMode, class Tags>
 void ExtSetupAnalysisMode<BaseAnalysisMode,Tags>::initialize_traversal(const TimingGraph& tg) {
@@ -150,7 +154,21 @@ void ExtSetupAnalysisMode<BaseAnalysisMode,Tags>::forward_traverse_finalize_node
 #ifdef TAG_DEBUG
         std::cout << "Evaluating Node: " << node_id << " " << tg.node_type(node_id) << " (" << node_func << ")\n";
 #endif
+
         for(const auto& src_tags : src_tag_perms) {
+
+#ifdef TAG_DEBUG
+            std::cout << "\tCase\n";
+            std::cout << "\t\tinput: {";
+            for(int edge_idx = 0; edge_idx < tg.num_node_in_edges(node_id); edge_idx++) {
+                const auto& tag = src_tags[edge_idx];
+                std::cout << tag.trans_type();
+                if(edge_idx < tg.num_node_in_edges(node_id) - 1) {
+                    std::cout << ", ";
+                }
+            }
+            std::cout << "}\n";
+#endif
 
             //Calculate the output transition type
             TransitionType output_transition = evaluate_transition(src_tags, node_func);
@@ -190,13 +208,51 @@ void ExtSetupAnalysisMode<BaseAnalysisMode,Tags>::forward_traverse_finalize_node
                 assert(scenario_tag.trans_type() == output_transition);
             }
 #ifdef APPROX_SWITCH_FUNC
-            auto switch_func_nsat = scenario_switch_func.CountMinterm(2*tg.logical_inputs().size());
-#if 1
-            BDD approx_switch_func = gen_sharpSAT_equiv_func(g_cudd, switch_func_nsat, 2*tg.logical_inputs().size());
-#else
-            auto switch_func_nsat_norm = switch_func_nsat / exp2(2*tg.logical_inputs().size());
-            BDD approx_switch_func = gen_norm_sharpSAT_equiv_func(g_cudd, switch_func_nsat_norm, 2*tg.logical_inputs().size()).first;
-#endif
+            std::chrono::time_point<std::chrono::steady_clock> start_approx = std::chrono::steady_clock::now();
+
+            int xfunc_node_cnt = scenario_switch_func.nodeCount();
+            BDD approx_switch_func;
+            if(xfunc_node_cnt > APPROX_SWITCH_NODE_THRESHOLD) {
+                g_eta_stats.approx_attempts += 1;
+
+                /*std::cout << "Node " << node_id << " Nbdd " << xfunc_node_cnt << "\n";*/
+                int target_node_cnt = APPROX_SWITCH_NODE_FRAC*xfunc_node_cnt;
+                int xfunc_support_size = scenario_switch_func.SupportSize();
+
+
+                approx_switch_func = scenario_switch_func.SupersetCompress(xfunc_support_size, target_node_cnt);
+                /*approx_switch_func = scenario_switch_func.SupersetShortPaths(xfunc_support_size, target_node_cnt);*/
+
+
+                std::chrono::time_point<std::chrono::steady_clock> start_approx_eval = std::chrono::steady_clock::now();
+                double orig_nsat = scenario_switch_func.CountMinterm(2*tg.logical_inputs().size());
+                double approx_nsat = approx_switch_func.CountMinterm(2*tg.logical_inputs().size());
+                double approx_nsat_ratio = approx_nsat / orig_nsat;
+                double approx_node_ratio = (float) approx_switch_func.nodeCount() / xfunc_node_cnt;
+                g_eta_stats.approx_eval_time += std::chrono::duration_cast<std::chrono::duration<float>>(std::chrono::steady_clock::now() - start_approx_eval).count();
+
+                if(approx_nsat_ratio < APPROX_SWITCH_ACCEPT_SHARPSAT_RATIO && approx_node_ratio < APPROX_SWITCH_ACCEPT_NODE_RATIO) {
+                    g_eta_stats.approx_accepted += 1;
+                    std::cout << "Approx Node Ratio: " << (float) approx_node_ratio;
+                    std::cout << " Approx #SAT Ratio: " << (float) approx_nsat_ratio;
+                    std::cout << " Accepted";
+                    std::cout << "\n";
+                } else {
+                    /*
+                     *std::cout << "Approx Node Ratio: " << (float) approx_node_cnt / xfunc_node_cnt;
+                     *std::cout << " Approx #SAT Ratio: " << (float) approx_nsat_ratio;
+                     *std::cout << " Rejected";
+                     */
+                    approx_switch_func = scenario_switch_func;
+                }
+
+            } else {
+                //No approximation
+                approx_switch_func = scenario_switch_func;
+            }
+
+            g_eta_stats.approx_time += std::chrono::duration_cast<std::chrono::duration<float>>(std::chrono::steady_clock::now() - start_approx).count();
+
             scenario_tag.set_switch_func(approx_switch_func);
 #else
             scenario_tag.set_switch_func(scenario_switch_func);
@@ -206,17 +262,6 @@ void ExtSetupAnalysisMode<BaseAnalysisMode,Tags>::forward_traverse_finalize_node
             sink_tags.max_arr(scenario_tag); 
 
 #ifdef TAG_DEBUG
-            std::cout << "\tCase\n";
-            std::cout << "\t\tinput: {";
-            for(int edge_idx = 0; edge_idx < tg.num_node_in_edges(node_id); edge_idx++) {
-                const auto& tag = src_tags[edge_idx];
-                std::cout << tag.trans_type();
-                if(edge_idx < tg.num_node_in_edges(node_id) - 1) {
-                    std::cout << ", ";
-                }
-            }
-            std::cout << "}\n";
-
             std::cout << "\t\toutput: " << output_transition << "\n";
             /*std::cout << "\t\tScenario Func: " << scenario_switch_func << " #SAT: " << scenario_switch_func.CountMinterm(2*tg.primary_inputs().size()) << "\n";*/
             auto pred = [output_transition](const Tag& tag) {

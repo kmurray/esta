@@ -6,6 +6,10 @@
 #include "BaseAnalysisMode.hpp"
 
 //#define APPROX_SWITCH_FUNC
+#define APPROX_SWITCH_NODE_THRESHOLD 5e2
+#define APPROX_SWITCH_NODE_FRAC 0.95
+#define APPROX_SWITCH_ACCEPT_SHARPSAT_RATIO 1.05
+#define APPROX_SWITCH_ACCEPT_NODE_RATIO 0.70
 
 template<class BaseAnalysisMode = BaseAnalysisMode, class Tags=TimingTags>
 class ExtSetupAnalysisMode : public BaseAnalysisMode {

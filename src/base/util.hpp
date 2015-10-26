@@ -66,3 +66,10 @@ class ActionTimer {
         std::stack<std::string> action_stack_;
         std::ostream& os_;
 };
+
+struct EtaStats {
+    float approx_time = 0;
+    float approx_eval_time = 0;
+    unsigned long long approx_attempts = 0;
+    unsigned long long approx_accepted = 0;
+};
