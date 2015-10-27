@@ -57,6 +57,13 @@ void BlifTimingGraphBuilder::build(TimingGraph& tg) {
         create_output(tg, output_port);
     }
 
+    //Label all the BDD variables
+    g_cudd.clearVariableNames();
+    for(int i = 0; i < g_cudd.ReadSize(); i++) {
+        g_cudd.pushVariableName(std::string("x") + std::to_string(i));
+        //std::cout << g_cudd.getVariableName(i) << "\n";
+    }
+
     /*
      * Once we have processed every primtiive, we then
      * walk through all the nets (external to primitives)

@@ -69,6 +69,10 @@ optparse::Values parse_args(int argc, char** argv) {
           .set_default("1.2")
           .help("Max growth in (intermediate) number of BDD nodes during sifting. Default %default")
           ;
+    parser.add_option("--bdd_cache_ratio")
+          .set_default("1.0")
+          .help("Factor adjusting cache size relative to default. Default %default")
+          ;
 
     std::vector<std::string> print_tags_choices = {"po", "pi", "all", "none"};
     parser.add_option("-p", "--print_tags")
@@ -114,9 +118,11 @@ int main(int argc, char** argv) {
     //Initialize CUDD
     g_cudd.AutodynEnable(options.get_as<Cudd_ReorderingType>("bdd_reorder_method"));
     g_cudd.EnableReorderingReporting();
+    //Cudd_EnableOrderingMonitoring(g_cudd.getManager());
     g_cudd.SetSiftMaxSwap(options.get_as<int>("sift_nswaps"));
     g_cudd.SetSiftMaxVar(options.get_as<int>("sift_nvars"));
     g_cudd.SetMaxGrowth(options.get_as<double>("sift_max_growth"));
+    g_cudd.SetMaxCacheHard(options.get_as<double>("bdd_cache_ratio") * g_cudd.ReadMaxCacheHard());
 
 
     //Load the file
@@ -289,6 +295,12 @@ int main(int argc, char** argv) {
     g_action_timer.pop_timer("Output Results");
 
     cout << endl;
+
+    /*
+     *for(int i = 0; i < g_cudd.ReadSize(); i++) {
+     *    std::cout << g_cudd.getVariableName(i) << "\n";
+     *}
+     */
 
     delete g_blif_data;
     return 0;

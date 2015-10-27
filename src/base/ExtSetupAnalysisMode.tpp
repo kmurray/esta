@@ -1,6 +1,7 @@
-/*#define TAG_DEBUG*/
 #include <chrono>
 #include "util.hpp"
+
+/*#define TAG_DEBUG*/
 
 extern EtaStats g_eta_stats;
 
@@ -23,9 +24,11 @@ void ExtSetupAnalysisMode<BaseAnalysisMode,Tags>::initialize_traversal(const Tim
         if(node_type == TN_Type::INPAD_SOURCE || node_type == TN_Type::FF_SOURCE) {
             //Generate the current variable
             pi_curr_bdd_vars_[node_id] = g_cudd.bddVar();
+            g_cudd.pushVariableName("n" + std::to_string(node_id));
 
             //We need to generate and record a new 'next' variable
             pi_next_bdd_vars_[node_id] = g_cudd.bddVar();
+            g_cudd.pushVariableName("n" + std::to_string(node_id) + "'");
         }
     }
 }
