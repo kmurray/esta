@@ -5,11 +5,6 @@
 #include "TimingTags.hpp"
 #include "BaseAnalysisMode.hpp"
 
-//#define APPROX_SWITCH_FUNC
-#define APPROX_SWITCH_NODE_THRESHOLD 5
-#define APPROX_SWITCH_ACCEPT_SHARPSAT_RATIO 1.05
-#define APPROX_SWITCH_ACCEPT_NODE_RATIO 0.70
-
 template<class BaseAnalysisMode = BaseAnalysisMode, class Tags=TimingTags>
 class ExtSetupAnalysisMode : public BaseAnalysisMode {
     public:
@@ -17,8 +12,6 @@ class ExtSetupAnalysisMode : public BaseAnalysisMode {
         //External tag access
         const Tags& setup_data_tags(NodeId node_id) const { return setup_data_tags_[node_id]; }
         const Tags& setup_clock_tags(NodeId node_id) const { return setup_clock_tags_[node_id]; }
-
-        void approx_xfuncs(bool val) { approx_xfuncs_ = val; }
     protected:
         //Internal operations for performing setup analysis to satisfy the BaseAnalysisMode interface
         void initialize_traversal(const TimingGraph& tg);
@@ -52,12 +45,6 @@ class ExtSetupAnalysisMode : public BaseAnalysisMode {
         //BDD variable information
         std::unordered_map<NodeId,BDD> pi_curr_bdd_vars_;
         std::unordered_map<NodeId,BDD> pi_next_bdd_vars_;
-
-        //Switch function approximation
-        bool approx_xfuncs_;
-        float approx_xfunc_node_threshold_ = APPROX_SWITCH_NODE_THRESHOLD; //Only approximate xfuncs with at least this many nodes
-        float approx_xfunc_accept_sharpsat_ratio_ = APPROX_SWITCH_ACCEPT_SHARPSAT_RATIO; //Accept approximations with no more than this fraction of satisfying assignments
-        float approx_xfunc_accept_node_ratio_ = APPROX_SWITCH_ACCEPT_NODE_RATIO; //Accept approximations with this fraction or fewer nodes
 };
 
 

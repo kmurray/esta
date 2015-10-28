@@ -74,11 +74,6 @@ optparse::Values parse_args(int argc, char** argv) {
           .set_default("1.0")
           .help("Factor adjusting cache size relative to default. Default %default")
           ;
-    parser.add_option("--approx_xfuncs")
-          .set_default("false")
-          .action("store_true")
-          .help("Enable xfunc approximation. Default %default")
-          ;
 
     std::vector<std::string> print_tags_choices = {"po", "pi", "all", "none"};
     parser.add_option("-p", "--print_tags")
@@ -223,7 +218,6 @@ int main(int argc, char** argv) {
 
     g_action_timer.push_timer("Analysis");
 
-    analyzer->approx_xfuncs(options.get_as<bool>("approx_xfuncs"));
     analyzer->calculate_timing();
 
     g_action_timer.pop_timer("Analysis");

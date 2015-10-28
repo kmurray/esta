@@ -210,61 +210,7 @@ void ExtSetupAnalysisMode<BaseAnalysisMode,Tags>::forward_traverse_finalize_node
 
                 assert(scenario_tag.trans_type() == output_transition);
             }
-            if(approx_xfuncs_) {
-                std::chrono::time_point<std::chrono::steady_clock> start_approx = std::chrono::steady_clock::now();
-
-                int xfunc_node_cnt = scenario_switch_func.nodeCount();
-                BDD approx_switch_func;
-                if(xfunc_node_cnt > APPROX_SWITCH_NODE_THRESHOLD) {
-                    g_eta_stats.approx_attempts += 1;
-
-                    /*std::cout << "Node " << node_id << " Nbdd " << xfunc_node_cnt << "\n";*/
-                    int target_node_cnt = approx_xfunc_node_threshold_*xfunc_node_cnt;
-                    int xfunc_support_size = scenario_switch_func.SupportSize();
-
-
-                    approx_switch_func = scenario_switch_func.SupersetCompress(xfunc_support_size, target_node_cnt);
-                    /*
-                     *approx_switch_func = scenario_switch_func.SupersetShortPaths(xfunc_support_size, target_node_cnt);
-                     */
-                    /*approx_switch_func = scenario_switch_func.SupersetHeavyBranch(xfunc_support_size, target_node_cnt);*/
-                    /*approx_switch_func = scenario_switch_func.OverApprox(xfunc_support_size, target_node_cnt, 0);*/
-                    /*approx_switch_func = scenario_switch_func.OverApprox(xfunc_support_size, target_node_cnt, 1);*/
-                    /*approx_switch_func = scenario_switch_func.RemapOverApprox(xfunc_support_size, target_node_cnt);*/
-
-
-                    std::chrono::time_point<std::chrono::steady_clock> start_approx_eval = std::chrono::steady_clock::now();
-                    double orig_nsat = scenario_switch_func.CountMinterm(2*tg.logical_inputs().size());
-                    double approx_nsat = approx_switch_func.CountMinterm(2*tg.logical_inputs().size());
-                    double approx_nsat_ratio = approx_nsat / orig_nsat;
-                    double approx_node_ratio = (float) approx_switch_func.nodeCount() / xfunc_node_cnt;
-                    g_eta_stats.approx_eval_time += std::chrono::duration_cast<std::chrono::duration<float>>(std::chrono::steady_clock::now() - start_approx_eval).count();
-
-                    if(approx_nsat_ratio < approx_xfunc_accept_sharpsat_ratio_ && approx_node_ratio < approx_xfunc_accept_node_ratio_) {
-                        g_eta_stats.approx_accepted += 1;
-                        std::cout << "Approx Node Ratio: " << (float) approx_node_ratio;
-                        std::cout << " Approx #SAT Ratio: " << (float) approx_nsat_ratio;
-                        std::cout << " Accepted";
-                        std::cout << "\n";
-                    } else {
-                        approx_switch_func = scenario_switch_func;
-                        /*std::cout << "Approx Node Ratio: " << (float) approx_node_ratio;*/
-                        /*std::cout << " Approx #SAT Ratio: " << (float) approx_nsat_ratio;*/
-                        /*std::cout << " Rejected";*/
-                        /*std::cout << "\n";*/
-                    }
-
-                } else {
-                    //No approximation
-                    approx_switch_func = scenario_switch_func;
-                }
-
-                g_eta_stats.approx_time += std::chrono::duration_cast<std::chrono::duration<float>>(std::chrono::steady_clock::now() - start_approx).count();
-
-                scenario_tag.set_switch_func(approx_switch_func);
-            } else {
-                scenario_tag.set_switch_func(scenario_switch_func);
-            }
+            scenario_tag.set_switch_func(scenario_switch_func);
             
             //Now we need to merge the scenario into the output tags
             sink_tags.max_arr(scenario_tag); 
