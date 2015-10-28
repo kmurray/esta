@@ -1,7 +1,8 @@
 #include <chrono>
+#include <sstream>
 #include "util.hpp"
 
-/*#define TAG_DEBUG*/
+#define TAG_DEBUG
 
 extern EtaStats g_eta_stats;
 
@@ -210,7 +211,20 @@ void ExtSetupAnalysisMode<BaseAnalysisMode,Tags>::forward_traverse_finalize_node
 
                 assert(scenario_tag.trans_type() == output_transition);
             }
-            scenario_tag.set_switch_func(scenario_switch_func);
+            //Rather than build the xfunc directly we introduce a new variable
+            //and save the mapping from variable to the real xfunc
+            BDD switch_var = g_cudd.bddVar();
+            
+            //Give a coherent name to the variable name
+            std::stringstream ss;
+            ss << "v" << node_id << "_" << output_transition;
+            g_cudd.pushVariableName(ss.str());
+
+            //Save the mapping from var to xfunc
+            bdd_var_to_implicit_xfunc_[switch_var] = scenario_switch_func;
+
+            //Set the var as the xfunc
+            scenario_tag.set_switch_func(switch_var);
             
             //Now we need to merge the scenario into the output tags
             sink_tags.max_arr(scenario_tag); 
@@ -223,8 +237,8 @@ void ExtSetupAnalysisMode<BaseAnalysisMode,Tags>::forward_traverse_finalize_node
             };
             auto iter = std::find_if(sink_tags.begin(), sink_tags.end(), pred);
             assert(iter != sink_tags.end());
-            std::cout << "\t\tSink " << iter->trans_type() << "\n";
-            /*<< " Func: " << iter->switch_func() << "\n";*/
+            std::cout << "\t\tSink " << iter->trans_type();// << "\n";
+            std::cout << " Func: " << iter->switch_func() << "\n";
             /*std::cout << " #SAT: " << iter->switch_func().CountMinterm(2*tg.primary_inputs().size()) << "\n";*/
 #endif
         }

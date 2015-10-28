@@ -45,6 +45,8 @@ class ExtSetupAnalysisMode : public BaseAnalysisMode {
         //BDD variable information
         std::unordered_map<NodeId,BDD> pi_curr_bdd_vars_;
         std::unordered_map<NodeId,BDD> pi_next_bdd_vars_;
+
+        std::unordered_map<BDD,BDD> bdd_var_to_implicit_xfunc_;
 };
 
 
