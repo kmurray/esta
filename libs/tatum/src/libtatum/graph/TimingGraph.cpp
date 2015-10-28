@@ -83,12 +83,15 @@ void TimingGraph::levelize() {
     //Also records primary outputs
 
     //Clear any previous levelization
-    node_levels_.clear();
+    levels_.clear();
     primary_outputs_.clear();
     logical_inputs_.clear();
+    logical_outputs_.clear();
+    node_levels_ = std::vector<LevelId>(num_nodes());
+
 
     //Allocate space for the first level
-    node_levels_.resize(1);
+    levels_.resize(1);
 
     //Copy the number of input edges per-node
     //These will be decremented to know when all a node's upstream parents have been
@@ -103,12 +106,16 @@ void TimingGraph::levelize() {
 
         if(node_fanin == 0) {
             //Add a primary input
-            node_levels_[0].push_back(node_id);
+            levels_[0].push_back(node_id);
         }
 
 
         if(node_type_val == TN_Type::INPAD_SOURCE || node_type_val == TN_Type::FF_SOURCE) {
             logical_inputs_.push_back(node_id);
+        }
+
+        if(node_type_val == TN_Type::OUTPAD_SINK || node_type_val == TN_Type::FF_SINK) {
+            logical_outputs_.push_back(node_id);
         }
                  
     }
@@ -123,7 +130,7 @@ void TimingGraph::levelize() {
     while(inserted_node_in_level) { //If nothing was inserted we are finished
         inserted_node_in_level = false;
 
-        for(const NodeId node_id : node_levels_[level_id]) {
+        for(const NodeId node_id : levels_[level_id]) {
             //Inspect the fanout
             for(int edge_idx = 0; edge_idx < num_node_out_edges(node_id); edge_idx++) {
                 EdgeId edge_id = node_out_edge(node_id, edge_idx);
@@ -136,10 +143,13 @@ void TimingGraph::levelize() {
                 //Add to the next level if all fanin has been seen
                 if(node_fanin_remaining[sink_node] == 0) {
                     //Ensure there is space by allocating the next level if required
-                    node_levels_.resize(level_id+2);
+                    levels_.resize(level_id+2);
 
-                    //Add the node
-                    node_levels_[level_id+1].push_back(sink_node);
+                    //Add the node to the level
+                    levels_[level_id+1].push_back(sink_node);
+                    
+                    //Record the level of the node
+                    node_levels_[sink_node] = level_id+1;
 
                     inserted_node_in_level = true;
                 }
@@ -161,7 +171,7 @@ std::vector<EdgeId> TimingGraph::optimize_edge_layout() {
     std::vector<std::vector<EdgeId>> edge_levels;
     for(int level_idx = 0; level_idx < num_levels(); level_idx++) {
         edge_levels.push_back(std::vector<EdgeId>());
-        for(auto node_id : node_levels_[level_idx]) {
+        for(auto node_id : levels_[level_idx]) {
             for(int i = 0; i < num_node_out_edges(node_id); i++) {
                 EdgeId edge_id = node_out_edge(node_id, i);
 
@@ -226,7 +236,7 @@ std::vector<NodeId> TimingGraph::optimize_node_layout() {
     /*
      *int cnt = 0;
      *for(int level_idx = 0; level_idx < num_levels(); level_idx++) {
-     *    for(NodeId node_id : node_levels_[level_idx]) {
+     *    for(NodeId node_id : levels_[level_idx]) {
      *        orig_to_new_node_id[node_id] = cnt;
      *        cnt++;
      *    }
@@ -252,7 +262,7 @@ std::vector<NodeId> TimingGraph::optimize_node_layout() {
 
     //Update the values
     for(int level_idx = 0; level_idx < num_levels(); level_idx++) {
-        for(NodeId old_node_id : node_levels_[level_idx]) {
+        for(NodeId old_node_id : levels_[level_idx]) {
             node_types_.push_back(old_node_types[old_node_id]);
             node_clock_domains_.push_back(old_node_clock_domains[old_node_id]);
             node_out_edges_.push_back(old_node_out_edges[old_node_id]);
@@ -269,11 +279,11 @@ std::vector<NodeId> TimingGraph::optimize_node_layout() {
      */
     //The node levels
     for(int level_idx = 0; level_idx < num_levels(); level_idx++) {
-        for(size_t node_idx = 0; node_idx < node_levels_[level_idx].size(); node_idx++) {
-            NodeId old_node_id = node_levels_[level_idx][node_idx];
+        for(size_t node_idx = 0; node_idx < levels_[level_idx].size(); node_idx++) {
+            NodeId old_node_id = levels_[level_idx][node_idx];
             NodeId new_node_id = orig_to_new_node_id[old_node_id];
 
-            node_levels_[level_idx][node_idx] = new_node_id;
+            levels_[level_idx][node_idx] = new_node_id;
         }
     }
 
