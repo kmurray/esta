@@ -1,6 +1,8 @@
 #include <cassert>
 #include <unordered_map>
 #include <set>
+#include <queue>
+#include <algorithm>
 #include "BlifTimingGraphBuilder.hpp"
 
 #include <iostream>
@@ -73,6 +75,9 @@ void BlifTimingGraphBuilder::build(TimingGraph& tg) {
 
     //Now that we have all the edges in the graph we can levelize it
     tg.levelize();
+
+    //check_logical_input_dependancies(tg);
+    check_logical_output_dependancies(tg);
 
     verify(tg);
 }
@@ -392,3 +397,88 @@ void BlifTimingGraphBuilder::identify_clock_drivers() {
     }
 }
 
+void BlifTimingGraphBuilder::check_logical_input_dependancies(const TimingGraph& tg) {
+    auto node_dependancies = std::vector<std::map<NodeId,int>>(tg.num_nodes());
+
+    for(NodeId node_id = 0; node_id < tg.num_nodes(); node_id++) {
+        auto type = tg.node_type(node_id);
+        if(type == TN_Type::INPAD_SOURCE || type == TN_Type::FF_SOURCE) {
+            node_dependancies[node_id][node_id]++;
+        }
+    }
+
+    for(int i = 1; i < tg.num_levels(); i++) {
+        for(NodeId node_id : tg.level(i)) {
+            if(tg.node_type(node_id) != TN_Type::FF_SOURCE) {
+                for(int edge_idx = 0; edge_idx < tg.num_node_in_edges(node_id); edge_idx++) {
+                    EdgeId edge_id = tg.node_in_edge(node_id, edge_idx);
+
+                    NodeId src_node = tg.edge_src_node(edge_id);
+                    for(auto kv : node_dependancies[src_node]) {
+                        node_dependancies[node_id][kv.first]++;
+                    }
+                }
+            }
+        }
+    }
+
+    cout << "Primary Output Dependancies:\n";
+    //for(NodeId node_id : tg.primary_outputs()) {
+    for(int i = 0; i < tg.num_levels(); i++) {
+        for(NodeId node_id : tg.level(i)) {
+            int total_deps = 0;
+            for(auto kv : node_dependancies[node_id]) {
+                total_deps += kv.second;
+            }
+            cout << "\tNode: " << node_id << " (" << tg.node_type(node_id) << ") " << "#Dependancies: " << total_deps << " (" << (float) total_deps / (2*tg.logical_inputs().size()) << ")\n";
+            cout << "\t\t{\n";
+            for(auto kv : node_dependancies[node_id]) {
+                cout << "\t\t\tNode: " << kv.first << ", Cnt: " << kv.second << "\n";
+            }
+            cout << "\t\t}\n";
+        }
+    }
+}
+
+void BlifTimingGraphBuilder::check_logical_output_dependancies(const TimingGraph& tg) {
+    cout << "PO Transitive Fan-ins\n";
+    for(NodeId po_node_id : tg.primary_outputs()) {
+        std::queue<NodeId> node_queue;
+        std::unordered_map<NodeId,int> transitive_fanin;
+
+        //Initialize the queue
+        for(int edge_idx = 0; edge_idx < tg.num_node_in_edges(po_node_id); edge_idx++) {
+            EdgeId edge_id = tg.node_in_edge(po_node_id, edge_idx);
+            NodeId src_node = tg.edge_src_node(edge_id);
+            node_queue.push(src_node);
+        }
+
+        while(!node_queue.empty()) {
+            NodeId node_id = node_queue.front();
+            node_queue.pop();
+
+            transitive_fanin[node_id]++;
+            
+            //Enqueue the fan-in of the current node
+            for(int edge_idx = 0; edge_idx < tg.num_node_in_edges(node_id); edge_idx++) {
+                EdgeId edge_id = tg.node_in_edge(node_id, edge_idx);
+                NodeId src_node = tg.edge_src_node(edge_id);
+                node_queue.push(src_node);
+            }
+        }
+
+        cout << "\tNode: " << po_node_id << " (" << tg.node_type(po_node_id) << ")\n ";
+        cout << "\t\t" << "Trans Fanin Nodes: " << transitive_fanin.size() << " (" << (float) transitive_fanin.size() / (tg.num_nodes()) << ")\n";
+
+        int pi_fanin = 0;
+        for(auto kv : transitive_fanin) {
+            NodeId node_id = kv.first;
+            auto type = tg.node_type(node_id);
+            if(type == TN_Type::FF_SOURCE || type == TN_Type::INPAD_SOURCE) {
+                pi_fanin++;
+            }
+        }
+        cout << "\t\t" << "#PI: " << pi_fanin << " (" << (float) pi_fanin / (tg.logical_inputs().size()) << ")\n";
+
+    }
+}
