@@ -39,6 +39,7 @@ EtaStats g_eta_stats;
 
 optparse::Values parse_args(int argc, char** argv);
 void print_tags(TimingGraph& tg, std::shared_ptr<AnalyzerType> analyzer, bool print_tag_switch, std::function<bool(TimingGraph&,NodeId)> node_pred);
+void level_stats(TimingGraph& tg, std::shared_ptr<AnalyzerType> analyzer);
 
 optparse::Values parse_args(int argc, char** argv) {
     auto parser = optparse::OptionParser()
@@ -72,6 +73,11 @@ optparse::Values parse_args(int argc, char** argv) {
     parser.add_option("--bdd_cache_ratio")
           .set_default("1.0")
           .help("Factor adjusting cache size relative to default. Default %default")
+          ;
+    parser.add_option("--approx_xfuncs")
+          .set_default("false")
+          .action("store_true")
+          .help("Enable xfunc approximation. Default %default")
           ;
 
     std::vector<std::string> print_tags_choices = {"po", "pi", "all", "none"};
@@ -176,6 +182,8 @@ int main(int argc, char** argv) {
      */
 
     cout << "Timing Graph Nodes: " << timing_graph.num_nodes() << "\n";
+    cout << "Timing Graph Num Logical Inputs: " << timing_graph.logical_inputs().size() << "\n";
+    cout << "Timing Graph Num Levels: " << timing_graph.num_levels() << "\n";
     print_level_histogram(timing_graph, 10);
     cout << "\n";
     
@@ -215,6 +223,7 @@ int main(int argc, char** argv) {
 
     g_action_timer.push_timer("Analysis");
 
+    analyzer->approx_xfuncs(options.get_as<bool>("approx_xfuncs"));
     analyzer->calculate_timing();
 
     g_action_timer.pop_timer("Analysis");
@@ -266,6 +275,7 @@ int main(int argc, char** argv) {
      *}
      */
 
+    level_stats(timing_graph, analyzer);
 
     cout << "\n";
     cout << "BDD Stats after analysis:\n";
@@ -278,14 +288,13 @@ int main(int argc, char** argv) {
     cout << "\treorder time (s): " << reorder_time_sec << " (" << reorder_time_sec / g_action_timer.elapsed("ETA Application") << " total)\n";
     cout << "\n";
 
-#ifdef APPROX_SWITCH_FUNC
     cout << "Switch Func Approx Stats:\n";
     cout << "\tApprox Attempts  : " << g_eta_stats.approx_attempts << "\n";
     cout << "\tApprox Accepted  : " << g_eta_stats.approx_accepted << " (" << (float) g_eta_stats.approx_accepted / g_eta_stats.approx_attempts << ")\n";
     cout << "\tApprox Time      : " << g_eta_stats.approx_time << " (" << g_eta_stats.approx_time / g_action_timer.elapsed("ETA Application") << " total)\n";
     cout << "\tApprox Eval Time : " << g_eta_stats.approx_eval_time << " (" << g_eta_stats.approx_eval_time / g_action_timer.elapsed("ETA Application") << " total)\n";
     cout << "\n";
-#endif
+
 
     if(options.get_as<bool>("show_bdd_stats")) {
         cout << endl;
@@ -307,10 +316,10 @@ int main(int argc, char** argv) {
 }
 
 void print_tags(TimingGraph& tg, std::shared_ptr<AnalyzerType> analyzer, bool print_tag_switch, std::function<bool(TimingGraph&,NodeId)> node_pred) {
-    auto nvars = tg.logical_inputs().size();
-    auto nassigns = pow(2,2*nvars); //4 types of transitions
+    auto nvars = 2*tg.logical_inputs().size();
+    auto nassigns = pow(2,nvars);
 
-    cout << "Num Vars: " << nvars << " Num Possible Assignments: " << nassigns << endl;
+    cout << "Num Logical Inputs: " << tg.logical_inputs().size() << " Num BDD Vars: " << nvars << " Num Possible Assignments: " << nassigns << endl;
 
     for(int i = 0; i < tg.num_levels(); i++) {
         for(NodeId node_id : tg.level(i)) {
@@ -334,7 +343,7 @@ void print_tags(TimingGraph& tg, std::shared_ptr<AnalyzerType> analyzer, bool pr
                     double data_switch_prob_sum = 0;
                     for(auto& tag : data_tags) {
                          //cout << "\t ArrTime: " << tag.arr_time().value() << "\n";
-                        double sat_cnt = tag.switch_func().CountMinterm(2*nvars);
+                        double sat_cnt = tag.switch_func().CountMinterm(nvars);
                         double switch_prob = sat_cnt / nassigns;
                         data_switch_prob_sum += switch_prob;
                         cout << "\t" << tag;
@@ -347,5 +356,39 @@ void print_tags(TimingGraph& tg, std::shared_ptr<AnalyzerType> analyzer, bool pr
                 }
             }
         }
+    }
+}
+
+void level_stats(TimingGraph& tg, std::shared_ptr<AnalyzerType> analyzer) {
+    auto profiling_data = analyzer->profiling_data();
+    cout << "Level Stats:\n";
+    for(int i = 0; i < tg.num_levels(); i++) {
+        float min_tag_xfunc_nnodes = 0.;
+        float avg_tag_xfunc_nnodes = 0.;
+        float max_tag_xfunc_nnodes = 0.;
+        float total_tag_xfunc_nnodes = 0.;
+        int ntags = 0;
+        for(NodeId node_id : tg.level(i)) {
+            auto& data_tags = analyzer->setup_data_tags(node_id);
+            for(auto& tag : data_tags) {
+                BDD xfunc = tag.switch_func();
+                
+                float xfunc_nnodes = xfunc.nodeCount();
+
+                if(min_tag_xfunc_nnodes == 0 || xfunc_nnodes < min_tag_xfunc_nnodes) {
+                    min_tag_xfunc_nnodes = xfunc_nnodes;
+                }
+                if(max_tag_xfunc_nnodes == 0 || xfunc_nnodes > max_tag_xfunc_nnodes) {
+                    max_tag_xfunc_nnodes = xfunc_nnodes;
+                }
+                total_tag_xfunc_nnodes += xfunc_nnodes;
+                ntags++;
+            }
+        }
+        avg_tag_xfunc_nnodes = total_tag_xfunc_nnodes / ntags;
+        cout << "\tLevel " << i << "\n";
+        cout << "\t\txfunc nodes: min=" << min_tag_xfunc_nnodes << " avg=" << avg_tag_xfunc_nnodes << " max=" << max_tag_xfunc_nnodes << " total=" << total_tag_xfunc_nnodes << "\n";
+        //auto level_time = profiling_data["fwd_level_" + std::to_string(i)];
+        //cout << "\t\ttime=" << level_time << "\n";
     }
 }
