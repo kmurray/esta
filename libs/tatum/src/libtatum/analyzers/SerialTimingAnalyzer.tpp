@@ -93,7 +93,7 @@ void SerialTimingAnalyzer<AnalysisType,DelayCalcType>::forward_traversal() {
         }
 
         std::cout << "\t\tmin_nnodes: " << xfunc_nnodes_min << " avg_nnodes: " << xfunc_nnodes_total / ntags << " max_nnodes: " << xfunc_nnodes_max << " nnodes_total: " << xfunc_nnodes_total << "\n";
-        std::cout << "\t\tmin_nvars : " << xfunc_nvars_min << " avg_nvars : " << xfunc_nvars_total / ntags << " (" << (xfunc_nvars_total / ntags) / (2*tg_.primary_inputs().size()) << ")" << " max_nvars : " << xfunc_nvars_max << "\n";
+        std::cout << "\t\tmin_nvars : " << xfunc_nvars_min << " avg_nvars : " << xfunc_nvars_total / ntags << " (" << (xfunc_nvars_total / ntags) / (2*tg_.logical_inputs().size()) << ")" << " max_nvars : " << xfunc_nvars_max << "\n";
 
 
         auto fwd_level_end = high_resolution_clock::now();
