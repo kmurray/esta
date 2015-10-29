@@ -4,6 +4,7 @@
 #include "TimingConstraints.hpp"
 #include "TimingTags.hpp"
 #include "BaseAnalysisMode.hpp"
+#include <iostream>
 
 template<class BaseAnalysisMode = BaseAnalysisMode, class Tags=TimingTags>
 class ExtSetupAnalysisMode : public BaseAnalysisMode {
@@ -12,6 +13,7 @@ class ExtSetupAnalysisMode : public BaseAnalysisMode {
         //External tag access
         const Tags& setup_data_tags(NodeId node_id) const { return setup_data_tags_[node_id]; }
         const Tags& setup_clock_tags(NodeId node_id) const { return setup_clock_tags_[node_id]; }
+        BDD build_xfunc(const TimingGraph& tg, const ExtTimingTag& tag, const NodeId node_id);
     protected:
         //Internal operations for performing setup analysis to satisfy the BaseAnalysisMode interface
         void initialize_traversal(const TimingGraph& tg);
@@ -45,8 +47,6 @@ class ExtSetupAnalysisMode : public BaseAnalysisMode {
         //BDD variable information
         std::unordered_map<NodeId,BDD> pi_curr_bdd_vars_;
         std::unordered_map<NodeId,BDD> pi_next_bdd_vars_;
-
-        std::unordered_map<BDD,BDD> bdd_var_to_implicit_xfunc_;
 };
 
 

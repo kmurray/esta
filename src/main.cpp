@@ -39,7 +39,6 @@ EtaStats g_eta_stats;
 
 optparse::Values parse_args(int argc, char** argv);
 void print_tags(TimingGraph& tg, std::shared_ptr<AnalyzerType> analyzer, bool print_tag_switch, std::function<bool(TimingGraph&,NodeId)> node_pred);
-void level_stats(TimingGraph& tg, std::shared_ptr<AnalyzerType> analyzer);
 
 optparse::Values parse_args(int argc, char** argv) {
     auto parser = optparse::OptionParser()
@@ -85,7 +84,7 @@ optparse::Values parse_args(int argc, char** argv) {
           ;
 
     parser.add_option("--print_tag_switch")
-          .dest("print_tag_switch_fucn")
+          .dest("print_tag_switch")
           .action("store_true")
           .set_default("false")
           .help("Print swithc function of each tag. Default %default")
@@ -156,11 +155,9 @@ int main(int argc, char** argv) {
     g_action_timer.pop_timer("Building Timing Graph");
     cout << "\n";
 
-    /*
-     *cout << "\n";
-     *cout << "TimingGraph: " << "\n";
-     *print_timing_graph(timing_graph);
-     */
+    cout << "\n";
+    cout << "TimingGraph: " << "\n";
+    print_timing_graph(timing_graph);
 
     /*
      *cout << "\n";
@@ -224,20 +221,22 @@ int main(int argc, char** argv) {
 
 
     g_action_timer.push_timer("Output Results");
+    bool print_switch = options.get_as<bool>("print_tag_switch");
+
     if(options.get_as<string>("print_tags") == "pi") {
-        print_tags(timing_graph, analyzer, options.get_as<bool>("print_tag_switch_func"),
+        print_tags(timing_graph, analyzer, print_switch,
                     [] (TimingGraph& tg, NodeId node_id) {
                         return tg.num_node_in_edges(node_id) == 0; 
                     }
                 );
     } else if(options.get_as<string>("print_tags") == "po") {
-        print_tags(timing_graph, analyzer, options.get_as<bool>("print_tag_switch_func"),
+        print_tags(timing_graph, analyzer, print_switch,
                     [](TimingGraph& tg, NodeId node_id) {
                         return tg.num_node_out_edges(node_id) == 0; 
                     }
                 );
     } else if(options.get_as<string>("print_tags") == "all") {
-        print_tags(timing_graph, analyzer, options.get_as<bool>("print_tag_switch_func"),
+        print_tags(timing_graph, analyzer, print_switch,
                     [](TimingGraph& tg, NodeId node_id) {
                         return true; 
                     }
@@ -268,8 +267,6 @@ int main(int argc, char** argv) {
      *    cout << ", #SAT: " << sat_cnt << " (" << switch_prob << ")\n";
      *}
      */
-
-    level_stats(timing_graph, analyzer);
 
     cout << "\n";
     cout << "BDD Stats after analysis:\n";
@@ -326,7 +323,7 @@ void print_tags(TimingGraph& tg, std::shared_ptr<AnalyzerType> analyzer, bool pr
                     for(auto& tag : clk_tags) {
                         cout << "\t" << tag;
                         if(print_tag_switch) {
-                            cout << " " << tag.switch_func(); 
+                            //cout << " " << tag.switch_func(); 
                         }
                         cout << "\n";
                     }
@@ -334,16 +331,21 @@ void print_tags(TimingGraph& tg, std::shared_ptr<AnalyzerType> analyzer, bool pr
                 cout << "   Data Tags:\n";
                 auto& data_tags = analyzer->setup_data_tags(node_id);
                 if(data_tags.num_tags() > 0) {
-                    double data_switch_prob_sum = 0;
                     for(auto& tag : data_tags) {
                          //cout << "\t ArrTime: " << tag.arr_time().value() << "\n";
-                        double sat_cnt = tag.switch_func().CountMinterm(nvars);
-                        double switch_prob = sat_cnt / nassigns;
-                        data_switch_prob_sum += switch_prob;
+                        //double sat_cnt = tag.switch_func().CountMinterm(nvars);
+                        //double switch_prob = sat_cnt / nassigns;
+                        //data_switch_prob_sum += switch_prob;
+                        double sat_cnt = 0;
                         cout << "\t" << tag;
-                        cout << ", #SAT: " << sat_cnt << " (" << switch_prob << ")";
-                        if(print_tag_switch) {
-                            cout << ", xfunc: " << tag.switch_func();
+                        if(tg.num_node_out_edges(node_id) == 0) {
+                            BDD xfunc = analyzer->build_xfunc(tg, tag, node_id);
+                            sat_cnt = xfunc.CountMinterm(nvars);
+                            double switch_prob = sat_cnt / nassigns;
+                            cout << ", #SAT: " << sat_cnt << " (" << switch_prob << ")";
+                            if(print_tag_switch) {
+                                cout << ", xfunc: " << xfunc;
+                            }
                         }
                         cout << "\n";
                     }
@@ -353,36 +355,3 @@ void print_tags(TimingGraph& tg, std::shared_ptr<AnalyzerType> analyzer, bool pr
     }
 }
 
-void level_stats(TimingGraph& tg, std::shared_ptr<AnalyzerType> analyzer) {
-    auto profiling_data = analyzer->profiling_data();
-    cout << "Level Stats:\n";
-    for(int i = 0; i < tg.num_levels(); i++) {
-        float min_tag_xfunc_nnodes = 0.;
-        float avg_tag_xfunc_nnodes = 0.;
-        float max_tag_xfunc_nnodes = 0.;
-        float total_tag_xfunc_nnodes = 0.;
-        int ntags = 0;
-        for(NodeId node_id : tg.level(i)) {
-            auto& data_tags = analyzer->setup_data_tags(node_id);
-            for(auto& tag : data_tags) {
-                BDD xfunc = tag.switch_func();
-                
-                float xfunc_nnodes = xfunc.nodeCount();
-
-                if(min_tag_xfunc_nnodes == 0 || xfunc_nnodes < min_tag_xfunc_nnodes) {
-                    min_tag_xfunc_nnodes = xfunc_nnodes;
-                }
-                if(max_tag_xfunc_nnodes == 0 || xfunc_nnodes > max_tag_xfunc_nnodes) {
-                    max_tag_xfunc_nnodes = xfunc_nnodes;
-                }
-                total_tag_xfunc_nnodes += xfunc_nnodes;
-                ntags++;
-            }
-        }
-        avg_tag_xfunc_nnodes = total_tag_xfunc_nnodes / ntags;
-        cout << "\tLevel " << i << "\n";
-        cout << "\t\txfunc nodes: min=" << min_tag_xfunc_nnodes << " avg=" << avg_tag_xfunc_nnodes << " max=" << max_tag_xfunc_nnodes << " total=" << total_tag_xfunc_nnodes << "\n";
-        //auto level_time = profiling_data["fwd_level_" + std::to_string(i)];
-        //cout << "\t\ttime=" << level_time << "\n";
-    }
-}

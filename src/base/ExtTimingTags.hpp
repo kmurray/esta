@@ -131,13 +131,22 @@ inline void ExtTimingTags::max_arr(const Tag& tag) {
     if(iter == end()) {
         //First time we've seen this tag
         iter = add_tag(tag);
+        return;
     } else {
         iter->max_arr(tag.arr_time(), tag);
     }
 
     assert(iter != end());
 
-    iter->set_switch_func(iter->switch_func() | tag.switch_func());
+    //HACK copy the current input transitions, append any from the incoming tag
+    //and then set the updated transitions and the new (current) transitions
+    std::vector<std::vector<TransitionType>> input_transitions = iter->input_transitions();
+
+    for(auto scenario : tag.input_transitions()) {
+        input_transitions.push_back(scenario);
+    }
+
+    iter->set_input_transitions(input_transitions);
 }
 
 /*
