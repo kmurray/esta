@@ -432,11 +432,20 @@ BDD ExtSetupAnalysisMode<BaseAnalysisMode,Tags>::build_xfunc(const TimingGraph& 
             int scenario_cnt = 0;
             for(const auto& transition_scenario : tag.input_transitions()) {
                 BDD f_scenario = g_cudd.bddOne();
-                assert((int) transition_scenario.size() == tg.num_node_in_edges(node_id));
+                
+                //We need to keep a separate transition index since some edges
+                //(e.g. clock edges) do not count towards input transitions
+                int trans_idx = 0;
 
                 for(int edge_idx = 0; edge_idx < tg.num_node_in_edges(node_id); edge_idx++) {
                     EdgeId edge_id = tg.node_in_edge(node_id, edge_idx);
                     NodeId src_node_id = tg.edge_src_node(edge_id);
+
+                    if(tg.node_type(src_node_id) == TN_Type::FF_CLOCK) {
+                        continue;
+                    }
+
+                    assert(trans_idx < (int) transition_scenario.size());
                     
                     auto& src_tags = setup_data_tags(src_node_id);
                     for(auto& src_tag: src_tags) {
@@ -446,6 +455,7 @@ BDD ExtSetupAnalysisMode<BaseAnalysisMode,Tags>::build_xfunc(const TimingGraph& 
                             break;
                         }
                     }
+                    trans_idx++;
                 }
 
                 f |= f_scenario;
