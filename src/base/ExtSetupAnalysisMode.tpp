@@ -418,9 +418,8 @@ TransitionType ExtSetupAnalysisMode<BaseAnalysisMode,Tags>::evaluate_transition(
 template<class BaseAnalysisMode, class Tags>
 BDD ExtSetupAnalysisMode<BaseAnalysisMode,Tags>::build_xfunc(const TimingGraph& tg, const ExtTimingTag& tag, const NodeId node_id) {
     /*std::cout << "build_xfunc at Node: " << node_id << " TAG: " << tag << "\n";*/
-
-    auto iter = bdd_lookup_.find(std::make_pair(node_id, tag.trans_type()));
-    if(iter == bdd_lookup_.end()) {
+    auto key = std::make_pair(node_id, tag.trans_type());
+    if(!bdd_cache_.contains(key)) {
         //Not found calculate it
         BDD f;
         auto node_type = tg.node_type(node_id);
@@ -457,12 +456,12 @@ BDD ExtSetupAnalysisMode<BaseAnalysisMode,Tags>::build_xfunc(const TimingGraph& 
             }
         }
         //Calulcated it, save it
-        bdd_lookup_[std::make_pair(node_id,tag.trans_type())] = f;
+        bdd_cache_.insert(key, f);
 
         return f;
     } else {
         //Found it
-        return iter->second;
+        return bdd_cache_.value(key);
     }
     assert(0);
 }

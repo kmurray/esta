@@ -69,9 +69,13 @@ optparse::Values parse_args(int argc, char** argv) {
           .set_default("1.2")
           .help("Max growth in (intermediate) number of BDD nodes during sifting. Default %default")
           ;
-    parser.add_option("--bdd_cache_ratio")
+    parser.add_option("--cudd_cache_ratio")
           .set_default("1.0")
-          .help("Factor adjusting cache size relative to default. Default %default")
+          .help("Factor adjusting cache size relative to CUDD default. Default %default")
+          ;
+    parser.add_option("--xfunc_cache_nelem")
+          .set_default("0")
+          .help("Number of BDDs to cache while building switch functions. Note a value of 0 causes all xfuncs to be memoized (unbounded cache). A larger value prevents switch functions from being re-calculated, but also increases (perhaps exponentially) the size of the composite BDD CUDD must manage. This can causing a large amount of time to be spent re-ordering the BDD.  Default %default")
           ;
 
     std::vector<std::string> print_tags_choices = {"po", "pi", "all", "none"};
@@ -122,7 +126,7 @@ int main(int argc, char** argv) {
     g_cudd.SetSiftMaxSwap(options.get_as<int>("sift_nswaps"));
     g_cudd.SetSiftMaxVar(options.get_as<int>("sift_nvars"));
     g_cudd.SetMaxGrowth(options.get_as<double>("sift_max_growth"));
-    g_cudd.SetMaxCacheHard(options.get_as<double>("bdd_cache_ratio") * g_cudd.ReadMaxCacheHard());
+    g_cudd.SetMaxCacheHard(options.get_as<double>("cudd_cache_ratio") * g_cudd.ReadMaxCacheHard());
 
 
     //Load the file
@@ -217,6 +221,7 @@ int main(int argc, char** argv) {
 
     g_action_timer.push_timer("Analysis");
 
+    analyzer->set_xfunc_cache_size(options.get_as<size_t>("xfunc_cache_nelem"));
     analyzer->calculate_timing();
 
     g_action_timer.pop_timer("Analysis");
