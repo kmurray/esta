@@ -155,9 +155,11 @@ int main(int argc, char** argv) {
     g_action_timer.pop_timer("Building Timing Graph");
     cout << "\n";
 
-    cout << "\n";
-    cout << "TimingGraph: " << "\n";
-    print_timing_graph(timing_graph);
+    /*
+     *cout << "\n";
+     *cout << "TimingGraph: " << "\n";
+     *print_timing_graph(timing_graph);
+     */
 
     /*
      *cout << "\n";

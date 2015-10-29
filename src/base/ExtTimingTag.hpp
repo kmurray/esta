@@ -271,23 +271,25 @@ std::ostream& operator<<(std::ostream& os, const ExtTimingTag& tag) {
     os << ", Arr: " << tag.arr_time().value();
     os << ", Req: " << tag.req_time().value();
 
-    os << ", InTrans: {";
-    auto input_transitions = tag.input_transitions();
-    for(size_t i = 0; i < input_transitions.size(); i++) {
-        //Scenario
-        os << "{";
-        for(size_t j = 0; j < input_transitions[i].size(); j++) {
-            //Input transitions
-            os << input_transitions[i][j];
-            if(j < input_transitions[i].size() - 1) {
-                os << ", ";
-            }
-        }
-        os << "}";
-        if(i < input_transitions.size() - 1) {
-            os << ", ";
-        }
-    }
-    os << "}";
+    /*
+     *os << ", InTrans: {";
+     *auto input_transitions = tag.input_transitions();
+     *for(size_t i = 0; i < input_transitions.size(); i++) {
+     *    //Scenario
+     *    os << "{";
+     *    for(size_t j = 0; j < input_transitions[i].size(); j++) {
+     *        //Input transitions
+     *        os << input_transitions[i][j];
+     *        if(j < input_transitions[i].size() - 1) {
+     *            os << ", ";
+     *        }
+     *    }
+     *    os << "}";
+     *    if(i < input_transitions.size() - 1) {
+     *        os << ", ";
+     *    }
+     *}
+     *os << "}";
+     */
     return os;
 }

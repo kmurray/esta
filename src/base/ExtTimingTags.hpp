@@ -190,7 +190,7 @@ inline void ExtTimingTags::clear() {
 }
 
 inline ExtTimingTags::iterator ExtTimingTags::find_matching_tag(const Tag& base_tag) {
-    auto pred = [base_tag](const Tag& tag) {
+    auto pred = [&](const Tag& tag) {
         return tag.matches(base_tag);
     };
     return std::find_if(begin(), end(), pred);

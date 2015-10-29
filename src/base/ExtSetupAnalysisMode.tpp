@@ -418,38 +418,51 @@ TransitionType ExtSetupAnalysisMode<BaseAnalysisMode,Tags>::evaluate_transition(
 template<class BaseAnalysisMode, class Tags>
 BDD ExtSetupAnalysisMode<BaseAnalysisMode,Tags>::build_xfunc(const TimingGraph& tg, const ExtTimingTag& tag, const NodeId node_id) {
     /*std::cout << "build_xfunc at Node: " << node_id << " TAG: " << tag << "\n";*/
-    BDD f;
-    auto node_type = tg.node_type(node_id);
-    if(node_type == TN_Type::INPAD_SOURCE || node_type == TN_Type::FF_SOURCE) {
-        /*std::cout << "Node " << node_id << " Base";*/
-        f = generate_pi_switch_func(node_id, tag.trans_type());
-        /*std::cout << " xfunc: " << f << "\n";*/
-    } else {
-        f = g_cudd.bddZero();
-        int scenario_cnt = 0;
-        for(auto transition_scenario : tag.input_transitions()) {
-            BDD f_scenario = g_cudd.bddOne();
-            assert((int) transition_scenario.size() == tg.num_node_in_edges(node_id));
 
-            for(int edge_idx = 0; edge_idx < tg.num_node_in_edges(node_id); edge_idx++) {
-                EdgeId edge_id = tg.node_in_edge(node_id, edge_idx);
-                NodeId src_node_id = tg.edge_src_node(edge_id);
-                
-                auto src_tags = setup_data_tags(src_node_id);
-                ExtTimingTag search_tag = tag;
-                search_tag.set_trans_type(transition_scenario[edge_idx]);
-                auto src_tag_iter = src_tags.find_matching_tag(search_tag);
-                assert(src_tag_iter != src_tags.end());
-
-                f_scenario &= build_xfunc(tg, *src_tag_iter, src_node_id);
-            }
-
-            f |= f_scenario;
-            /*std::cout << "Node " << node_id << " Scenario: " << scenario_cnt;*/
+    auto iter = bdd_lookup_.find(std::make_pair(node_id, tag.trans_type()));
+    if(iter == bdd_lookup_.end()) {
+        //Not found calculate it
+        BDD f;
+        auto node_type = tg.node_type(node_id);
+        if(node_type == TN_Type::INPAD_SOURCE || node_type == TN_Type::FF_SOURCE) {
+            /*std::cout << "Node " << node_id << " Base";*/
+            f = generate_pi_switch_func(node_id, tag.trans_type());
             /*std::cout << " xfunc: " << f << "\n";*/
+        } else {
+            f = g_cudd.bddZero();
+            int scenario_cnt = 0;
+            for(const auto& transition_scenario : tag.input_transitions()) {
+                BDD f_scenario = g_cudd.bddOne();
+                assert((int) transition_scenario.size() == tg.num_node_in_edges(node_id));
 
-            scenario_cnt++;
+                for(int edge_idx = 0; edge_idx < tg.num_node_in_edges(node_id); edge_idx++) {
+                    EdgeId edge_id = tg.node_in_edge(node_id, edge_idx);
+                    NodeId src_node_id = tg.edge_src_node(edge_id);
+                    
+                    auto& src_tags = setup_data_tags(src_node_id);
+                    for(auto& src_tag: src_tags) {
+                        if(src_tag.trans_type() == transition_scenario[edge_idx]) {
+                            //Found the matching tag
+                            f_scenario &= build_xfunc(tg, src_tag, src_node_id);
+                            break;
+                        }
+                    }
+                }
+
+                f |= f_scenario;
+                /*std::cout << "Node " << node_id << " Scenario: " << scenario_cnt;*/
+                /*std::cout << " xfunc: " << f << "\n";*/
+
+                scenario_cnt++;
+            }
         }
+        //Calulcated it, save it
+        bdd_lookup_[std::make_pair(node_id,tag.trans_type())] = f;
+
+        return f;
+    } else {
+        //Found it
+        return iter->second;
     }
-    return f;
+    assert(0);
 }
