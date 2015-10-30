@@ -4,10 +4,14 @@
 #include <cassert>
 #include <cstdio>
 #include <cmath>
+#include <cstring>
 
 #include "OptionParser.h"
 
 #include "bdd.hpp"
+#include "cuddInt.h"
+#include "util.h"
+
 #include "util.hpp"
 
 #include "blif_parse.hpp"
@@ -38,7 +42,12 @@ ActionTimer g_action_timer;
 EtaStats g_eta_stats;
 
 optparse::Values parse_args(int argc, char** argv);
-void print_tags(TimingGraph& tg, std::shared_ptr<AnalyzerType> analyzer, bool print_tag_switch, std::function<bool(TimingGraph&,NodeId)> node_pred);
+void print_node_tags(const TimingGraph& tg, std::shared_ptr<AnalysisType> analyzer, NodeId node_id, double nvars, double nassigns, float progress, bool print_sat_cnt, bool print_switch);
+
+int PreReorderHook( DdManager *dd, const char *str, void *data);
+int PostReorderHook( DdManager *dd, const char *str, void *data);
+int PreGarbageCollectHook(DdManager* dd, const char* str, void* data);
+int PostGarbageCollectHook(DdManager* dd, const char* str, void* data);
 
 optparse::Values parse_args(int argc, char** argv) {
     auto parser = optparse::OptionParser()
@@ -121,8 +130,12 @@ int main(int argc, char** argv) {
 
     //Initialize CUDD
     g_cudd.AutodynEnable(options.get_as<Cudd_ReorderingType>("bdd_reorder_method"));
-    g_cudd.EnableReorderingReporting();
+    //g_cudd.EnableReorderingReporting();
     //Cudd_EnableOrderingMonitoring(g_cudd.getManager());
+    g_cudd.AddHook(PreReorderHook, CUDD_PRE_REORDERING_HOOK);
+    g_cudd.AddHook(PostReorderHook, CUDD_POST_REORDERING_HOOK);
+    //g_cudd.AddHook(PreGarbageCollectHook, CUDD_PRE_GC_HOOK);
+    //g_cudd.AddHook(PostGarbageCollectHook, CUDD_POST_GC_HOOK);
     g_cudd.SetSiftMaxSwap(options.get_as<int>("sift_nswaps"));
     g_cudd.SetSiftMaxVar(options.get_as<int>("sift_nvars"));
     g_cudd.SetMaxGrowth(options.get_as<double>("sift_max_growth"));
@@ -155,6 +168,7 @@ int main(int argc, char** argv) {
     g_action_timer.push_timer("Building Timing Graph");
 
     tg_builder.build(timing_graph);
+    const auto& lo_dep_stats = tg_builder.get_logical_output_dependancy_stats();
 
     g_action_timer.pop_timer("Building Timing Graph");
     cout << "\n";
@@ -228,31 +242,70 @@ int main(int argc, char** argv) {
 
 
     g_action_timer.push_timer("Output Results");
-    bool print_switch = options.get_as<bool>("print_tag_switch");
 
-    if(options.get_as<string>("print_tags") == "pi") {
-        print_tags(timing_graph, analyzer, print_switch,
-                    [] (TimingGraph& tg, NodeId node_id) {
-                        return tg.num_node_in_edges(node_id) == 0; 
-                    }
-                );
-    } else if(options.get_as<string>("print_tags") == "po") {
-        print_tags(timing_graph, analyzer, print_switch,
-                    [](TimingGraph& tg, NodeId node_id) {
-                        return tg.num_node_out_edges(node_id) == 0; 
-                    }
-                );
-    } else if(options.get_as<string>("print_tags") == "all") {
-        print_tags(timing_graph, analyzer, print_switch,
-                    [](TimingGraph& tg, NodeId node_id) {
-                        return true; 
-                    }
-                );
-    } else if(options.get_as<string>("print_tags") == "none") {
-        //pass
-    } else {
-        assert(0);
+
+    bool print_switch = options.get_as<bool>("print_tag_switch");
+    bool print_sat_cnt = true;
+    double nvars = 2*timing_graph.logical_inputs().size();
+    double nassigns = pow(2,nvars);
+    cout << "Num Logical Inputs: " << timing_graph.logical_inputs().size() << " Num BDD Vars: " << nvars << " Num Possible Assignments: " << nassigns << endl;
+
+    //Try to keep outputs with common dependancies together
+    //hopefully will maximize cache re-use
+    std::vector<NodeId> sorted_lo_nodes;
+    for(const auto& kv : lo_dep_stats) {
+        const std::vector<NodeId>& nodes = kv.second;
+        sorted_lo_nodes.insert(sorted_lo_nodes.end(), nodes.begin(), nodes.end());
     }
+
+    size_t nodes_processed = 0;
+    for(auto node_id : sorted_lo_nodes) {
+        float progress = (float) nodes_processed / sorted_lo_nodes.size();
+        print_node_tags(timing_graph, analyzer, node_id, nvars, nassigns, progress, print_sat_cnt, print_switch);
+
+        //Disable gc before reset
+        g_cudd.DisableGarbageCollection();
+
+        //Clear the cache
+        analyzer->reset_xfunc_cache();
+
+        //Re-enable gc (do only one gc per reset)
+        g_cudd.EnableGarbageCollection();
+        
+
+        g_cudd.ReduceHeap(CUDD_REORDER_SAME, 50000);
+
+        nodes_processed++;
+
+    }
+
+/*
+ *    bool print_switch = options.get_as<bool>("print_tag_switch");
+ *
+ *    if(options.get_as<string>("print_tags") == "pi") {
+ *        print_tags(timing_graph, analyzer, print_switch,
+ *                    [] (TimingGraph& tg, NodeId node_id) {
+ *                        return tg.num_node_in_edges(node_id) == 0; 
+ *                    }
+ *                );
+ *    } else if(options.get_as<string>("print_tags") == "po") {
+ *        print_tags(timing_graph, analyzer, print_switch,
+ *                    [](TimingGraph& tg, NodeId node_id) {
+ *                        return tg.num_node_out_edges(node_id) == 0; 
+ *                    }
+ *                );
+ *    } else if(options.get_as<string>("print_tags") == "all") {
+ *        print_tags(timing_graph, analyzer, print_switch,
+ *                    [](TimingGraph& tg, NodeId node_id) {
+ *                        return true; 
+ *                    }
+ *                );
+ *    } else if(options.get_as<string>("print_tags") == "none") {
+ *        //pass
+ *    } else {
+ *        assert(0);
+ *    }
+ */
 
     /*
      *std::cout << "\n";
@@ -313,52 +366,79 @@ int main(int argc, char** argv) {
     return 0;
 }
 
-void print_tags(TimingGraph& tg, std::shared_ptr<AnalyzerType> analyzer, bool print_tag_switch, std::function<bool(TimingGraph&,NodeId)> node_pred) {
-    auto nvars = 2*tg.logical_inputs().size();
-    auto nassigns = pow(2,nvars);
-
-    cout << "Num Logical Inputs: " << tg.logical_inputs().size() << " Num BDD Vars: " << nvars << " Num Possible Assignments: " << nassigns << endl;
-
-    for(int i = 0; i < tg.num_levels(); i++) {
-        for(NodeId node_id : tg.level(i)) {
-        //for(NodeId node_id : timing_graph.primary_outputs()) {
-            if(node_pred(tg, node_id)) { //Primary output
-                cout << "Node: " << node_id << " (" << tg.node_type(node_id) << ")\n";
-                cout << "   Clk Tags:\n";
-                auto& clk_tags = analyzer->setup_clock_tags(node_id);
-                if(clk_tags.num_tags() > 0) {
-                    for(auto& tag : clk_tags) {
-                        cout << "\t" << tag;
-                        if(print_tag_switch) {
-                            //cout << " " << tag.switch_func(); 
-                        }
-                        cout << "\n";
-                    }
-                }
-                cout << "   Data Tags:\n";
-                auto& data_tags = analyzer->setup_data_tags(node_id);
-                if(data_tags.num_tags() > 0) {
-                    for(auto& tag : data_tags) {
-                         //cout << "\t ArrTime: " << tag.arr_time().value() << "\n";
-                        //double sat_cnt = tag.switch_func().CountMinterm(nvars);
-                        //double switch_prob = sat_cnt / nassigns;
-                        //data_switch_prob_sum += switch_prob;
-                        double sat_cnt = 0;
-                        cout << "\t" << tag;
-                        if(tg.num_node_out_edges(node_id) == 0) {
-                            BDD xfunc = analyzer->build_xfunc(tg, tag, node_id);
-                            sat_cnt = xfunc.CountMinterm(nvars);
-                            double switch_prob = sat_cnt / nassigns;
-                            cout << ", #SAT: " << sat_cnt << " (" << switch_prob << ")";
-                            if(print_tag_switch) {
-                                cout << ", xfunc: " << xfunc;
-                            }
-                        }
-                        cout << "\n";
-                    }
-                }
-            }
+void print_node_tags(const TimingGraph& tg, std::shared_ptr<AnalysisType> analyzer, NodeId node_id, double nvars, double nassigns, float progress, bool print_sat_cnt, bool print_switch) {
+    cout << "Node: " << node_id << " " << tg.node_type(node_id) << " (" << progress*100 << "%)\n";
+    cout << "   Clk Tags:\n";
+    auto& clk_tags = analyzer->setup_clock_tags(node_id);
+    if(clk_tags.num_tags() > 0) {
+        for(auto& tag : clk_tags) {
+            cout << "\t" << tag;
+            cout << "\n";
         }
     }
+    cout << "   Data Tags:\n";
+    auto& data_tags = analyzer->setup_data_tags(node_id);
+    if(data_tags.num_tags() > 0) {
+        for(auto& tag : data_tags) {
+            double sat_cnt = 0;
+            BDD xfunc = g_cudd.bddZero();
+            if(print_sat_cnt || print_switch) {
+                xfunc = analyzer->build_xfunc(tg, tag, node_id);
+            }
+            cout << "\t" << tag;
+            if(print_sat_cnt) {
+                sat_cnt = xfunc.CountMinterm(nvars);
+                double switch_prob = sat_cnt / nassigns;
+                cout << ", #SAT: " << sat_cnt << " (" << switch_prob << ")";
+            }
+            if(print_switch) {
+                cout << ", xfunc: " << xfunc;
+            }
+            cout << "\n";
+        }
+    }
+}
+
+int PreReorderHook( DdManager *dd, const char *str, void *data) {
+    int retval;
+
+    retval = fprintf(dd->out,"%s reordering", str);
+    if (retval == EOF) return(0);
+
+    retval = fprintf(dd->out,": from %ld to ... ", strcmp(str, "BDD") == 0 ?
+		     Cudd_ReadNodeCount(dd) : Cudd_zddReadNodeCount(dd));
+    if (retval == EOF) return(0);
+    fflush(dd->out);
+    return(1);
+
+}
+
+int PostReorderHook( DdManager *dd, const char *str, void *data) {
+    unsigned long initialTime = (long) data;
+    int retval;
+    unsigned long finalTime = util_cpu_time();
+    double totalTimeSec = (double)(finalTime - initialTime) / 1000.0;
+
+    long node_cnt = strcmp(str, "BDD") == 0 ? Cudd_ReadNodeCount(dd) : Cudd_zddReadNodeCount(dd);
+
+    retval = fprintf(dd->out,"%ld nodes in %g sec", node_cnt,
+		     totalTimeSec);
+    //Override default reorder size to be factor of two
+    dd->nextDyn = std::max(2*node_cnt, (long) 4096);
+    retval = fprintf(dd->out," (next reorder %u nodes)\n", dd->nextDyn);
+    if (retval == EOF) return(0);
+    retval = fflush(dd->out);
+    if (retval == EOF) return(0);
+    return(1);
+}
+
+int PreGarbageCollectHook(DdManager* dd, const char* str, void* data) {
+    fprintf(dd->out,"%s gc %u dead nodes ...", str, dd->dead);
+    return 1;
+}
+
+int PostGarbageCollectHook(DdManager* dd, const char* str, void* data) {
+    fprintf(dd->out,"gc finished\n");
+    return 1;
 }
 

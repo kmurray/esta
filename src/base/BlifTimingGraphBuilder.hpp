@@ -5,7 +5,8 @@ class BlifTimingGraphBuilder : public TimingGraphBuilder {
         BlifTimingGraphBuilder(BlifData* data);
 
         void build(TimingGraph& tg);
-        std::unordered_map<const BlifPort*, NodeId> get_port_to_node_lookup() { return port_to_node_lookup_; }
+        const std::unordered_map<const BlifPort*, NodeId>& get_port_to_node_lookup() { return port_to_node_lookup_; }
+        const std::map<std::pair<size_t,size_t>,std::vector<NodeId>>& get_logical_output_dependancy_stats() { return logical_output_dependancy_stats_; }
 
     protected:
         virtual void create_input(TimingGraph& tg, const BlifPort* input_port);
@@ -27,4 +28,5 @@ class BlifTimingGraphBuilder : public TimingGraphBuilder {
         std::unordered_map<const BlifPort*,NodeId> port_to_node_lookup_;
         std::unordered_map<NodeId,const BlifPort*> node_to_port_lookup_;
         std::unordered_map<const BlifPort*,DomainId> clock_driver_to_domain_;
+        std::map<std::pair<size_t,size_t>,std::vector<NodeId>> logical_output_dependancy_stats_;
 };

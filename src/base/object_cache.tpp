@@ -10,15 +10,7 @@
 template<typename K, typename V, template<typename ...> class MAP>
 ObjectCache<K,V,MAP>::~ObjectCache() {
     if(print_stats_) {
-        std::cout << "Cache Statistics at destruction:" << std::endl;
-        std::cout << "  Hits         : " << num_hits_ << std::endl;
-        std::cout << "  Misses       : " << num_misses_ << std::endl;
-        std::cout << "  Hits + Misses: " << num_misses_ + num_hits_ << std::endl;
-        std::cout << "  Hit Rate     : " << ((float) num_hits_) / (num_misses_ + num_hits_) << std::endl;
-        std::cout << "  Evictions    : " << num_evictions_ << std::endl;
-        std::cout << "  Eviction Rate: " << ((float) num_evictions_) / (num_misses_ + num_hits_) << std::endl;
-        std::cout << "  Target Capacity (# items): " << capacity_ << std::endl;
-        std::cout << "  Actual Size (# items)    : " << object_lookup_.size() << std::endl;
+        print_stats();
     }
 }
 
@@ -106,6 +98,18 @@ typename ObjectCache<K,V,MAP>::value_t& ObjectCache<K,V,MAP>::value(const key_t&
     return iter->second.first;
 }
 
+template<typename K, typename V, template<typename ...> class MAP>
+void ObjectCache<K,V,MAP>::print_stats() {
+    std::cout << "Cache Statistics:" << std::endl;
+    std::cout << "  Hits         : " << num_hits_ << std::endl;
+    std::cout << "  Misses       : " << num_misses_ << std::endl;
+    std::cout << "  Evictions    : " << num_evictions_ << std::endl;
+    std::cout << "  Hits + Misses: " << num_misses_ + num_hits_ << std::endl;
+    std::cout << "  Hit Rate     : " << ((float) num_hits_) / (num_misses_ + num_hits_) << std::endl;
+    std::cout << "  Eviction Rate: " << ((float) num_evictions_) / (num_misses_ + num_hits_) << std::endl;
+    std::cout << "  Target Capacity (# items): " << capacity_ << std::endl;
+    std::cout << "  Actual Size (# items)    : " << object_lookup_.size() << std::endl;
+}
 
 /*
  * Private methods
@@ -129,7 +133,9 @@ void ObjectCache<K,V,MAP>::evict() {
     assert(object_lookup_.size() > 0);
 
     //Remove the key from the cache
-    object_lookup_.erase(key_access_order_.back());
+    size_t num_erased = object_lookup_.erase(key_access_order_.back());
+
+    assert(num_erased == 1);
 
     //Remove the key from the access order list - it will be the last entry
     key_access_order_.erase(--(key_access_order_.end()));

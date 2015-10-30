@@ -62,6 +62,12 @@ class ObjectCache {
         size_t capacity() { return capacity_; }
         void set_capacity(size_t val) { capacity_ = val; resize(); }
 
+        void clear() { object_lookup_.clear(); key_access_order_.clear(); }
+
+        void reset_stats() { num_hits_ = 0; num_misses_ = 0; num_evictions_ = 0; }
+
+        void print_stats();
+
     private:
 
         //Moves the key specified by this iterator to the front of the key access list

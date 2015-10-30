@@ -18,6 +18,7 @@ class ExtSetupAnalysisMode : public BaseAnalysisMode {
         BDD build_xfunc(const TimingGraph& tg, const ExtTimingTag& tag, const NodeId node_id);
 
         void set_xfunc_cache_size(size_t val) { bdd_cache_.set_capacity(val); }
+        void reset_xfunc_cache() { bdd_cache_.print_stats(); bdd_cache_.clear(); bdd_cache_.reset_stats(); }
     protected:
         //Internal operations for performing setup analysis to satisfy the BaseAnalysisMode interface
         void initialize_traversal(const TimingGraph& tg);

@@ -480,5 +480,7 @@ void BlifTimingGraphBuilder::check_logical_output_dependancies(const TimingGraph
         }
         cout << "\t\t" << "#PI: " << pi_fanin << " (" << (float) pi_fanin / (tg.logical_inputs().size()) << ")\n";
 
+        //Save stats
+        logical_output_dependancy_stats_[std::make_pair(transitive_fanin.size(), pi_fanin)].push_back(po_node_id);
     }
 }
