@@ -30,6 +30,7 @@ using std::cout;
 using std::cerr;
 using std::endl;
 using std::string;
+using std::to_string;
 
 using AnalysisType = ExtSetupAnalysisMode<BaseAnalysisMode,ExtTimingTags>;
 using DelayCalcType = PreCalcTransDelayCalculator;
@@ -260,23 +261,17 @@ int main(int argc, char** argv) {
 
     size_t nodes_processed = 0;
     for(auto node_id : sorted_lo_nodes) {
+        std::string action_name = "Node " + to_string(node_id) + " eval";
+        g_action_timer.push_timer(action_name);
         float progress = (float) nodes_processed / sorted_lo_nodes.size();
         print_node_tags(timing_graph, analyzer, node_id, nvars, nassigns, progress, print_sat_cnt, print_switch);
 
-        //Disable gc before reset
-        g_cudd.DisableGarbageCollection();
-
-        //Clear the cache
+        //Clear the cache - this should shrink the size of CUDDs bdds
         analyzer->reset_xfunc_cache();
-
-        //Re-enable gc (do only one gc per reset)
-        g_cudd.EnableGarbageCollection();
-        
-
-        g_cudd.ReduceHeap(CUDD_REORDER_SAME, 50000);
 
         nodes_processed++;
 
+        g_action_timer.pop_timer(action_name);
     }
 
 /*
@@ -419,13 +414,14 @@ int PostReorderHook( DdManager *dd, const char *str, void *data) {
     unsigned long finalTime = util_cpu_time();
     double totalTimeSec = (double)(finalTime - initialTime) / 1000.0;
 
-    long node_cnt = strcmp(str, "BDD") == 0 ? Cudd_ReadNodeCount(dd) : Cudd_zddReadNodeCount(dd);
+    auto node_cnt = strcmp(str, "BDD") == 0 ? Cudd_ReadNodeCount(dd) : Cudd_zddReadNodeCount(dd);
 
     retval = fprintf(dd->out,"%ld nodes in %g sec", node_cnt,
 		     totalTimeSec);
     //Override default reorder size to be factor of two
-    dd->nextDyn = std::max(2*node_cnt, (long) 4096);
-    retval = fprintf(dd->out," (next reorder %u nodes)\n", dd->nextDyn);
+    auto next_reorder = std::max(2*node_cnt, (long) 4096) + dd->constants.keys;
+    Cudd_SetNextReordering(dd, next_reorder);
+    retval = fprintf(dd->out," (next reorder %u nodes)\n", dd->nextDyn - dd->constants.keys);
     if (retval == EOF) return(0);
     retval = fflush(dd->out);
     if (retval == EOF) return(0);

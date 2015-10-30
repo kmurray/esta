@@ -9,6 +9,19 @@
 extern EtaStats g_eta_stats;
 
 template<class BaseAnalysisMode, class Tags>
+void ExtSetupAnalysisMode<BaseAnalysisMode,Tags>::reset_xfunc_cache() { 
+    bdd_cache_.print_stats(); 
+    bdd_cache_.clear(); 
+    bdd_cache_.reset_stats(); 
+
+    //Reset the default re-order size
+    //Re-ordering really big BDDs is slow (re-order time appears to be quadratic in size)
+    //So cap the size for re-ordering to something reasonable when re-starting
+    auto next_reorder = std::min(g_cudd.ReadNextReordering(), 100004u);
+    g_cudd.SetNextReordering(next_reorder);
+}
+
+template<class BaseAnalysisMode, class Tags>
 void ExtSetupAnalysisMode<BaseAnalysisMode,Tags>::initialize_traversal(const TimingGraph& tg) {
     //Chain to base class
     BaseAnalysisMode::initialize_traversal(tg);
