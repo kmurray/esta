@@ -393,18 +393,20 @@ void print_node_tags(const TimingGraph& tg, std::shared_ptr<AnalyzerType> analyz
                 auto sat_cnt_supp = sharp_sat_eval->count_sat(tag, node_id);
 
                 //Re-adjust if approx and not full support
-                int support_size_diff = 0;
-                if(!sat_cnt_supp.pure_bdd) {
-                    support_size_diff = nvars - sat_cnt_supp.support.size();
-                    assert(support_size_diff >= 0);
-                } else {
-                    assert(support_size_diff == 0);
-                }
+                /*
+                 *int support_size_diff = 0;
+                 *if(!sat_cnt_supp.pure_bdd) {
+                 *    support_size_diff = nvars - sat_cnt_supp.support.size();
+                 *    assert(support_size_diff >= 0);
+                 *} else {
+                 *    assert(support_size_diff == 0);
+                 *}
+                 */
 
 
 
                 //Adjust for any variables not included in the support
-                double sat_cnt = sat_cnt_supp.count * pow(2, support_size_diff);
+                double sat_cnt = sat_cnt_supp.count;// * pow(2, support_size_diff);
 
                 auto iter = trans_to_count.find(tag.trans_type());
                 assert(iter == trans_to_count.end()); //Not found
