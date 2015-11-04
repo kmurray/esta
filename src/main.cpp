@@ -26,6 +26,10 @@
 #include "ExtSetupAnalysisMode.hpp"
 #include "sta_util.hpp"
 
+#include "SharpSatEvaluator.hpp"
+#include "SharpSatBddEvaluator.hpp"
+#include "SharpSatDecompBddEvaluator.hpp"
+
 using std::cout;
 using std::cerr;
 using std::endl;
@@ -35,6 +39,8 @@ using std::to_string;
 using AnalysisType = ExtSetupAnalysisMode<BaseAnalysisMode,ExtTimingTags>;
 using DelayCalcType = PreCalcTransDelayCalculator;
 using AnalyzerType = SerialTimingAnalyzer<AnalysisType,DelayCalcType>;
+//using SharpSatType = SharpSatBddEvaluator<AnalyzerType>;
+using SharpSatType = SharpSatDecompBddEvaluator<AnalyzerType>;
 
 //XXX: global variable
 //TODO: Clean up and pass appropriately....
@@ -43,7 +49,8 @@ ActionTimer g_action_timer;
 EtaStats g_eta_stats;
 
 optparse::Values parse_args(int argc, char** argv);
-void print_node_tags(const TimingGraph& tg, std::shared_ptr<AnalysisType> analyzer, NodeId node_id, double nvars, double nassigns, float progress, bool print_sat_cnt, bool print_switch);
+//void print_node_tags(const TimingGraph& tg, std::shared_ptr<AnalyzerType> analyzer, std::shared_ptr<SharpSatType> sharp_sat_eval, NodeId node_id, double nvars, double nassigns, float progress, bool print_sat_cnt, bool print_switch);
+void print_node_tags(const TimingGraph& tg, std::shared_ptr<AnalyzerType> analyzer, std::shared_ptr<SharpSatType> sharp_sat_eval, NodeId node_id, double nvars, double nassigns, float progress, bool print_sat_cnt);
 
 int PreReorderHook( DdManager *dd, const char *str, void *data);
 int PostReorderHook( DdManager *dd, const char *str, void *data);
@@ -59,6 +66,12 @@ optparse::Values parse_args(int argc, char** argv) {
           .dest("blif_file")
           .metavar("BLIF_FILE")
           .help("The blif file to load and analyze.")
+          ;
+
+    parser.add_option("--print_graph")
+          .action("store_true")
+          .set_default("false")
+          .help("Print the timing graph. Default %default")
           ;
 
     parser.add_option("--reorder_method")
@@ -174,25 +187,21 @@ int main(int argc, char** argv) {
     g_action_timer.pop_timer("Building Timing Graph");
     cout << "\n";
 
-    /*
-     *cout << "\n";
-     *cout << "TimingGraph: " << "\n";
-     *print_timing_graph(timing_graph);
-     */
+    if(options.get_as<bool>("print_graph")) {
+        cout << "\n";
+        cout << "TimingGraph: " << "\n";
+        print_timing_graph(timing_graph);
 
-    /*
-     *cout << "\n";
-     *cout << "TimingGraph logic functions: " << "\n";
-     *for(NodeId id = 0; id < timing_graph.num_nodes(); id++) {
-     *    cout << "Node " << id << ": " << timing_graph.node_func(id) << "\n";
-     *}
-     */
+        cout << "\n";
+        cout << "TimingGraph logic functions: " << "\n";
+        for(NodeId id = 0; id < timing_graph.num_nodes(); id++) {
+            cout << "Node " << id << ": " << timing_graph.node_func(id) << "\n";
+        }
 
-    cout << "\n";
-    /*
-     *cout << "TimingGraph Levelization: " << "\n";
-     *print_levelization(timing_graph);
-     */
+        cout << "\n";
+        cout << "TimingGraph Levelization: " << "\n";
+        print_levelization(timing_graph);
+    }
 
     cout << "Timing Graph Nodes: " << timing_graph.num_nodes() << "\n";
     cout << "Timing Graph Num Logical Inputs: " << timing_graph.logical_inputs().size() << "\n";
@@ -245,7 +254,6 @@ int main(int argc, char** argv) {
     g_action_timer.push_timer("Output Results");
 
 
-    bool print_switch = options.get_as<bool>("print_tag_switch");
     bool print_sat_cnt = true;
     double nvars = 2*timing_graph.logical_inputs().size();
     double nassigns = pow(2,nvars);
@@ -259,15 +267,16 @@ int main(int argc, char** argv) {
         sorted_lo_nodes.insert(sorted_lo_nodes.end(), nodes.begin(), nodes.end());
     }
 
+    auto sharp_sat_eval = std::make_shared<SharpSatType>(timing_graph, analyzer, nvars);
     size_t nodes_processed = 0;
     for(auto node_id : sorted_lo_nodes) {
         std::string action_name = "Node " + to_string(node_id) + " eval";
         g_action_timer.push_timer(action_name);
         float progress = (float) nodes_processed / sorted_lo_nodes.size();
-        print_node_tags(timing_graph, analyzer, node_id, nvars, nassigns, progress, print_sat_cnt, print_switch);
+        print_node_tags(timing_graph, analyzer, sharp_sat_eval, node_id, nvars, nassigns, progress, print_sat_cnt);
 
         //Clear the cache - this should shrink the size of CUDDs bdds
-        analyzer->reset_xfunc_cache();
+        sharp_sat_eval->reset();
 
         nodes_processed++;
 
@@ -361,7 +370,8 @@ int main(int argc, char** argv) {
     return 0;
 }
 
-void print_node_tags(const TimingGraph& tg, std::shared_ptr<AnalysisType> analyzer, NodeId node_id, double nvars, double nassigns, float progress, bool print_sat_cnt, bool print_switch) {
+void print_node_tags(const TimingGraph& tg, std::shared_ptr<AnalyzerType> analyzer, std::shared_ptr<SharpSatType> sharp_sat_eval, NodeId node_id, double nvars, double nassigns, float progress, bool print_sat_cnt) {
+
     cout << "Node: " << node_id << " " << tg.node_type(node_id) << " (" << progress*100 << "%)\n";
     cout << "   Clk Tags:\n";
     auto& clk_tags = analyzer->setup_clock_tags(node_id);
@@ -374,22 +384,54 @@ void print_node_tags(const TimingGraph& tg, std::shared_ptr<AnalysisType> analyz
     cout << "   Data Tags:\n";
     auto& data_tags = analyzer->setup_data_tags(node_id);
     if(data_tags.num_tags() > 0) {
-        for(auto& tag : data_tags) {
-            double sat_cnt = 0;
-            BDD xfunc = g_cudd.bddZero();
-            if(print_sat_cnt || print_switch) {
-                xfunc = analyzer->build_xfunc(tg, tag, node_id);
+        if(print_sat_cnt) {
+            //Calculate sat counts
+            std::map<TransitionType, double> trans_to_count;
+            std::map<TransitionType, bool> trans_to_pure_bdd;
+            double total_sat_cnt = 0;
+            for(auto& tag : data_tags) {
+                auto sat_cnt_supp = sharp_sat_eval->count_sat(tag, node_id);
+
+                //Re-adjust if approx and not full support
+                int support_size_diff = 0;
+                if(!sat_cnt_supp.pure_bdd) {
+                    support_size_diff = nvars - sat_cnt_supp.support.size();
+                    assert(support_size_diff >= 0);
+                } else {
+                    assert(support_size_diff == 0);
+                }
+
+
+
+                //Adjust for any variables not included in the support
+                double sat_cnt = sat_cnt_supp.count * pow(2, support_size_diff);
+
+                auto iter = trans_to_count.find(tag.trans_type());
+                assert(iter == trans_to_count.end()); //Not found
+                trans_to_count[tag.trans_type()] = sat_cnt;
+                trans_to_pure_bdd[tag.trans_type()] = sat_cnt_supp.pure_bdd;
+
+                total_sat_cnt += sat_cnt;
             }
-            cout << "\t" << tag;
-            if(print_sat_cnt) {
-                sat_cnt = xfunc.CountMinterm(nvars);
-                double switch_prob = sat_cnt / nassigns;
-                cout << ", #SAT: " << sat_cnt << " (" << switch_prob << ")";
+
+            //Print the tags
+            for(auto& tag : data_tags) {
+                double sat_cnt = trans_to_count[tag.trans_type()];
+                double switch_prob = sat_cnt / total_sat_cnt;
+                cout << "\t" << tag << ", #SAT: " << sat_cnt << " (" << switch_prob << ")";
+                if(!trans_to_pure_bdd[tag.trans_type()]) {
+                    cout << "*";
+                }
+                if(total_sat_cnt != nassigns) {
+                    if(trans_to_pure_bdd[tag.trans_type()]) {
+                        cout << " [BDD Re-Normed]";
+                        //assert(0);
+                    } else {
+                        cout << " [Approx Re-Normed]";
+                    }
+                }
+                cout << "\n";
             }
-            if(print_switch) {
-                cout << ", xfunc: " << xfunc;
-            }
-            cout << "\n";
         }
     }
 }

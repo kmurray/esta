@@ -3,7 +3,10 @@
  *
  */
 #include <iostream>
+#include <cassert>
+#include <unordered_map>
 #include "bdd.hpp"
+#include "Time.hpp"
 
 /*
  * These defines control how a tag is said to 'match' another
@@ -182,7 +185,7 @@ inline ExtTimingTag::ExtTimingTag(const Time& arr_time_val, const Time& req_time
 
 inline void ExtTimingTag::update_arr(const Time new_arr, const ExtTimingTag& base_tag) {
     //NOTE: leave next alone, since we want to keep the linked list intact
-    ASSERT(clock_domain() == base_tag.clock_domain()); //Domain must be the same
+    assert(clock_domain() == base_tag.clock_domain()); //Domain must be the same
     set_arr_time(new_arr);
     set_launch_node(base_tag.launch_node());
 
@@ -192,7 +195,7 @@ inline void ExtTimingTag::update_arr(const Time new_arr, const ExtTimingTag& bas
  *inline void ExtTimingTag::update_req(const Time& new_req_time, const ExtTimingTag& base_tag) {
  *    //NOTE: We only update the req time, since everything else is determined by the arrival
  *    //TODO: remove base tag argument?
- *    ASSERT(clock_domain() == base_tag.clock_domain()); //Domain must be the same
+ *    assert(clock_domain() == base_tag.clock_domain()); //Domain must be the same
  *    set_req_time(new_req_time);
  *}
  */

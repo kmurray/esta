@@ -49,7 +49,7 @@ class ActionTimer {
             float val = duration(steady_clock::now(), iter->second);
 
             if(print) {
-                os_ << "### End   " << action_name << " (" << val << " sec)" << std::endl;
+                os_ << "### End   " << action_name << " after " << val << " sec" << std::endl;
             }
 
             timers_.erase(iter);
