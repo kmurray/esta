@@ -58,6 +58,13 @@ if(COMPILER_SUPPORTS_-fkeep-inline-functions)
     #set(CMAKE_CXX_FLAGS_RELWITHDEBINFO "${CMAKE_CXX_FLAGS_RELWITHDEBINFO} -fkeep-inline-functions")
 endif()
 
+#Support for gprof
+CHECK_CXX_COMPILER_FLAG("-pg" COMPILER_SUPPORTS_-pg)
+if(COMPILER_SUPPORTS_-fkeep-inline-functions)
+    #set(CMAKE_CXX_FLAGS_DEBUG "${CMAKE_CXX_FLAGS_DEBUG} -fkeep-inline-functions")
+    set(CMAKE_CXX_FLAGS_RELWITHDEBINFO "${CMAKE_CXX_FLAGS_RELWITHDEBINFO} -pg")
+endif()
+
 #
 # Warning flags
 #

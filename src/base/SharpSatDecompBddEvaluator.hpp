@@ -83,9 +83,11 @@ typename SharpSatDecompBddEvaluator<Analyzer>::count_support SharpSatDecompBddEv
         //Save the sub-problem result
         count_table_.insert({key, sat_cnt_support});
 
+        std::cout << "Caclulated (" << node_id << ", " << tag.trans_type() << ") #SAT: " << sat_cnt_support.count << "\n";
         return sat_cnt_support;
     } else {
         //Found sub-problem in pre-calculated table
+        std::cout << "Looked Up  (" << node_id << ", " << tag.trans_type() << ") #SAT: " << iter->second.count << "\n";
         return iter->second;
     }
 }
