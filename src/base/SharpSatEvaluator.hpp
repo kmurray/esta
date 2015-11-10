@@ -2,6 +2,7 @@
 #include <memory>
 #include "timing_graph_fwd.hpp"
 #include "ExtTimingTag.hpp"
+#include "ep_real.hpp"
 
 
 template<class Analyzer>
@@ -14,7 +15,7 @@ class SharpSatEvaluator {
         virtual ~SharpSatEvaluator() {}
 
         struct count_support {
-            typedef double count_type;
+            typedef real_t count_type;
             typedef std::vector<unsigned int> support_type;
 
             count_type count;

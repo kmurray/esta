@@ -1,5 +1,5 @@
 #pragma once
-
+#include "ep_real.hpp"
 #include "SharpSatEvaluator.hpp"
 
 
@@ -8,8 +8,11 @@ class SharpSatBddEvaluator : public SharpSatEvaluator<Analyzer> {
     public:
         typedef typename SharpSatBddEvaluator<Analyzer>::count_support count_support;
 
-        SharpSatBddEvaluator(const TimingGraph& tg, std::shared_ptr<Analyzer> analyzer, int nvars)
-            : SharpSatEvaluator<Analyzer>(tg, analyzer, nvars) {
+        SharpSatBddEvaluator(const TimingGraph& tg, std::shared_ptr<Analyzer> analyzer, int nvars, int approx_threshold, float node_ratio, float quality)
+            : SharpSatEvaluator<Analyzer>(tg, analyzer, nvars)
+            , bdd_approx_threshold_(approx_threshold) 
+            , bdd_approx_node_ratio_(node_ratio)
+            , bdd_approx_quality_(quality) {
             //We have a unique logic variable for each Primary Input
             //
             //To represent transitions we have both a 'curr' and 'next' variable
@@ -30,11 +33,13 @@ class SharpSatBddEvaluator : public SharpSatEvaluator<Analyzer> {
         }
 
         count_support count_sat(const ExtTimingTag& tag, NodeId node_id) override {
-            BDD f = build_bdd_xfunc(tag, node_id);
+            BDD f = build_bdd_xfunc(tag, node_id, 0);
 
-            double cnt = f.CountMinterm(this->nvars_);
+            EpDouble f_count_cudd;
+            Cudd_EpdCountMinterm(f.manager(), f.getNode(), this->nvars_, &f_count_cudd);
+            real_t f_count = EpDouble2Real(f_count_cudd);
 
-            return {cnt, f.SupportIndices(), true};
+            return {f_count, f.SupportIndices(), true};
         }
 
         void reset() override { 
@@ -45,18 +50,33 @@ class SharpSatBddEvaluator : public SharpSatEvaluator<Analyzer> {
             //Reset the default re-order size
             //Re-ordering really big BDDs is slow (re-order time appears to be quadratic in size)
             //So cap the size for re-ordering to something reasonable when re-starting
-            auto next_reorder = std::min(g_cudd.ReadNextReordering(), 100004u);
-            g_cudd.SetNextReordering(next_reorder);
+            /*
+             *auto next_reorder = std::min(g_cudd.ReadNextReordering(), 100004u);
+             *g_cudd.SetNextReordering(next_reorder);
+             */
+
+             g_cudd.SetNextReordering(4096);
         }
 
     protected:
 
 
-        BDD build_bdd_xfunc(const ExtTimingTag& tag, const NodeId node_id) {
+        BDD build_bdd_xfunc(const ExtTimingTag& tag, const NodeId node_id, int level) {
             /*std::cout << "build_xfunc at Node: " << node_id << " TAG: " << tag << "\n";*/
             auto key = std::make_pair(node_id, tag.trans_type());
+
+            //Indent based on recursion level 
+            std::string tab(level, ' ');
+
+#ifdef BDD_CALC_DEBUG
+            std::cout << tab << "Requiested BDD for " << node_id << " " << tag.trans_type() << " " << this->tg_.node_type(node_id) << "\n";
+#endif
+
             if(!bdd_cache_.contains(key)) {
                 //Not found calculate it
+
+                int baseline_node_count = g_cudd.ReadNodeCount();
+
                 BDD f;
                 auto node_type = this->tg_.node_type(node_id);
                 if(node_type == TN_Type::INPAD_SOURCE || node_type == TN_Type::FF_SOURCE) {
@@ -87,7 +107,7 @@ class SharpSatBddEvaluator : public SharpSatEvaluator<Analyzer> {
                             for(auto& src_tag: src_tags) {
                                 if(src_tag.trans_type() == transition_scenario[edge_idx]) {
                                     //Found the matching tag
-                                    f_scenario &= this->build_bdd_xfunc(src_tag, src_node_id);
+                                    f_scenario &= this->build_bdd_xfunc(src_tag, src_node_id, level+1);
                                     break;
                                 }
                             }
@@ -101,11 +121,63 @@ class SharpSatBddEvaluator : public SharpSatEvaluator<Analyzer> {
                         scenario_cnt++;
                     }
                 }
+
+                int delta_size = g_cudd.ReadNodeCount() - baseline_node_count;
+                int delta_size_approx = delta_size;
+
+                if(bdd_approx_threshold_ >= 0 && (delta_size > bdd_approx_threshold_)) {
+                    //Approximate the BDD
+
+                    int tgt_node_count = std::max(1.0f, f.nodeCount()*bdd_approx_node_ratio_);
+                    BDD f_approx = f.SupersetCompress(f.SupportSize(), tgt_node_count);
+                    //BDD f_approx = f.OverApprox(f.SupportSize(), f.nodeCount()*bdd_approx_node_ratio_, 1, bdd_approx_quality_);
+                    //BDD f_approx = f.RemapOverApprox(f.SupportSize(), f.nodeCount()*bdd_approx_node_ratio_, 0.);
+                    //BDD f_approx = f.SupersetShortPaths(f.SupportSize(), f.nodeCount()*bdd_approx_node_ratio_, false);
+
+                    EpDouble f_count_cudd;
+                    EpDouble f_approx_count_cudd;
+                    Cudd_EpdCountMinterm(f.manager(), f.getNode(), this->nvars_, &f_count_cudd);
+                    Cudd_EpdCountMinterm(f_approx.manager(), f_approx.getNode(), this->nvars_, &f_approx_count_cudd);
+
+                    //Convert to useable types
+                    real_t f_count = EpDouble2Real(f_count_cudd);
+                    real_t f_approx_count = EpDouble2Real(f_approx_count_cudd);
+                    real_t sat_ratio = f_approx_count / f_count;
+
+                    if(sat_ratio >= 1.0 && sat_ratio <= bdd_approx_quality_) {
+                        int f_node_count = f.nodeCount();
+
+                        f = f_approx; 
+                        delta_size_approx = g_cudd.ReadNodeCount() - baseline_node_count;
+#if 1
+                        std::cout << tab << "Approximated BDD";
+                        std::cout << " Quality: " << sat_ratio;
+                        std::cout << " f_nodes: " << f_approx.nodeCount() << "/" << f_node_count << " (" << (float) f_approx.nodeCount() / f_node_count << ")";
+                        std::cout << " delta_size: " << delta_size_approx << "/" << delta_size << " (" << (float) delta_size_approx / delta_size << ")";
+                        std::cout << "\n";
+#endif
+#ifdef BDD_CALC_DEBUG
+                       delta_size_approx = g_cudd.ReadNodeCount() - baseline_node_count;
+#endif
+                    }
+                }
+
                 //Calulcated it, save it
                 bdd_cache_.insert(key, f);
 
+#ifdef BDD_CALC_DEBUG
+                std::cout << tab << "Calculated BDD for " << node_id << " " << tag.trans_type() << " " << this->tg_.node_type(node_id) << " ";
+                if(delta_size_approx == delta_size) {
+                    std::cout << "Delta Size: " << delta_size << "\n";
+                } else {
+                    std::cout << "Delta Size Approx: " << delta_size_approx << "(" << (float) delta_size_approx / delta_size << ")\n";
+                }
+#endif
                 return f;
             } else {
+#ifdef BDD_CALC_DEBUG
+                std::cout << tab << "Looked up  BDD for " << node_id << " " << tag.trans_type() << " " << this->tg_.node_type(node_id) << "\n";
+#endif
                 //Found it
                 return bdd_cache_.value(key);
             }
@@ -154,6 +226,10 @@ class SharpSatBddEvaluator : public SharpSatEvaluator<Analyzer> {
         //BDD variable information
         std::unordered_map<NodeId,BDD> pi_curr_bdd_vars_;
         std::unordered_map<NodeId,BDD> pi_next_bdd_vars_;
+
+        int bdd_approx_threshold_;
+        float bdd_approx_node_ratio_;
+        float bdd_approx_quality_;
 
         ObjectCacheMap<std::pair<NodeId,TransitionType>,BDD> bdd_cache_;
 };

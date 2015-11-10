@@ -10,7 +10,8 @@
 
 #include "bdd.hpp"
 #include "cuddInt.h"
-#include "util.h"
+//#include "util.h"
+#include "cudd_hooks.hpp"
 
 #include "util.hpp"
 
@@ -39,8 +40,8 @@ using std::to_string;
 using AnalysisType = ExtSetupAnalysisMode<BaseAnalysisMode,ExtTimingTags>;
 using DelayCalcType = PreCalcTransDelayCalculator;
 using AnalyzerType = SerialTimingAnalyzer<AnalysisType,DelayCalcType>;
-//using SharpSatType = SharpSatBddEvaluator<AnalyzerType>;
-using SharpSatType = SharpSatDecompBddEvaluator<AnalyzerType>;
+using SharpSatType = SharpSatBddEvaluator<AnalyzerType>;
+//using SharpSatType = SharpSatDecompBddEvaluator<AnalyzerType>;
 
 //XXX: global variable
 //TODO: Clean up and pass appropriately....
@@ -50,12 +51,7 @@ EtaStats g_eta_stats;
 
 optparse::Values parse_args(int argc, char** argv);
 //void print_node_tags(const TimingGraph& tg, std::shared_ptr<AnalyzerType> analyzer, std::shared_ptr<SharpSatType> sharp_sat_eval, NodeId node_id, double nvars, double nassigns, float progress, bool print_sat_cnt, bool print_switch);
-void print_node_tags(const TimingGraph& tg, std::shared_ptr<AnalyzerType> analyzer, std::shared_ptr<SharpSatType> sharp_sat_eval, NodeId node_id, double nvars, double nassigns, float progress, bool print_sat_cnt);
-
-int PreReorderHook( DdManager *dd, const char *str, void *data);
-int PostReorderHook( DdManager *dd, const char *str, void *data);
-int PreGarbageCollectHook(DdManager* dd, const char* str, void* data);
-int PostGarbageCollectHook(DdManager* dd, const char* str, void* data);
+void print_node_tags(const TimingGraph& tg, std::shared_ptr<AnalyzerType> analyzer, std::shared_ptr<SharpSatType> sharp_sat_eval, NodeId node_id, int nvars, real_t nassigns, float progress, bool print_sat_cnt);
 
 optparse::Values parse_args(int argc, char** argv) {
     auto parser = optparse::OptionParser()
@@ -99,6 +95,19 @@ optparse::Values parse_args(int argc, char** argv) {
     parser.add_option("--xfunc_cache_nelem")
           .set_default("0")
           .help("Number of BDDs to cache while building switch functions. Note a value of 0 causes all xfuncs to be memoized (unbounded cache). A larger value prevents switch functions from being re-calculated, but also increases (perhaps exponentially) the size of the composite BDD CUDD must manage. This can causing a large amount of time to be spent re-ordering the BDD.  Default %default")
+          ;
+
+    parser.add_option("--approx_threshold")
+          .set_default("-1")
+          .help("The number of BDD nodes beyond which BDDs are approximated. Negative thresholds ensure no approximation occurs. Default %default")
+          ;
+    parser.add_option("--approx_ratio")
+          .set_default("0.5")
+          .help("The desired reduction in number BDD nodes when BDDs are approximated. Default %default")
+          ;
+    parser.add_option("--approx_quality")
+          .set_default("1.5")
+          .help("The worst degredation in #SAT quality (0.5 would accept up to a 50% under approximation, 1.0 only an exact approximation, and 1.5 a 50% over approximation). Default %default")
           ;
 
     std::vector<std::string> print_tags_choices = {"po", "pi", "all", "none"};
@@ -255,8 +264,8 @@ int main(int argc, char** argv) {
 
 
     bool print_sat_cnt = true;
-    double nvars = 2*timing_graph.logical_inputs().size();
-    double nassigns = pow(2,nvars);
+    int nvars = 2*timing_graph.logical_inputs().size();
+    real_t nassigns = pow(2,(real_t) nvars);
     cout << "Num Logical Inputs: " << timing_graph.logical_inputs().size() << " Num BDD Vars: " << nvars << " Num Possible Assignments: " << nassigns << endl;
 
     //Try to keep outputs with common dependancies together
@@ -266,8 +275,9 @@ int main(int argc, char** argv) {
         const std::vector<NodeId>& nodes = kv.second;
         sorted_lo_nodes.insert(sorted_lo_nodes.end(), nodes.begin(), nodes.end());
     }
+    std::reverse(sorted_lo_nodes.begin(), sorted_lo_nodes.end());
 
-    auto sharp_sat_eval = std::make_shared<SharpSatType>(timing_graph, analyzer, nvars);
+    auto sharp_sat_eval = std::make_shared<SharpSatType>(timing_graph, analyzer, nvars, options.get_as<int>("approx_threshold"), options.get_as<float>("approx_ratio"), options.get_as<float>("approx_quality"));
     size_t nodes_processed = 0;
     for(auto node_id : sorted_lo_nodes) {
         std::string action_name = "Node " + to_string(node_id) + " eval";
@@ -370,7 +380,7 @@ int main(int argc, char** argv) {
     return 0;
 }
 
-void print_node_tags(const TimingGraph& tg, std::shared_ptr<AnalyzerType> analyzer, std::shared_ptr<SharpSatType> sharp_sat_eval, NodeId node_id, double nvars, double nassigns, float progress, bool print_sat_cnt) {
+void print_node_tags(const TimingGraph& tg, std::shared_ptr<AnalyzerType> analyzer, std::shared_ptr<SharpSatType> sharp_sat_eval, NodeId node_id, int nvars, real_t nassigns, float progress, bool print_sat_cnt) {
 
     cout << "Node: " << node_id << " " << tg.node_type(node_id) << " (" << progress*100 << "%)\n";
     cout << "   Clk Tags:\n";
@@ -386,9 +396,9 @@ void print_node_tags(const TimingGraph& tg, std::shared_ptr<AnalyzerType> analyz
     if(data_tags.num_tags() > 0) {
         if(print_sat_cnt) {
             //Calculate sat counts
-            std::map<TransitionType, double> trans_to_count;
+            std::map<TransitionType, real_t> trans_to_count;
             std::map<TransitionType, bool> trans_to_pure_bdd;
-            double total_sat_cnt = 0;
+            real_t total_sat_cnt = 0;
             for(auto& tag : data_tags) {
                 auto sat_cnt_supp = sharp_sat_eval->count_sat(tag, node_id);
 
@@ -406,7 +416,7 @@ void print_node_tags(const TimingGraph& tg, std::shared_ptr<AnalyzerType> analyz
 
 
                 //Adjust for any variables not included in the support
-                double sat_cnt = sat_cnt_supp.count;// * pow(2, support_size_diff);
+                auto sat_cnt = sat_cnt_supp.count;// * pow(2, support_size_diff);
 
                 auto iter = trans_to_count.find(tag.trans_type());
                 assert(iter == trans_to_count.end()); //Not found
@@ -418,8 +428,12 @@ void print_node_tags(const TimingGraph& tg, std::shared_ptr<AnalyzerType> analyz
 
             //Print the tags
             for(auto& tag : data_tags) {
-                double sat_cnt = trans_to_count[tag.trans_type()];
-                double switch_prob = sat_cnt / total_sat_cnt;
+                auto sat_cnt = trans_to_count[tag.trans_type()];
+#if 1
+                auto switch_prob = sat_cnt / real_t(nassigns);
+                cout << "\t" << tag << ", #SAT: " << sat_cnt << " (" << switch_prob << ")";
+#else
+                auto switch_prob = sat_cnt / total_sat_cnt;
                 cout << "\t" << tag << ", #SAT: " << sat_cnt << " (" << switch_prob << ")";
                 if(!trans_to_pure_bdd[tag.trans_type()]) {
                     cout << "*";
@@ -432,53 +446,10 @@ void print_node_tags(const TimingGraph& tg, std::shared_ptr<AnalyzerType> analyz
                         cout << " [Approx Re-Normed]";
                     }
                 }
+#endif
                 cout << "\n";
             }
         }
     }
-}
-
-int PreReorderHook( DdManager *dd, const char *str, void *data) {
-    int retval;
-
-    retval = fprintf(dd->out,"%s reordering", str);
-    if (retval == EOF) return(0);
-
-    retval = fprintf(dd->out,": from %ld to ... ", strcmp(str, "BDD") == 0 ?
-		     Cudd_ReadNodeCount(dd) : Cudd_zddReadNodeCount(dd));
-    if (retval == EOF) return(0);
-    fflush(dd->out);
-    return(1);
-
-}
-
-int PostReorderHook( DdManager *dd, const char *str, void *data) {
-    unsigned long initialTime = (long) data;
-    int retval;
-    unsigned long finalTime = util_cpu_time();
-    double totalTimeSec = (double)(finalTime - initialTime) / 1000.0;
-
-    auto node_cnt = strcmp(str, "BDD") == 0 ? Cudd_ReadNodeCount(dd) : Cudd_zddReadNodeCount(dd);
-
-    retval = fprintf(dd->out,"%ld nodes in %g sec", node_cnt,
-		     totalTimeSec);
-    //Override default reorder size to be factor of two
-    auto next_reorder = std::max(2*node_cnt, (long) 4096) + dd->constants.keys;
-    Cudd_SetNextReordering(dd, next_reorder);
-    retval = fprintf(dd->out," (next reorder %u nodes)\n", dd->nextDyn - dd->constants.keys);
-    if (retval == EOF) return(0);
-    retval = fflush(dd->out);
-    if (retval == EOF) return(0);
-    return(1);
-}
-
-int PreGarbageCollectHook(DdManager* dd, const char* str, void* data) {
-    fprintf(dd->out,"%s gc %u dead nodes ...", str, dd->dead);
-    return 1;
-}
-
-int PostGarbageCollectHook(DdManager* dd, const char* str, void* data) {
-    fprintf(dd->out,"gc finished\n");
-    return 1;
 }
 

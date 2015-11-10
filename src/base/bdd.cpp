@@ -2,6 +2,7 @@
 #include <iostream>
 #include <cmath>
 #include "bdd.hpp"
+#include "cuddInt.h"
 
 Cudd g_cudd;
 
@@ -11,6 +12,8 @@ using std::cout;
 class CubeNum;
 
 BDD gen_cube(Cudd& cudd, size_t nvars, size_t cube_size, const CubeNum& cube_num);
+
+int bdd_unique_node_count_recurr(DdNode* node, int depth);
 
 std::istream& operator>>(std::istream& is, Cudd_ReorderingType& type) {
     std::string s;
@@ -305,4 +308,33 @@ BDD gen_cube(Cudd& cudd, size_t nvars, size_t cube_size, const CubeNum& cube_num
         }
     }
     return cube;
+}
+
+int bdd_unique_node_count(const BDD& bdd) {
+    DdNode* root = bdd.getNode();
+
+    return bdd_unique_node_count_recurr(root, 0);
+}
+
+int bdd_unique_node_count_recurr(DdNode* node, int depth) {
+    int uniq_cnt = 0;
+
+    assert(depth < 1000);
+
+    if(cuddIsConstant(node)) {
+        return 0;
+    }
+
+    if(node->ref == 0) {
+        uniq_cnt += 1;
+    } else {
+        assert(node->ref > 1);
+        return 0;
+    }
+
+    //Children
+    uniq_cnt += bdd_unique_node_count_recurr(cuddT(node), depth+1);
+    uniq_cnt += bdd_unique_node_count_recurr(cuddE(node), depth+1);
+
+    return uniq_cnt;
 }

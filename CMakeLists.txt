@@ -59,11 +59,11 @@ if(COMPILER_SUPPORTS_-fkeep-inline-functions)
 endif()
 
 #Support for gprof
-CHECK_CXX_COMPILER_FLAG("-pg" COMPILER_SUPPORTS_-pg)
-if(COMPILER_SUPPORTS_-fkeep-inline-functions)
-    #set(CMAKE_CXX_FLAGS_DEBUG "${CMAKE_CXX_FLAGS_DEBUG} -fkeep-inline-functions")
-    set(CMAKE_CXX_FLAGS_RELWITHDEBINFO "${CMAKE_CXX_FLAGS_RELWITHDEBINFO} -pg")
-endif()
+#CHECK_CXX_COMPILER_FLAG("-pg" COMPILER_SUPPORTS_-pg)
+#if(COMPILER_SUPPORTS_-fkeep-inline-functions)
+    ##set(CMAKE_CXX_FLAGS_DEBUG "${CMAKE_CXX_FLAGS_DEBUG} -fkeep-inline-functions")
+    #set(CMAKE_CXX_FLAGS_RELWITHDEBINFO "${CMAKE_CXX_FLAGS_RELWITHDEBINFO} -pg")
+#endif()
 
 #
 # Warning flags
@@ -105,6 +105,20 @@ endforeach()
 set(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} ${WARN_FLAGS}")
 
 message(STATUS "CMAKE_CXX_FLAGS: ${CMAKE_CXX_FLAGS}")
+
+#
+#
+# External dependancy on BOOST
+#
+#
+set(TATUM_USE_SYSTEM_BOOST YES)
+find_package(Boost)
+if(Boost_FOUND)
+    message(STATUS "FOUND BOOST ${Boost_VERSION} at ${Boost_INCLUDE_DIRS}")
+    include_directories(SYSTEM ${Boost_INCLUDE_DIRS})
+else()
+    message(FATAL_ERROR "Could not find BOOST!")
+endif()
 
 #
 #
@@ -167,7 +181,7 @@ set(CUDD_LIBS
 message(STATUS "CUDD INSTALL DIR: ${install_dir}")
 
 #Export include dirs to we can compile against CUDD
-include_directories(${install_dir}/src/project_cudd/include/ ${install_dir}/src/project_cudd/obj/)
+include_directories(${install_dir}/src/project_cudd/include/ ${install_dir}/src/project_cudd/obj/ ${install_dir}/src/project_cudd/cudd/)
 
 enable_testing()
 

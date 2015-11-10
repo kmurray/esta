@@ -421,27 +421,28 @@ void BlifTimingGraphBuilder::check_logical_input_dependancies(const TimingGraph&
             }
         }
     }
-
-    cout << "Primary Output Dependancies:\n";
-    //for(NodeId node_id : tg.primary_outputs()) {
-    for(int i = 0; i < tg.num_levels(); i++) {
-        for(NodeId node_id : tg.level(i)) {
-            int total_deps = 0;
-            for(auto kv : node_dependancies[node_id]) {
-                total_deps += kv.second;
-            }
-            cout << "\tNode: " << node_id << " (" << tg.node_type(node_id) << ") " << "#Dependancies: " << total_deps << " (" << (float) total_deps / (2*tg.logical_inputs().size()) << ")\n";
-            cout << "\t\t{\n";
-            for(auto kv : node_dependancies[node_id]) {
-                cout << "\t\t\tNode: " << kv.first << ", Cnt: " << kv.second << "\n";
-            }
-            cout << "\t\t}\n";
-        }
-    }
+/*
+ *
+ *    cout << "Primary Output Dependancies:\n";
+ *    for(int i = 0; i < tg.num_levels(); i++) {
+ *        for(NodeId node_id : tg.level(i)) {
+ *            int total_deps = 0;
+ *            for(auto kv : node_dependancies[node_id]) {
+ *                total_deps += kv.second;
+ *            }
+ *            cout << "\tNode: " << node_id << " (" << tg.node_type(node_id) << ") " << "#Dependancies: " << total_deps << " (" << (float) total_deps / (2*tg.logical_inputs().size()) << ")\n";
+ *            cout << "\t\t{\n";
+ *            for(auto kv : node_dependancies[node_id]) {
+ *                cout << "\t\t\tNode: " << kv.first << ", Cnt: " << kv.second << "\n";
+ *            }
+ *            cout << "\t\t}\n";
+ *        }
+ *    }
+ */
 }
 
 void BlifTimingGraphBuilder::check_logical_output_dependancies(const TimingGraph& tg) {
-    cout << "PO Transitive Fan-ins\n";
+    //cout << "PO Transitive Fan-ins\n";
     for(NodeId po_node_id : tg.primary_outputs()) {
         std::queue<NodeId> node_queue;
         std::unordered_map<NodeId,int> transitive_fanin;
@@ -467,8 +468,8 @@ void BlifTimingGraphBuilder::check_logical_output_dependancies(const TimingGraph
             }
         }
 
-        cout << "\tNode: " << po_node_id << " (" << tg.node_type(po_node_id) << ")\n ";
-        cout << "\t\t" << "Trans Fanin Nodes: " << transitive_fanin.size() << " (" << (float) transitive_fanin.size() / (tg.num_nodes()) << ")\n";
+        //cout << "\tNode: " << po_node_id << " (" << tg.node_type(po_node_id) << ")\n ";
+        //cout << "\t\t" << "Trans Fanin Nodes: " << transitive_fanin.size() << " (" << (float) transitive_fanin.size() / (tg.num_nodes()) << ")\n";
 
         int pi_fanin = 0;
         for(auto kv : transitive_fanin) {
@@ -478,7 +479,7 @@ void BlifTimingGraphBuilder::check_logical_output_dependancies(const TimingGraph
                 pi_fanin++;
             }
         }
-        cout << "\t\t" << "#PI: " << pi_fanin << " (" << (float) pi_fanin / (tg.logical_inputs().size()) << ")\n";
+        //cout << "\t\t" << "#PI: " << pi_fanin << " (" << (float) pi_fanin / (tg.logical_inputs().size()) << ")\n";
 
         //Save stats
         logical_output_dependancy_stats_[std::make_pair(transitive_fanin.size(), pi_fanin)].push_back(po_node_id);
