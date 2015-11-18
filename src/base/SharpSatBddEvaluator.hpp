@@ -43,6 +43,16 @@ class SharpSatBddEvaluator : public SharpSatEvaluator<Analyzer> {
         }
 
         void reset() override { 
+            int i = 0;
+            for(auto& cudd : {g_cudd}) {
+                std::cout << "Cudd " << i << " (" << cudd.getManager() << ")\n";
+                std::cout << "\tnvars       : " << cudd.ReadSize() << "\n";
+                std::cout << "\tpeak_nnodes : " << cudd.ReadPeakNodeCount() << "\n";
+                std::cout << "\tcurr_nnodes : " << cudd.ReadNodeCount() << "\n";
+                std::cout << "\tnum_reorders: " << cudd.ReadReorderings() << "\n";
+                std::cout << "\treorder_time: " << (float) cudd.ReadReorderingTime() / 1000 << "\n";
+                i++;
+            }
             bdd_cache_.print_stats(); 
             bdd_cache_.clear(); 
             bdd_cache_.reset_stats(); 
