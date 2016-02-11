@@ -418,37 +418,12 @@ void print_node_tags(const TimingGraph& tg, std::shared_ptr<AnalyzerType> analyz
                 //Adjust for any variables not included in the support
                 auto sat_cnt = sat_cnt_supp.count;// * pow(2, support_size_diff);
 
-                auto iter = trans_to_count.find(tag.trans_type());
-                assert(iter == trans_to_count.end()); //Not found
-                trans_to_count[tag.trans_type()] = sat_cnt;
-                trans_to_pure_bdd[tag.trans_type()] = sat_cnt_supp.pure_bdd;
+                auto switch_prob = sat_cnt / real_t(nassigns);
+                cout << "\t" << tag << ", #SAT: " << sat_cnt << " (" << switch_prob << ")\n";
 
                 total_sat_cnt += sat_cnt;
             }
-
-            //Print the tags
-            for(auto& tag : data_tags) {
-                auto sat_cnt = trans_to_count[tag.trans_type()];
-#if 1
-                auto switch_prob = sat_cnt / real_t(nassigns);
-                cout << "\t" << tag << ", #SAT: " << sat_cnt << " (" << switch_prob << ")";
-#else
-                auto switch_prob = sat_cnt / total_sat_cnt;
-                cout << "\t" << tag << ", #SAT: " << sat_cnt << " (" << switch_prob << ")";
-                if(!trans_to_pure_bdd[tag.trans_type()]) {
-                    cout << "*";
-                }
-                if(total_sat_cnt != nassigns) {
-                    if(trans_to_pure_bdd[tag.trans_type()]) {
-                        cout << " [BDD Re-Normed]";
-                        //assert(0);
-                    } else {
-                        cout << " [Approx Re-Normed]";
-                    }
-                }
-#endif
-                cout << "\n";
-            }
+            cout << "\n";
         }
     }
 }
