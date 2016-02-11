@@ -37,10 +37,10 @@ class ObjectCache {
         //  'allow_key_overwrites' determines whether an exception is 
         //    thrown if keys are overwritten
         //  'print_stats' prints hit/miss/capacity statistics on destruction
-        ObjectCache(size_t capacity = 0, bool allow_key_overwrites = false, bool print_stats = true) 
-            : capacity_(capacity)
+        ObjectCache(size_t capacity_val = 0, bool allow_key_overwrites = false, bool print_stats_val = true) 
+            : capacity_(capacity_val)
             , allow_key_overwrites_(allow_key_overwrites)
-            , print_stats_(print_stats)
+            , print_stats_(print_stats_val)
             , num_hits_(0)
             , num_misses_(0)
             , num_evictions_(0) {}
