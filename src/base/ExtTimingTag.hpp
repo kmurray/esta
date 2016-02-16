@@ -18,7 +18,7 @@
  * For more detail see ExtTimingTag::matches()
  */
 #define TAG_MATCH_TRANSITION
-//#define TAG_MATCH_DELAY
+#define TAG_MATCH_DELAY
 //#define TAG_MATCH_SWITCH_FUNC
 
 enum class TransitionType {
@@ -95,6 +95,8 @@ class ExtTimingTag {
         void set_trans_type(const TransitionType& new_trans_type) { trans_type_ = new_trans_type; }
 
         void set_input_transitions(const std::vector<std::vector<TransitionType>>& v) { input_transitions_ = v; }
+
+        void add_input_transition(const std::vector<TransitionType>& t) { input_transitions_.push_back(t); }
 
         ///\param new_next The new timing tag to insert in the current set of ExtTimingTags
         void set_next(ExtTimingTag* new_next) { next_ = new_next; }
@@ -182,7 +184,6 @@ inline ExtTimingTag::ExtTimingTag(const Time& arr_time_val, const Time& req_time
     , trans_type_(base_tag.trans_type())
     {}
 
-
 inline void ExtTimingTag::update_arr(const Time new_arr, const ExtTimingTag& base_tag) {
     //NOTE: leave next alone, since we want to keep the linked list intact
     assert(clock_domain() == base_tag.clock_domain()); //Domain must be the same
@@ -243,11 +244,11 @@ inline bool ExtTimingTag::matches(const ExtTimingTag& other) const {
     bool match = (clock_domain() == other.clock_domain());
 
 #ifdef TAG_MATCH_TRANSITION
-    match &= (trans_type() == other.trans_type());    
+    match &= (trans_type() == other.trans_type());
 #endif
 
 #ifdef TAG_MATCH_DELAY
-    match &= (arr_time() == other.arr_time());    
+    match &= (arr_time() == other.arr_time());
 #endif
 
 #ifdef TAG_MATCH_SWITCH_FUNC

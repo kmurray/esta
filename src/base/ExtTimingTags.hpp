@@ -127,6 +127,18 @@ inline ExtTimingTags::iterator ExtTimingTags::add_tag(const Tag& tag) {
 }
 
 inline void ExtTimingTags::max_arr(const Tag& tag) {
+#if 0
+    auto iter = add_tag(tag);
+
+    std::vector<std::vector<TransitionType>> input_transitions = iter->input_transitions();
+
+    for(auto scenario : tag.input_transitions()) {
+        input_transitions.push_back(scenario);
+    }
+
+    iter->set_input_transitions(input_transitions);
+
+#else
     auto iter = find_matching_tag(tag);
     if(iter == end()) {
         //First time we've seen this tag
@@ -138,16 +150,12 @@ inline void ExtTimingTags::max_arr(const Tag& tag) {
 
     assert(iter != end());
 
-    //HACK copy the current input transitions, append any from the incoming tag
-    //and then set the updated transitions and the new (current) transitions
-    std::vector<std::vector<TransitionType>> input_transitions = iter->input_transitions();
-
     for(auto scenario : tag.input_transitions()) {
-        input_transitions.push_back(scenario);
+        iter->add_input_transition(scenario);
     }
-
-    iter->set_input_transitions(input_transitions);
+#endif
 }
+
 
 /*
  *inline void ExtTimingTags::min_req(const Time& new_time, const Tag& base_tag) {

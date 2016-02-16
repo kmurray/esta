@@ -2,6 +2,8 @@
 #include "ep_real.hpp"
 #include "SharpSatEvaluator.hpp"
 
+//#define BDD_CALC_DEBUG
+
 
 template<class Analyzer>
 class SharpSatBddEvaluator : public SharpSatEvaluator<Analyzer> {
@@ -79,13 +81,11 @@ class SharpSatBddEvaluator : public SharpSatEvaluator<Analyzer> {
             std::string tab(level, ' ');
 
 #ifdef BDD_CALC_DEBUG
-            std::cout << tab << "Requiested BDD for " << node_id << " " << tag.trans_type() << " " << this->tg_.node_type(node_id) << "\n";
+            std::cout << tab << "Requested BDD for " << node_id << " " << tag.trans_type() << " " << this->tg_.node_type(node_id) << "\n";
 #endif
 
             if(!bdd_cache_.contains(key)) {
                 //Not found calculate it
-
-                int baseline_node_count = g_cudd.ReadNodeCount();
 
                 BDD f;
                 auto node_type = this->tg_.node_type(node_id);
@@ -96,7 +96,17 @@ class SharpSatBddEvaluator : public SharpSatEvaluator<Analyzer> {
                 } else {
                     f = g_cudd.bddZero();
                     int scenario_cnt = 0;
-                    for(const auto& transition_scenario : tag.input_transitions()) {
+                    //Uniquify transitions
+                    auto input_transitions = tag.input_transitions();
+
+                    //Uniquify the transitions
+                    /*
+                     *std::sort(input_transitions.begin(), input_transitions.end());
+                     *auto uniq_iter = std::unique(input_transitions.begin(), input_transitions.end());
+                     *input_transitions.resize(std::distance(input_transitions.begin(), uniq_iter));
+                     */
+
+                    for(const auto& transition_scenario : input_transitions) {
                         BDD f_scenario = g_cudd.bddOne();
                         
                         //We need to keep a separate transition index since some edges
@@ -132,57 +142,13 @@ class SharpSatBddEvaluator : public SharpSatEvaluator<Analyzer> {
                     }
                 }
 
-                int delta_size = g_cudd.ReadNodeCount() - baseline_node_count;
-                int delta_size_approx = delta_size;
-
-                if(bdd_approx_threshold_ >= 0 && (delta_size > bdd_approx_threshold_)) {
-                    //Approximate the BDD
-
-                    int tgt_node_count = std::max(1.0f, f.nodeCount()*bdd_approx_node_ratio_);
-                    BDD f_approx = f.SupersetCompress(f.SupportSize(), tgt_node_count);
-                    //BDD f_approx = f.OverApprox(f.SupportSize(), f.nodeCount()*bdd_approx_node_ratio_, 1, bdd_approx_quality_);
-                    //BDD f_approx = f.RemapOverApprox(f.SupportSize(), f.nodeCount()*bdd_approx_node_ratio_, 0.);
-                    //BDD f_approx = f.SupersetShortPaths(f.SupportSize(), f.nodeCount()*bdd_approx_node_ratio_, false);
-
-                    EpDouble f_count_cudd;
-                    EpDouble f_approx_count_cudd;
-                    Cudd_EpdCountMinterm(f.manager(), f.getNode(), this->nvars_, &f_count_cudd);
-                    Cudd_EpdCountMinterm(f_approx.manager(), f_approx.getNode(), this->nvars_, &f_approx_count_cudd);
-
-                    //Convert to useable types
-                    real_t f_count = EpDouble2Real(f_count_cudd);
-                    real_t f_approx_count = EpDouble2Real(f_approx_count_cudd);
-                    real_t sat_ratio = f_approx_count / f_count;
-
-                    if(sat_ratio >= 1.0 && sat_ratio <= bdd_approx_quality_) {
-                        int f_node_count = f.nodeCount();
-
-                        f = f_approx; 
-                        delta_size_approx = g_cudd.ReadNodeCount() - baseline_node_count;
-#if 1
-                        std::cout << tab << "Approximated BDD";
-                        std::cout << " Quality: " << sat_ratio;
-                        std::cout << " f_nodes: " << f_approx.nodeCount() << "/" << f_node_count << " (" << (float) f_approx.nodeCount() / f_node_count << ")";
-                        std::cout << " delta_size: " << delta_size_approx << "/" << delta_size << " (" << (float) delta_size_approx / delta_size << ")";
-                        std::cout << "\n";
-#endif
-#ifdef BDD_CALC_DEBUG
-                       delta_size_approx = g_cudd.ReadNodeCount() - baseline_node_count;
-#endif
-                    }
-                }
-
                 //Calulcated it, save it
                 bdd_cache_.insert(key, f);
 
 #ifdef BDD_CALC_DEBUG
-                std::cout << tab << "Calculated BDD for " << node_id << " " << tag.trans_type() << " " << this->tg_.node_type(node_id) << " ";
-                if(delta_size_approx == delta_size) {
-                    std::cout << "Delta Size: " << delta_size << "\n";
-                } else {
-                    std::cout << "Delta Size Approx: " << delta_size_approx << "(" << (float) delta_size_approx / delta_size << ")\n";
-                }
+                std::cout << tab << "Calculated BDD for " << node_id << " " << tag.trans_type() << " " << this->tg_.node_type(node_id) << " " << f << "\n";
 #endif
+
                 return f;
             } else {
 #ifdef BDD_CALC_DEBUG

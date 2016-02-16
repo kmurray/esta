@@ -396,27 +396,24 @@ void print_node_tags(const TimingGraph& tg, std::shared_ptr<AnalyzerType> analyz
     if(data_tags.num_tags() > 0) {
         if(print_sat_cnt) {
             //Calculate sat counts
-            std::map<TransitionType, real_t> trans_to_count;
-            std::map<TransitionType, bool> trans_to_pure_bdd;
             real_t total_sat_cnt = 0;
-            for(auto& tag : data_tags) {
+
+            std::vector<ExtTimingTag> tags;
+            for(auto tag : data_tags) {
+                tags.push_back(tag);
+            }
+
+            auto order = [](const ExtTimingTag& lhs, const ExtTimingTag& rhs) {
+                return lhs.clock_domain() < rhs.clock_domain() && lhs.trans_type() < rhs.trans_type() && lhs.arr_time().value() < rhs.arr_time().value();
+            };
+
+            std::sort(tags.begin(), tags.end(), order);
+
+            for(auto& tag : tags) {
                 auto sat_cnt_supp = sharp_sat_eval->count_sat(tag, node_id);
 
-                //Re-adjust if approx and not full support
-                /*
-                 *int support_size_diff = 0;
-                 *if(!sat_cnt_supp.pure_bdd) {
-                 *    support_size_diff = nvars - sat_cnt_supp.support.size();
-                 *    assert(support_size_diff >= 0);
-                 *} else {
-                 *    assert(support_size_diff == 0);
-                 *}
-                 */
-
-
-
                 //Adjust for any variables not included in the support
-                auto sat_cnt = sat_cnt_supp.count;// * pow(2, support_size_diff);
+                auto sat_cnt = sat_cnt_supp.count;
 
                 auto switch_prob = sat_cnt / real_t(nassigns);
                 cout << "\t" << tag << ", #SAT: " << sat_cnt << " (" << switch_prob << ")\n";
