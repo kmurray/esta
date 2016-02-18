@@ -72,7 +72,7 @@ void ExtSetupAnalysisMode<BaseAnalysisMode,Tags>::pre_traverse_node(const Timing
         ASSERT_MSG(setup_clock_tags_[node_id].num_tags() == 0, "Clock source already has clock tags");
 
         //Initialize a clock tag with zero arrival, invalid required time
-        Tag clock_tag = Tag(Time(0.), Time(NAN), tg.node_clock_domain(node_id), node_id, TransitionType::CLOCK);
+        Tag* clock_tag = new Tag(Time(0.), Time(NAN), tg.node_clock_domain(node_id), node_id, TransitionType::CLOCK);
 
         //Add the tag
         setup_clock_tags_[node_id].add_tag(clock_tag);
@@ -88,14 +88,14 @@ void ExtSetupAnalysisMode<BaseAnalysisMode,Tags>::pre_traverse_node(const Timing
         if(tg.node_is_clock_source(node_id)) {
             //Figure out if we are an input which defines a clock
             for(auto trans : {TransitionType::CLOCK}) {
-                Tag input_tag = Tag(Time(0.), Time(NAN), tg.node_clock_domain(node_id), node_id, trans);
+                Tag* input_tag = new Tag(Time(0.), Time(NAN), tg.node_clock_domain(node_id), node_id, trans);
                 setup_clock_tags_[node_id].add_tag(input_tag);
             }
         } else {
             //Initialize a data tag with zero arrival, invalid required time
             for(auto trans : {TransitionType::RISE, TransitionType::FALL, TransitionType::HIGH, TransitionType::LOW}) {
 
-                Tag input_tag = Tag(Time(0.), Time(NAN), tg.node_clock_domain(node_id), node_id, trans);
+                Tag* input_tag = new Tag(Time(0.), Time(NAN), tg.node_clock_domain(node_id), node_id, trans);
                 setup_data_tags_[node_id].add_tag(input_tag);
             }
         }
@@ -133,12 +133,12 @@ void ExtSetupAnalysisMode<BaseAnalysisMode,Tags>::forward_traverse_finalize_node
             const Time& edge_delay = dc.max_edge_delay(tg, edge_id, TransitionType::CLOCK);
 
             Tags& sink_data_tags = setup_data_tags_[node_id];
-            for(const Tag& clk_tag : src_clock_tags) {
+            for(const Tag* clk_tag : src_clock_tags) {
                 //Determine the new data tag based on the arriving clock tag
-                Time new_arr = clk_tag.arr_time() + edge_delay;
+                Time new_arr = clk_tag->arr_time() + edge_delay;
                 for(auto trans : {TransitionType::RISE, TransitionType::FALL, TransitionType::HIGH, TransitionType::LOW}) {
-                    Tag launch_data_tag = Tag(new_arr, Time(NAN), clk_tag.clock_domain(), node_id, trans);
-                    sink_data_tags.max_arr(launch_data_tag);
+                    Tag launch_data_tag = Tag(new_arr, Time(NAN), clk_tag->clock_domain(), node_id, trans);
+                    sink_data_tags.max_arr(&launch_data_tag);
                 }
             }
         } else if(tg.node_type(node_id) == TN_Type::FF_SINK) {
@@ -148,11 +148,11 @@ void ExtSetupAnalysisMode<BaseAnalysisMode,Tags>::forward_traverse_finalize_node
             const Time& edge_delay = dc.max_edge_delay(tg, edge_id, TransitionType::CLOCK);
             Tags& sink_clock_tags = setup_clock_tags_[node_id];
 
-            for(const Tag& clk_tag : src_clock_tags) {
+            for(const Tag* clk_tag : src_clock_tags) {
                 //Determine the new data tag based on the arriving clock tag
-                Time new_arr = clk_tag.arr_time() + edge_delay;
-                Tag new_clk_tag = Tag(new_arr, Time(NAN), clk_tag);
-                sink_clock_tags.max_arr(new_clk_tag);
+                Time new_arr = clk_tag->arr_time() + edge_delay;
+                Tag new_clk_tag = Tag(new_arr, Time(NAN), *clk_tag);
+                sink_clock_tags.max_arr(&new_clk_tag);
             }
         }
     }
@@ -163,7 +163,7 @@ void ExtSetupAnalysisMode<BaseAnalysisMode,Tags>::forward_traverse_finalize_node
 
         //Generate all tag transition permutations
         //TODO: use a generator rather than pre-compute
-        std::vector<std::vector<Tag>> src_tag_perms = gen_tag_permutations(src_data_tag_sets);
+        std::vector<std::vector<const Tag*>> src_tag_perms = gen_tag_permutations(src_data_tag_sets);
 
         const BDD& node_func = tg.node_func(node_id);
 
@@ -198,7 +198,7 @@ void ExtSetupAnalysisMode<BaseAnalysisMode,Tags>::forward_traverse_finalize_node
 
             assert((int) src_tags.size() <= tg.num_node_in_edges(node_id)); //May be less than if we are ignoring non-data edges like those from FF_CLOCK to FF_SINK
 
-            auto input_transitions = std::vector<std::vector<TransitionType>>(1);
+            std::vector<const ExtTimingTag*> input_tags;
 
             for(int edge_idx = 0; edge_idx < tg.num_node_in_edges(node_id); edge_idx++) {
                 EdgeId edge_id = tg.node_in_edge(node_id, edge_idx);
@@ -207,22 +207,22 @@ void ExtSetupAnalysisMode<BaseAnalysisMode,Tags>::forward_traverse_finalize_node
                     continue; //We skip edges from FF_CLOCK since they never carry data arrivals
                 }
 
-                const Tag& src_tag = src_tags[edge_idx];
+                const Tag* src_tag = src_tags[edge_idx];
 
                 Time edge_delay = dc.max_edge_delay(tg, edge_id, output_transition);
 
-                Time new_arr = src_tag.arr_time() + edge_delay;
+                Time new_arr = src_tag->arr_time() + edge_delay;
 
-                input_transitions[0].push_back(src_tag.trans_type());
+                input_tags.push_back(src_tag);
 
                 if(edge_idx == 0) {
-                    scenario_tag.set_clock_domain(src_tag.clock_domain());
+                    scenario_tag.set_clock_domain(src_tag->clock_domain());
                 }
                 scenario_tag.max_arr(new_arr, src_tag);
 
                 assert(scenario_tag.trans_type() == output_transition);
             }
-            scenario_tag.set_input_transitions(input_transitions);
+            scenario_tag.add_input_tags(input_tags);
 /*
  *            //Rather than build the xfunc directly we introduce a new variable
  *            //and save the mapping from variable to the real xfunc
@@ -241,7 +241,7 @@ void ExtSetupAnalysisMode<BaseAnalysisMode,Tags>::forward_traverse_finalize_node
  */
             
             //Now we need to merge the scenario into the output tags
-            sink_tags.max_arr(scenario_tag); 
+            sink_tags.max_arr(&scenario_tag); 
 
 #ifdef TAG_DEBUG
             std::cout << "\t\toutput: " << output_transition << "\n";
@@ -301,18 +301,18 @@ BDD ExtSetupAnalysisMode<BaseAnalysisMode,Tags>::generate_pi_switch_func(NodeId 
 }
 
 template<class BaseAnalysisMode, class Tags>
-std::vector<std::vector<typename Tags::Tag>> ExtSetupAnalysisMode<BaseAnalysisMode,Tags>::gen_tag_permutations(const std::vector<Tags>& tags) {
-    std::vector<std::vector<Tag>> tag_permuations;
+std::vector<std::vector<const typename Tags::Tag*>> ExtSetupAnalysisMode<BaseAnalysisMode,Tags>::gen_tag_permutations(const std::vector<Tags>& tags) {
+    std::vector<std::vector<const Tag*>> tag_permuations;
 
-    gen_tag_permutations_recurr(tags, 0, std::vector<Tag>(), tag_permuations);
+    gen_tag_permutations_recurr(tags, 0, std::vector<const Tag*>(), tag_permuations);
 
     return tag_permuations;
 }
 
 template<class BaseAnalysisMode, class Tags>
-void ExtSetupAnalysisMode<BaseAnalysisMode,Tags>::gen_tag_permutations_recurr(const std::vector<Tags>& tags, size_t var_idx, const std::vector<Tag>& partial_perm, std::vector<std::vector<Tag>>& tag_permutations) {
+void ExtSetupAnalysisMode<BaseAnalysisMode,Tags>::gen_tag_permutations_recurr(const std::vector<Tags>& tags, size_t var_idx, const std::vector<const Tag*>& partial_perm, std::vector<std::vector<const Tag*>>& tag_permutations) {
     
-    for(const Tag& tag : tags[var_idx]) {
+    for(const Tag* tag : tags[var_idx]) {
         //Make a copy since we will be adding our values
         auto new_perm = partial_perm;
         new_perm.push_back(tag);
@@ -333,7 +333,7 @@ void ExtSetupAnalysisMode<BaseAnalysisMode,Tags>::gen_tag_permutations_recurr(co
 }
 
 template<class BaseAnalysisMode, class Tags>
-TransitionType ExtSetupAnalysisMode<BaseAnalysisMode,Tags>::evaluate_transition(const std::vector<Tag>& input_tags_scenario, const BDD& node_func) {
+TransitionType ExtSetupAnalysisMode<BaseAnalysisMode,Tags>::evaluate_transition(const std::vector<const Tag*>& input_tags_scenario, const BDD& node_func) {
     //CUDD assumes we provide the inputs defined up to the maximum variable index in the bdd
     //so we need to allocate a vector atleast as large as the highest index.
     //To do this we query the support indicies and take the max + 1 of these as the size.
@@ -364,8 +364,8 @@ TransitionType ExtSetupAnalysisMode<BaseAnalysisMode,Tags>::evaluate_transition(
             //We do expect the node inputs to be a superset of
             //the support
             assert(var_idx < input_tags_scenario.size());
-            const Tag& tag = input_tags_scenario[var_idx];
-            switch(tag.trans_type()) {
+            const Tag* tag = input_tags_scenario[var_idx];
+            switch(tag->trans_type()) {
                 case TransitionType::RISE:
                     initial_inputs[var_idx] = 0;
                     final_inputs[var_idx] = 1;
@@ -428,6 +428,7 @@ TransitionType ExtSetupAnalysisMode<BaseAnalysisMode,Tags>::evaluate_transition(
     assert(0); //Shouldn't get here
 }
 
+#if 0
 template<class BaseAnalysisMode, class Tags>
 BDD ExtSetupAnalysisMode<BaseAnalysisMode,Tags>::build_xfunc(const TimingGraph& tg, const ExtTimingTag& tag, const NodeId node_id) {
     /*std::cout << "build_xfunc at Node: " << node_id << " TAG: " << tag << "\n";*/
@@ -443,13 +444,9 @@ BDD ExtSetupAnalysisMode<BaseAnalysisMode,Tags>::build_xfunc(const TimingGraph& 
         } else {
             f = g_cudd.bddZero();
             int scenario_cnt = 0;
-            for(const auto& transition_scenario : tag.input_transitions()) {
+            for(const auto& transition_scenario : tag.input_tags()) {
                 BDD f_scenario = g_cudd.bddOne();
                 
-                //We need to keep a separate transition index since some edges
-                //(e.g. clock edges) do not count towards input transitions
-                int trans_idx = 0;
-
                 for(int edge_idx = 0; edge_idx < tg.num_node_in_edges(node_id); edge_idx++) {
                     EdgeId edge_id = tg.node_in_edge(node_id, edge_idx);
                     NodeId src_node_id = tg.edge_src_node(edge_id);
@@ -458,17 +455,9 @@ BDD ExtSetupAnalysisMode<BaseAnalysisMode,Tags>::build_xfunc(const TimingGraph& 
                         continue;
                     }
 
-                    assert(trans_idx < (int) transition_scenario.size());
-                    
-                    auto& src_tags = setup_data_tags(src_node_id);
-                    for(auto& src_tag: src_tags) {
-                        if(src_tag.trans_type() == transition_scenario[edge_idx]) {
-                            //Found the matching tag
-                            f_scenario &= build_xfunc(tg, src_tag, src_node_id);
-                            break;
-                        }
-                    }
-                    trans_idx++;
+                    ExtTimingTag* src_tag = transition_scenario[edge_idx];
+
+                    f_scenario &= build_xfunc(tg, *src_tag, src_node_id);
                 }
 
                 f |= f_scenario;
@@ -488,3 +477,4 @@ BDD ExtSetupAnalysisMode<BaseAnalysisMode,Tags>::build_xfunc(const TimingGraph& 
     }
     assert(0);
 }
+#endif

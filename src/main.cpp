@@ -29,7 +29,7 @@
 
 #include "SharpSatEvaluator.hpp"
 #include "SharpSatBddEvaluator.hpp"
-#include "SharpSatDecompBddEvaluator.hpp"
+//#include "SharpSatDecompBddEvaluator.hpp"
 
 using std::cout;
 using std::cerr;
@@ -398,25 +398,14 @@ void print_node_tags(const TimingGraph& tg, std::shared_ptr<AnalyzerType> analyz
             //Calculate sat counts
             real_t total_sat_cnt = 0;
 
-            std::vector<ExtTimingTag> tags;
             for(auto tag : data_tags) {
-                tags.push_back(tag);
-            }
-
-            auto order = [](const ExtTimingTag& lhs, const ExtTimingTag& rhs) {
-                return lhs.clock_domain() < rhs.clock_domain() && lhs.trans_type() < rhs.trans_type() && lhs.arr_time().value() < rhs.arr_time().value();
-            };
-
-            std::sort(tags.begin(), tags.end(), order);
-
-            for(auto& tag : tags) {
-                auto sat_cnt_supp = sharp_sat_eval->count_sat(tag, node_id);
+                auto sat_cnt_supp = sharp_sat_eval->count_sat(*tag, node_id);
 
                 //Adjust for any variables not included in the support
                 auto sat_cnt = sat_cnt_supp.count;
 
                 auto switch_prob = sat_cnt / real_t(nassigns);
-                cout << "\t" << tag << ", #SAT: " << sat_cnt << " (" << switch_prob << ")\n";
+                cout << "\t" << *tag << ", #SAT: " << sat_cnt << " (" << switch_prob << ")\n";
 
                 total_sat_cnt += sat_cnt;
             }

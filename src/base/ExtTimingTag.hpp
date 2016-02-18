@@ -2,11 +2,11 @@
 /*
  *
  */
-#include <iostream>
 #include <cassert>
 #include <unordered_map>
 #include "bdd.hpp"
 #include "Time.hpp"
+#include "TransitionType.hpp"
 
 /*
  * These defines control how a tag is said to 'match' another
@@ -20,18 +20,6 @@
 #define TAG_MATCH_TRANSITION
 #define TAG_MATCH_DELAY
 //#define TAG_MATCH_SWITCH_FUNC
-
-enum class TransitionType {
-    RISE,
-    FALL,
-    HIGH,
-    LOW,
-    CLOCK,
-    //STEADY,
-    //SWITCH
-    UNKOWN
-};
-std::ostream& operator<<(std::ostream& os, const TransitionType& trans);
 
 class ExtTimingTag {
     public:
@@ -71,10 +59,7 @@ class ExtTimingTag {
         ///\returns This tag's associated transition type
         TransitionType trans_type() const { return trans_type_; }
 
-        const std::vector<std::vector<TransitionType>>& input_transitions() const { return input_transitions_; }
-
-        ///\returns The next ExtTimingTag in the current set of ExtTimingTags (i.e. the next tag at a specific nonde in the TimingGraph)
-        ExtTimingTag* next() const { return next_; }
+        const std::vector<std::vector<const ExtTimingTag*>>& input_tags() const { return input_tags_; }
 
         /*
          * Setters
@@ -94,12 +79,7 @@ class ExtTimingTag {
         ///\param new_trans The new value to set as the tag's transition type
         void set_trans_type(const TransitionType& new_trans_type) { trans_type_ = new_trans_type; }
 
-        void set_input_transitions(const std::vector<std::vector<TransitionType>>& v) { input_transitions_ = v; }
-
-        void add_input_transition(const std::vector<TransitionType>& t) { input_transitions_.push_back(t); }
-
-        ///\param new_next The new timing tag to insert in the current set of ExtTimingTags
-        void set_next(ExtTimingTag* new_next) { next_ = new_next; }
+        void add_input_tags(const std::vector<const ExtTimingTag*>& t) { input_tags_.push_back(t); }
 
         /*
          * Modification operations
@@ -112,7 +92,7 @@ class ExtTimingTag {
         ///If the arrival time is updated, meta-data is also updated from base_tag
         ///\param new_arr_time The arrival time to compare against
         ///\param base_tag The tag from which meta-data is copied
-        void max_arr(const Time new_arr, const ExtTimingTag& tag);
+        void max_arr(const Time new_arr, const ExtTimingTag* base_tag);
 
         ///Updates the tag's arrival time if new_arr_time is smaller than the current arrival time.
         ///If the arrival time is updated, meta-data is also updated from base_tag
@@ -137,29 +117,27 @@ class ExtTimingTag {
          */
         ///\param other The tag to compare against
         ///\returns true if the meta-data of the current and other tag match
-        bool matches(const ExtTimingTag& other) const;
+        bool matches(const ExtTimingTag* other) const;
 
     private:
-        void update_arr(const Time new_arr, const ExtTimingTag& tag);
+        void update_arr(const Time new_arr, const ExtTimingTag* base_tag);
         //void update_req(const Time& new_req_time, const ExtTimingTag& base_tag);
 
         /*
          * Data
          */
-        ExtTimingTag* next_; //Next element in linked list of tags at a particular timing graph node
         Time arr_time_; //Arrival time
         Time req_time_; //Required time
         DomainId clock_domain_; //Clock domain for arr/req times
         NodeId launch_node_; //Node which launched this arrival time
         TransitionType trans_type_; //The transition type associated with this tag
-        std::vector<std::vector<TransitionType>> input_transitions_;
+        std::vector<std::vector<const ExtTimingTag*>> input_tags_;
 };
 
 std::ostream& operator<<(std::ostream& os, const ExtTimingTag& tag);
 
 inline ExtTimingTag::ExtTimingTag()
-    : next_(nullptr)
-    , arr_time_(NAN)
+    : arr_time_(NAN)
     , req_time_(NAN)
     , clock_domain_(INVALID_CLOCK_DOMAIN)
     , launch_node_(-1)
@@ -167,8 +145,7 @@ inline ExtTimingTag::ExtTimingTag()
     {}
 
 inline ExtTimingTag::ExtTimingTag(const Time& arr_time_val, const Time& req_time_val, DomainId domain, NodeId node, TransitionType trans)
-    : next_(nullptr)
-    , arr_time_(arr_time_val)
+    : arr_time_(arr_time_val)
     , req_time_(req_time_val)
     , clock_domain_(domain)
     , launch_node_(node)
@@ -176,32 +153,21 @@ inline ExtTimingTag::ExtTimingTag(const Time& arr_time_val, const Time& req_time
     {}
 
 inline ExtTimingTag::ExtTimingTag(const Time& arr_time_val, const Time& req_time_val, const ExtTimingTag& base_tag)
-    : next_(nullptr)
-    , arr_time_(arr_time_val)
+    : arr_time_(arr_time_val)
     , req_time_(req_time_val)
     , clock_domain_(base_tag.clock_domain())
     , launch_node_(base_tag.launch_node())
     , trans_type_(base_tag.trans_type())
     {}
 
-inline void ExtTimingTag::update_arr(const Time new_arr, const ExtTimingTag& base_tag) {
-    //NOTE: leave next alone, since we want to keep the linked list intact
-    assert(clock_domain() == base_tag.clock_domain()); //Domain must be the same
+inline void ExtTimingTag::update_arr(const Time new_arr, const ExtTimingTag* base_tag) {
+    assert(clock_domain() == base_tag->clock_domain()); //Domain must be the same
     set_arr_time(new_arr);
-    set_launch_node(base_tag.launch_node());
+    set_launch_node(base_tag->launch_node());
 
 }
 
-/*
- *inline void ExtTimingTag::update_req(const Time& new_req_time, const ExtTimingTag& base_tag) {
- *    //NOTE: We only update the req time, since everything else is determined by the arrival
- *    //TODO: remove base tag argument?
- *    assert(clock_domain() == base_tag.clock_domain()); //Domain must be the same
- *    set_req_time(new_req_time);
- *}
- */
-
-inline void ExtTimingTag::max_arr(const Time new_arr, const ExtTimingTag& base_tag) {
+inline void ExtTimingTag::max_arr(const Time new_arr, const ExtTimingTag* base_tag) {
     //Need to min with existing value
     if(!arr_time().valid() || new_arr.value() > arr_time().value()) {
         //New value is smaller, or no previous valid value existed
@@ -210,62 +176,24 @@ inline void ExtTimingTag::max_arr(const Time new_arr, const ExtTimingTag& base_t
     }
 }
 
-/*
- *inline void ExtTimingTag::min_req(const Time& new_req_time, const ExtTimingTag& base_tag) {
- *    //Need to min with existing value
- *    if(!req_time().valid() || new_req_time.value() < req_time().value()) {
- *        //New value is smaller, or no previous valid value existed
- *        //Update min
- *        update_req(new_req_time, base_tag);
- *    }
- *}
- *
- *inline void ExtTimingTag::min_arr(const Time& new_arr_time, const ExtTimingTag& base_tag) {
- *    //Need to min with existing value
- *    if(!arr_time().valid() || new_arr_time.value() < arr_time().value()) {
- *        //New value is smaller, or no previous valid value existed
- *        //Update min
- *        update_arr(new_arr_time, base_tag);
- *    }
- *}
- *
- *inline void ExtTimingTag::max_req(const Time& new_req_time, const ExtTimingTag& base_tag) {
- *    //Need to min with existing value
- *    if(!req_time().valid() || new_req_time.value() > req_time().value()) {
- *        //New value is smaller, or no previous valid value existed
- *        //Update min
- *        update_req(new_req_time, base_tag);
- *    }
- *}
- */
-inline bool ExtTimingTag::matches(const ExtTimingTag& other) const {
+inline bool ExtTimingTag::matches(const ExtTimingTag* other) const {
     //If a tag 'matches' it is typically collapsed into the matching tag.
 
-    bool match = (clock_domain() == other.clock_domain());
+    bool match = (clock_domain() == other->clock_domain());
 
 #ifdef TAG_MATCH_TRANSITION
-    match &= (trans_type() == other.trans_type());
+    match &= (trans_type() == other->trans_type());
 #endif
 
 #ifdef TAG_MATCH_DELAY
-    match &= (arr_time() == other.arr_time());
+    match &= (arr_time() == other->arr_time());
 #endif
 
 #ifdef TAG_MATCH_SWITCH_FUNC
-    match &= (switch_func() == other.switch_func());
+    match &= (switch_func() == other->switch_func());
 #endif
 
     return match;
-}
-
-std::ostream& operator<<(std::ostream& os, const TransitionType& trans) {
-    if(trans == TransitionType::RISE) os << "RISE";
-    else if (trans == TransitionType::FALL) os << "FALL";
-    else if (trans == TransitionType::HIGH) os << "HIGH";
-    else if (trans == TransitionType::LOW) os << "LOW";
-    else if (trans == TransitionType::CLOCK) os << "CLOCK";
-    else assert(0);
-    return os;
 }
 
 std::ostream& operator<<(std::ostream& os, const ExtTimingTag& tag) {
@@ -275,25 +203,5 @@ std::ostream& operator<<(std::ostream& os, const ExtTimingTag& tag) {
     os << ", Arr: " << tag.arr_time().value();
     os << ", Req: " << tag.req_time().value();
 
-    /*
-     *os << ", InTrans: {";
-     *auto input_transitions = tag.input_transitions();
-     *for(size_t i = 0; i < input_transitions.size(); i++) {
-     *    //Scenario
-     *    os << "{";
-     *    for(size_t j = 0; j < input_transitions[i].size(); j++) {
-     *        //Input transitions
-     *        os << input_transitions[i][j];
-     *        if(j < input_transitions[i].size() - 1) {
-     *            os << ", ";
-     *        }
-     *    }
-     *    os << "}";
-     *    if(i < input_transitions.size() - 1) {
-     *        os << ", ";
-     *    }
-     *}
-     *os << "}";
-     */
     return os;
 }

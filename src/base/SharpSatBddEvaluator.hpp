@@ -97,7 +97,7 @@ class SharpSatBddEvaluator : public SharpSatEvaluator<Analyzer> {
                     f = g_cudd.bddZero();
                     int scenario_cnt = 0;
                     //Uniquify transitions
-                    auto input_transitions = tag.input_transitions();
+                    auto& input_tags = tag.input_tags();
 
                     //Uniquify the transitions
                     /*
@@ -106,12 +106,8 @@ class SharpSatBddEvaluator : public SharpSatEvaluator<Analyzer> {
                      *input_transitions.resize(std::distance(input_transitions.begin(), uniq_iter));
                      */
 
-                    for(const auto& transition_scenario : input_transitions) {
+                    for(const auto& transition_scenario : input_tags) {
                         BDD f_scenario = g_cudd.bddOne();
-                        
-                        //We need to keep a separate transition index since some edges
-                        //(e.g. clock edges) do not count towards input transitions
-                        int trans_idx = 0;
 
                         for(int edge_idx = 0; edge_idx < this->tg_.num_node_in_edges(node_id); edge_idx++) {
                             EdgeId edge_id = this->tg_.node_in_edge(node_id, edge_idx);
@@ -121,17 +117,8 @@ class SharpSatBddEvaluator : public SharpSatEvaluator<Analyzer> {
                                 continue;
                             }
 
-                            assert(trans_idx < (int) transition_scenario.size());
-                            
-                            auto& src_tags = this->analyzer_->setup_data_tags(src_node_id);
-                            for(auto& src_tag: src_tags) {
-                                if(src_tag.trans_type() == transition_scenario[edge_idx]) {
-                                    //Found the matching tag
-                                    f_scenario &= this->build_bdd_xfunc(src_tag, src_node_id, level+1);
-                                    break;
-                                }
-                            }
-                            trans_idx++;
+                            const ExtTimingTag* src_tag = transition_scenario[edge_idx];
+                            f_scenario &= this->build_bdd_xfunc(*src_tag, src_node_id, level+1);
                         }
 
                         f |= f_scenario;

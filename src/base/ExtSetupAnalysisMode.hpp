@@ -15,7 +15,7 @@ class ExtSetupAnalysisMode : public BaseAnalysisMode {
         //External tag access
         const Tags& setup_data_tags(NodeId node_id) const { return setup_data_tags_[node_id]; }
         const Tags& setup_clock_tags(NodeId node_id) const { return setup_clock_tags_[node_id]; }
-        BDD build_xfunc(const TimingGraph& tg, const ExtTimingTag& tag, const NodeId node_id);
+        //BDD build_xfunc(const TimingGraph& tg, const ExtTimingTag& tag, const NodeId node_id);
 
         void set_xfunc_cache_size(size_t val) { bdd_cache_.set_capacity(val); }
         void reset_xfunc_cache();
@@ -41,9 +41,9 @@ class ExtSetupAnalysisMode : public BaseAnalysisMode {
 
         BDD generate_pi_switch_func(NodeId node_id, TransitionType trans);
 
-        std::vector<std::vector<Tag>> gen_tag_permutations(const std::vector<Tags>& input_tags);
-        void gen_tag_permutations_recurr(const std::vector<Tags>& input_tags, size_t var_idx, const std::vector<Tag>& partial_perm, std::vector<std::vector<Tag>>& permutations);
-        TransitionType evaluate_transition(const std::vector<Tag>& input_tags_scenario, const BDD& node_func);
+        std::vector<std::vector<const Tag*>> gen_tag_permutations(const std::vector<Tags>& input_tags);
+        void gen_tag_permutations_recurr(const std::vector<Tags>& input_tags, size_t var_idx, const std::vector<const Tag*>& partial_perm, std::vector<std::vector<const Tag*>>& permutations);
+        TransitionType evaluate_transition(const std::vector<const Tag*>& input_tags_scenario, const BDD& node_func);
 
         //Setup tag data storage
         std::vector<Tags> setup_data_tags_; //Data tags for each node [0..timing_graph.num_nodes()-1]
