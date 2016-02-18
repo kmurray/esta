@@ -97,7 +97,6 @@ inline void ExtTimingTags::max_arr(const Tag* tag) {
             matched_tag->add_input_tags(scenario);
         }
     }
-    return;
 }
 
 
