@@ -151,19 +151,6 @@ void BlifTimingGraphBuilder::create_latch(TimingGraph& tg, const BlifLatch* latc
     NodeId opin = tg.add_node(TN_Type::FF_OPIN, INVALID_CLOCK_DOMAIN, false);
     NodeId clock = tg.add_node(TN_Type::FF_CLOCK, INVALID_CLOCK_DOMAIN, false); 
 
-#if 0
-    if(src == 27) {
-        std::cout << "FOUND IT\n";
-        for(auto row_ptr : names->cover_rows) {
-            for(auto val : *row_ptr) {
-                std::cout << val;
-            }
-            std::cout << std::endl;
-        }
-        std::cout << "\n";
-    }
-#endif
-
     //The edges
     tg.add_edge(ipin, sink);
     tg.add_edge(src, opin);
@@ -224,18 +211,6 @@ void BlifTimingGraphBuilder::create_names(TimingGraph& tg, const BlifNames* name
         //Regular combinational primitive
         output_node_id = tg.add_node(TN_Type::PRIMITIVE_OPIN, INVALID_CLOCK_DOMAIN, false);
     }
-#if 0
-    if(output_node_id == 27) {
-        std::cout << "FOUND IT\n";
-        for(auto row_ptr : names->cover_rows) {
-            for(auto val : *row_ptr) {
-                std::cout << val;
-            }
-            std::cout << std::endl;
-        }
-        std::cout << "\n";
-    }
-#endif
 
     //Record the mapping from blif netlist to timing graph nodes
     port_to_node_lookup_[output_port] = output_node_id;
@@ -324,7 +299,7 @@ BDD BlifTimingGraphBuilder::create_func_from_names(const BlifNames* names, const
         //must be TRUE
         assert((*row)[row->size()-1] == LogicValue::TRUE);
 
-        //We now and together the inputs in a single row
+        //We now AND together the inputs in a single row
         //to create a cube
         BDD cube = g_cudd.bddOne();
         for(size_t i = 0; i < row->size() - 1; i++) {

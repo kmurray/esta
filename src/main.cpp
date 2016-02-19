@@ -267,6 +267,22 @@ int main(int argc, char** argv) {
     int nvars = 2*timing_graph.logical_inputs().size();
     real_t nassigns = pow(2,(real_t) nvars);
     cout << "Num Logical Inputs: " << timing_graph.logical_inputs().size() << " Num BDD Vars: " << nvars << " Num Possible Assignments: " << nassigns << endl;
+    cout << endl;
+
+    auto sharp_sat_eval = std::make_shared<SharpSatType>(timing_graph, analyzer, nvars, options.get_as<int>("approx_threshold"), options.get_as<float>("approx_ratio"), options.get_as<float>("approx_quality"));
+
+
+#if 0
+    g_action_timer.push_timer("Raw tags");
+
+    for(LevelId level_id = 0; level_id < timing_graph.num_levels(); level_id++) {
+        for(auto node_id : timing_graph.level(level_id)) {
+            print_node_tags(timing_graph, analyzer, sharp_sat_eval, node_id, nvars, nassigns, 0 , print_sat_cnt);
+        }
+    }
+
+    g_action_timer.pop_timer("Raw tags");
+#endif
 
     //Try to keep outputs with common dependancies together
     //hopefully will maximize cache re-use
@@ -277,7 +293,6 @@ int main(int argc, char** argv) {
     }
     std::reverse(sorted_lo_nodes.begin(), sorted_lo_nodes.end());
 
-    auto sharp_sat_eval = std::make_shared<SharpSatType>(timing_graph, analyzer, nvars, options.get_as<int>("approx_threshold"), options.get_as<float>("approx_ratio"), options.get_as<float>("approx_quality"));
     size_t nodes_processed = 0;
     for(auto node_id : sorted_lo_nodes) {
         std::string action_name = "Node " + to_string(node_id) + " eval";
@@ -399,7 +414,7 @@ void print_node_tags(const TimingGraph& tg, std::shared_ptr<AnalyzerType> analyz
             real_t total_sat_cnt = 0;
 
             for(auto tag : data_tags) {
-                auto sat_cnt_supp = sharp_sat_eval->count_sat(*tag, node_id);
+                auto sat_cnt_supp = sharp_sat_eval->count_sat(tag, node_id);
 
                 //Adjust for any variables not included in the support
                 auto sat_cnt = sat_cnt_supp.count;

@@ -197,11 +197,26 @@ inline bool ExtTimingTag::matches(const ExtTimingTag* other) const {
 }
 
 std::ostream& operator<<(std::ostream& os, const ExtTimingTag& tag) {
-    os << "Domain: " << tag.clock_domain();
-    os << ", Launch Node: " << tag.launch_node();
-    os << ", OutTrans: " << tag.trans_type();
-    os << ", Arr: " << tag.arr_time().value();
-    os << ", Req: " << tag.req_time().value();
+    os << &tag;
+    os << " Domain: " << tag.clock_domain();
+    os << " Launch Node: " << tag.launch_node();
+    os << " OutTrans: " << tag.trans_type();
+    os << " Arr: " << tag.arr_time().value();
+    os << " Req: " << tag.req_time().value();
+
+#if 0
+    if(tag.input_tags().size() > 0) {
+        os << "\n";
+        for(auto scenario : tag.input_tags()) {
+            for(auto in_tag : scenario) {
+                os << "\t\t" << in_tag;
+                os << " Trans: " << in_tag->trans_type();  
+                os << " Arr:   " << in_tag->arr_time().value();  
+            }
+            os << "\n";
+        }
+    }
+#endif
 
     return os;
 }

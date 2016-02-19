@@ -34,7 +34,7 @@ class SharpSatBddEvaluator : public SharpSatEvaluator<Analyzer> {
             }
         }
 
-        count_support count_sat(const ExtTimingTag& tag, NodeId node_id) override {
+        count_support count_sat(const ExtTimingTag* tag, NodeId node_id) override {
             BDD f = build_bdd_xfunc(tag, node_id, 0);
 
             EpDouble f_count_cudd;
@@ -73,9 +73,9 @@ class SharpSatBddEvaluator : public SharpSatEvaluator<Analyzer> {
     protected:
 
 
-        BDD build_bdd_xfunc(const ExtTimingTag& tag, const NodeId node_id, int level) {
+        BDD build_bdd_xfunc(const ExtTimingTag* tag, const NodeId node_id, int level) {
             /*std::cout << "build_xfunc at Node: " << node_id << " TAG: " << tag << "\n";*/
-            auto key = std::make_pair(node_id, tag.trans_type());
+            auto key = tag;
 
             //Indent based on recursion level 
             std::string tab(level, ' ');
@@ -91,22 +91,13 @@ class SharpSatBddEvaluator : public SharpSatEvaluator<Analyzer> {
                 auto node_type = this->tg_.node_type(node_id);
                 if(node_type == TN_Type::INPAD_SOURCE || node_type == TN_Type::FF_SOURCE) {
                     /*std::cout << "Node " << node_id << " Base";*/
-                    f = generate_pi_switch_func(node_id, tag.trans_type());
+                    f = generate_pi_switch_func(node_id, tag->trans_type());
                     /*std::cout << " xfunc: " << f << "\n";*/
                 } else {
                     f = g_cudd.bddZero();
                     int scenario_cnt = 0;
-                    //Uniquify transitions
-                    auto& input_tags = tag.input_tags();
 
-                    //Uniquify the transitions
-                    /*
-                     *std::sort(input_transitions.begin(), input_transitions.end());
-                     *auto uniq_iter = std::unique(input_transitions.begin(), input_transitions.end());
-                     *input_transitions.resize(std::distance(input_transitions.begin(), uniq_iter));
-                     */
-
-                    for(const auto& transition_scenario : input_tags) {
+                    for(const auto& transition_scenario : tag->input_tags()) {
                         BDD f_scenario = g_cudd.bddOne();
 
                         for(int edge_idx = 0; edge_idx < this->tg_.num_node_in_edges(node_id); edge_idx++) {
@@ -118,7 +109,7 @@ class SharpSatBddEvaluator : public SharpSatEvaluator<Analyzer> {
                             }
 
                             const ExtTimingTag* src_tag = transition_scenario[edge_idx];
-                            f_scenario &= this->build_bdd_xfunc(*src_tag, src_node_id, level+1);
+                            f_scenario &= this->build_bdd_xfunc(src_tag, src_node_id, level+1);
                         }
 
                         f |= f_scenario;
@@ -194,6 +185,6 @@ class SharpSatBddEvaluator : public SharpSatEvaluator<Analyzer> {
         float bdd_approx_node_ratio_;
         float bdd_approx_quality_;
 
-        ObjectCacheMap<std::pair<NodeId,TransitionType>,BDD> bdd_cache_;
+        ObjectCacheMap<const ExtTimingTag*,BDD> bdd_cache_;
 };
 
