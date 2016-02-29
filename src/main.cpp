@@ -69,6 +69,11 @@ optparse::Values parse_args(int argc, char** argv) {
           .set_default("false")
           .help("Print the timing graph. Default %default")
           ;
+    parser.add_option("--write_graph_dot")
+          .action("store_true")
+          .set_default("false")
+          .help("Print the timing graph. Default %default")
+          ;
 
     parser.add_option("--reorder_method")
           .dest("bdd_reorder_method")
@@ -212,6 +217,11 @@ int main(int argc, char** argv) {
         print_levelization(timing_graph);
     }
 
+    if(options.get_as<bool>("write_graph_dot")) {
+        std::ofstream outfile("timing_graph.dot");
+        write_timing_graph_dot(outfile, timing_graph);
+    }
+
     cout << "Timing Graph Nodes: " << timing_graph.num_nodes() << "\n";
     cout << "Timing Graph Num Logical Inputs: " << timing_graph.logical_inputs().size() << "\n";
     cout << "Timing Graph Num Levels: " << timing_graph.num_levels() << "\n";
@@ -272,7 +282,7 @@ int main(int argc, char** argv) {
     auto sharp_sat_eval = std::make_shared<SharpSatType>(timing_graph, analyzer, nvars, options.get_as<int>("approx_threshold"), options.get_as<float>("approx_ratio"), options.get_as<float>("approx_quality"));
 
 
-#if 0
+#if 1
     g_action_timer.push_timer("Raw tags");
 
     for(LevelId level_id = 0; level_id < timing_graph.num_levels(); level_id++) {
@@ -424,7 +434,9 @@ void print_node_tags(const TimingGraph& tg, std::shared_ptr<AnalyzerType> analyz
 
                 total_sat_cnt += sat_cnt;
             }
+            cout << "\tTotal #SAT: " << total_sat_cnt << "\n";
             cout << "\n";
+            assert(total_sat_cnt == nassigns);
         }
     }
 }
