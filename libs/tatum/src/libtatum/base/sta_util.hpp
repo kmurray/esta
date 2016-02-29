@@ -6,6 +6,8 @@
 #include "TimingGraph.hpp"
 #include "TimingAnalyzer.hpp"
 
+void write_timing_graph_dot(std::ostream& os, const TimingGraph& tg);
+
 float time_sec(struct timespec start, struct timespec end);
 
 void print_histogram(const std::vector<float>& values, int nbuckets);
@@ -27,7 +29,6 @@ void dump_level_times(std::string fname, const TimingGraph& timing_graph, std::m
 /*
  * Templated function implementations
  */
-
 template<class Analyzer>
 void write_dot_file_setup(std::ostream& os, const TimingGraph& tg, const std::shared_ptr<Analyzer>& analyzer) {
     //Write out a dot file of the timing graph

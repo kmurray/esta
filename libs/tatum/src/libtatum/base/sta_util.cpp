@@ -15,6 +15,68 @@ using std::endl;
 void identify_constant_gen_fanout_helper(const TimingGraph& tg, const NodeId node_id, std::set<NodeId>& const_gen_fanout_nodes);
 void identify_clock_gen_fanout_helper(const TimingGraph& tg, const NodeId node_id, std::set<NodeId>& clock_gen_fanout_nodes);
 
+void write_timing_graph_dot(std::ostream& os, const TimingGraph& tg) {
+    //Write out a dot file of the timing graph
+    os << "digraph G {" <<std::endl;
+    //os << "\tnode[shape=record]" << std::endl;
+
+    for(int inode = 0; inode < tg.num_nodes(); inode++) {
+        os << "\tnode" << inode;
+        os << "[label=\"";
+        os << "n" << inode;
+        os << "\\n" << tg.node_type(inode);
+        os << "\"";
+
+        os << " fixedsize=false margin=0";
+
+        switch(tg.node_type(inode)) {
+            case TN_Type::INPAD_SOURCE: //Fallthrough
+            case TN_Type::FF_SOURCE:
+                os << " " << "shape=invhouse";
+                break;
+            case TN_Type::FF_SINK: //Fallthrough
+            case TN_Type::OUTPAD_SINK:
+                os << " " << "shape=house";
+                break;
+            case TN_Type::PRIMITIVE_OPIN:
+                os << " " << "shape=invtrapezium";
+                break;
+            default:
+                //Pass
+                break;
+        }
+
+        os << "]";
+        os <<std::endl;
+    }
+
+    //Force drawing to be levelized
+    for(int ilevel = 0; ilevel < tg.num_levels(); ilevel++) {
+        os << "\t{rank = same;";
+
+        for(NodeId node_id : tg.level(ilevel)) {
+            os << " node" << node_id <<";";
+        }
+        os << "}" <<std::endl;
+    }
+
+    for(int ilevel = 0; ilevel < tg.num_levels(); ilevel++) {
+        for(NodeId node_id : tg.level(ilevel)) {
+            for(int edge_idx = 0; edge_idx < tg.num_node_out_edges(node_id); edge_idx++) {
+                EdgeId edge_id = tg.node_out_edge(node_id, edge_idx);
+
+                NodeId sink_node_id = tg.edge_sink_node(edge_id);
+
+                os << "\tnode" << node_id << " -> node" << sink_node_id;
+                os << ";" <<std::endl;
+            }
+        }
+    }
+
+    os << "}" <<std::endl;
+}
+
+
 float time_sec(struct timespec start, struct timespec end) {
     float time = end.tv_sec - start.tv_sec;
 
