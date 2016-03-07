@@ -2,9 +2,7 @@
 #include <sstream>
 #include "util.hpp"
 
-/*
- *#define TAG_DEBUG
- */
+//#define TAG_DEBUG
 
 extern EtaStats g_eta_stats;
 
@@ -29,24 +27,6 @@ void ExtSetupAnalysisMode<BaseAnalysisMode,Tags>::initialize_traversal(const Tim
     //Initialize
     setup_data_tags_ = std::vector<Tags>(tg.num_nodes());
     setup_clock_tags_ = std::vector<Tags>(tg.num_nodes());
-
-    //We have a unique logic variable for each Primary Input
-    //
-    //To represent transitions we have both a 'curr' and 'next' variable
-    pi_curr_bdd_vars_.clear();
-    pi_next_bdd_vars_.clear();
-    for(NodeId node_id = 0; node_id < tg.num_nodes(); node_id++) {
-        auto node_type = tg.node_type(node_id);
-        if(node_type == TN_Type::INPAD_SOURCE || node_type == TN_Type::FF_SOURCE) {
-            //Generate the current variable
-            pi_curr_bdd_vars_[node_id] = g_cudd.bddVar();
-            g_cudd.pushVariableName("n" + std::to_string(node_id));
-
-            //We need to generate and record a new 'next' variable
-            pi_next_bdd_vars_[node_id] = g_cudd.bddVar();
-            g_cudd.pushVariableName("n" + std::to_string(node_id) + "'");
-        }
-    }
 }
 
 template<class BaseAnalysisMode, class Tags>
@@ -178,7 +158,7 @@ void ExtSetupAnalysisMode<BaseAnalysisMode,Tags>::forward_traverse_finalize_node
             std::cout << "\t\tinput: {";
             for(int edge_idx = 0; edge_idx < tg.num_node_in_edges(node_id); edge_idx++) {
                 const auto& tag = src_tags[edge_idx];
-                std::cout << tag.trans_type();
+                std::cout << tag->trans_type();
                 if(edge_idx < tg.num_node_in_edges(node_id) - 1) {
                     std::cout << ", ";
                 }
@@ -223,22 +203,6 @@ void ExtSetupAnalysisMode<BaseAnalysisMode,Tags>::forward_traverse_finalize_node
                 assert(scenario_tag.trans_type() == output_transition);
             }
             scenario_tag.add_input_tags(input_tags);
-/*
- *            //Rather than build the xfunc directly we introduce a new variable
- *            //and save the mapping from variable to the real xfunc
- *            BDD switch_var = g_cudd.bddVar();
- *            
- *            //Give a coherent name to the variable name
- *            std::stringstream ss;
- *            ss << "v" << node_id << "_" << output_transition;
- *            g_cudd.pushVariableName(ss.str());
- *
- *            //Save the mapping from var to xfunc
- *            bdd_var_to_implicit_xfunc_[switch_var] = scenario_switch_func;
- *
- *            //Set the var as the xfunc
- *            scenario_tag.set_switch_func(switch_var);
- */
             
             //Now we need to merge the scenario into the output tags
             sink_tags.max_arr(&scenario_tag); 
@@ -246,58 +210,19 @@ void ExtSetupAnalysisMode<BaseAnalysisMode,Tags>::forward_traverse_finalize_node
 #ifdef TAG_DEBUG
             std::cout << "\t\toutput: " << output_transition << "\n";
             /*std::cout << "\t\tScenario Func: " << scenario_switch_func << " #SAT: " << scenario_switch_func.CountMinterm(2*tg.primary_inputs().size()) << "\n";*/
-            auto pred = [output_transition](const Tag& tag) {
-                return tag.trans_type() == output_transition;
+            auto pred = [output_transition](const Tag* tag) {
+                return tag->trans_type() == output_transition;
             };
             auto iter = std::find_if(sink_tags.begin(), sink_tags.end(), pred);
             assert(iter != sink_tags.end());
             /*std::cout << "\t\tSink " << iter->trans_type();*/
-            std::cout << "\t\t" << *iter;
+            std::cout << "\t\t" << **iter;
             /*std::cout << " Func: " << iter->switch_func();*/
             std::cout << "\n";
             /*std::cout << " #SAT: " << iter->switch_func().CountMinterm(2*tg.primary_inputs().size()) << "\n";*/
 #endif
         }
     }
-}
-
-template<class BaseAnalysisMode, class Tags>
-BDD ExtSetupAnalysisMode<BaseAnalysisMode,Tags>::generate_pi_switch_func(NodeId node_id, TransitionType trans) {
-    auto curr_iter = pi_curr_bdd_vars_.find(node_id);
-    assert(curr_iter != pi_curr_bdd_vars_.end());
-
-    auto next_iter = pi_next_bdd_vars_.find(node_id);
-    assert(next_iter != pi_next_bdd_vars_.end());
-
-    BDD f_curr = curr_iter->second;
-    BDD f_next = next_iter->second;
-
-    BDD switch_func;
-    switch(trans) {
-        case TransitionType::RISE:
-            switch_func = (!f_curr) & f_next; 
-            break;
-        case TransitionType::FALL:
-            switch_func = f_curr & (!f_next); 
-            break;
-        case TransitionType::HIGH:
-            switch_func = f_curr & f_next; 
-            break;
-        case TransitionType::LOW:
-            switch_func = (!f_curr) & (!f_next); 
-            break;
-        /*
-         *case TransitionType::STEADY:
-         *    switch_func = !(f_curr ^ f_next);
-         *    break;
-         *case TransitionType::SWITCH:
-         *    switch_func = f_curr ^ f_next;
-         *    break;
-         */
-        default:
-            assert(0);
-    }
-    return switch_func;
 }
 
 template<class BaseAnalysisMode, class Tags>
@@ -427,54 +352,3 @@ TransitionType ExtSetupAnalysisMode<BaseAnalysisMode,Tags>::evaluate_transition(
 
     assert(0); //Shouldn't get here
 }
-
-#if 0
-template<class BaseAnalysisMode, class Tags>
-BDD ExtSetupAnalysisMode<BaseAnalysisMode,Tags>::build_xfunc(const TimingGraph& tg, const ExtTimingTag& tag, const NodeId node_id) {
-    /*std::cout << "build_xfunc at Node: " << node_id << " TAG: " << tag << "\n";*/
-    auto key = std::make_pair(node_id, tag.trans_type());
-    if(!bdd_cache_.contains(key)) {
-        //Not found calculate it
-        BDD f;
-        auto node_type = tg.node_type(node_id);
-        if(node_type == TN_Type::INPAD_SOURCE || node_type == TN_Type::FF_SOURCE) {
-            /*std::cout << "Node " << node_id << " Base";*/
-            f = generate_pi_switch_func(node_id, tag.trans_type());
-            /*std::cout << " xfunc: " << f << "\n";*/
-        } else {
-            f = g_cudd.bddZero();
-            int scenario_cnt = 0;
-            for(const auto& transition_scenario : tag.input_tags()) {
-                BDD f_scenario = g_cudd.bddOne();
-                
-                for(int edge_idx = 0; edge_idx < tg.num_node_in_edges(node_id); edge_idx++) {
-                    EdgeId edge_id = tg.node_in_edge(node_id, edge_idx);
-                    NodeId src_node_id = tg.edge_src_node(edge_id);
-
-                    if(tg.node_type(src_node_id) == TN_Type::FF_CLOCK) {
-                        continue;
-                    }
-
-                    ExtTimingTag* src_tag = transition_scenario[edge_idx];
-
-                    f_scenario &= build_xfunc(tg, *src_tag, src_node_id);
-                }
-
-                f |= f_scenario;
-                /*std::cout << "Node " << node_id << " Scenario: " << scenario_cnt;*/
-                /*std::cout << " xfunc: " << f << "\n";*/
-
-                scenario_cnt++;
-            }
-        }
-        //Calulcated it, save it
-        bdd_cache_.insert(key, f);
-
-        return f;
-    } else {
-        //Found it
-        return bdd_cache_.value(key);
-    }
-    assert(0);
-}
-#endif
