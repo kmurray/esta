@@ -14,3 +14,19 @@ real_t EpDouble2Real(EpDouble& val) {
     assert(!ss.fail());
     return converted_val;
 }
+
+real_t ApaInt2Real(DdApaNumber value, int digits) {
+    stringstream ss;
+    
+    for(int  i = 0; i < digits; ++i) {
+        ss << value[i];
+    }
+    std::cout << ss.str() << std::endl;
+
+    real_t converted_val;
+    ss >> converted_val;
+
+    assert(!ss.fail());
+
+    return converted_val;
+}
