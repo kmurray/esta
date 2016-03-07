@@ -3,7 +3,7 @@
 #include "SharpSatEvaluator.hpp"
 
 //#define BDD_CALC_DEBUG
-
+//#define DEBUG_PRINT_MINTERMS
 
 template<class Analyzer>
 class SharpSatBddEvaluator : public SharpSatEvaluator<Analyzer> {
@@ -37,9 +37,16 @@ class SharpSatBddEvaluator : public SharpSatEvaluator<Analyzer> {
         count_support count_sat(const ExtTimingTag* tag, NodeId node_id) override {
             BDD f = build_bdd_xfunc(tag, node_id, 0);
 
-            EpDouble f_count_cudd;
-            Cudd_EpdCountMinterm(f.manager(), f.getNode(), this->nvars_, &f_count_cudd);
-            real_t f_count = EpDouble2Real(f_count_cudd);
+            real_t f_count = bdd_sharpsat(f);
+
+#ifdef DEBUG_PRINT_MINTERMS
+            //Debug code to print out the associated minterms
+            for(size_t i = 0; i < g_cudd.ReadSize(); ++i) {
+                std::cout << g_cudd.getVariableName(i) << ",";
+            }
+            std::cout << std::endl;
+            f.PrintMinterm();
+#endif
 
             return {f_count, f.SupportIndices(), true};
         }
@@ -72,6 +79,22 @@ class SharpSatBddEvaluator : public SharpSatEvaluator<Analyzer> {
 
     protected:
 
+        real_t bdd_sharpsat(BDD f) {
+            //Take care not to use CUDD's Epd (Extended Precision Double) 
+            //CountMinterm related functions these sometimes give the wrong
+            //result!
+            //
+            //Instead we use the Apa (Arbitrary Presiction Arithmetic, i.e. Arbitrary Precision Int)
+            //related functions.
+            int n_apa_digits = 0;
+            DdApaNumber apa_count_cudd = Cudd_ApaCountMinterm(f.manager(), f.getNode(), this->nvars_, &n_apa_digits);
+
+            //Convert to our extended floating point type
+            real_t f_count_apa = ApaInt2Real(apa_count_cudd, n_apa_digits);
+
+            return f_count_apa;
+        }
+
 
         BDD build_bdd_xfunc(const ExtTimingTag* tag, const NodeId node_id, int level) {
             /*std::cout << "build_xfunc at Node: " << node_id << " TAG: " << tag << "\n";*/
@@ -81,7 +104,7 @@ class SharpSatBddEvaluator : public SharpSatEvaluator<Analyzer> {
             std::string tab(level, ' ');
 
 #ifdef BDD_CALC_DEBUG
-            std::cout << tab << "Requested BDD for " << node_id << " " << tag.trans_type() << " " << this->tg_.node_type(node_id) << "\n";
+            std::cout << tab << "Requested BDD for " << node_id << " " << tag << " " << this->tg_.node_type(node_id) << "\n";
 #endif
 
             if(!bdd_cache_.contains(key)) {
@@ -124,16 +147,17 @@ class SharpSatBddEvaluator : public SharpSatEvaluator<Analyzer> {
                 bdd_cache_.insert(key, f);
 
 #ifdef BDD_CALC_DEBUG
-                std::cout << tab << "Calculated BDD for " << node_id << " " << tag.trans_type() << " " << this->tg_.node_type(node_id) << " " << f << "\n";
+                std::cout << tab << "Calculated BDD for " << node_id << " " << tag << " " << this->tg_.node_type(node_id) << " #SAT: " << bdd_sharpsat(f) << " " << f << "\n";
 #endif
 
                 return f;
             } else {
+                BDD f = bdd_cache_.value(key);
 #ifdef BDD_CALC_DEBUG
-                std::cout << tab << "Looked up  BDD for " << node_id << " " << tag.trans_type() << " " << this->tg_.node_type(node_id) << "\n";
+                std::cout << tab << "Looked up  BDD for " << node_id << " " << tag << " " << this->tg_.node_type(node_id) << " #SAT: " << bdd_sharpsat(f) << "\n";
 #endif
                 //Found it
-                return bdd_cache_.value(key);
+                return f;
             }
             assert(0);
         }
