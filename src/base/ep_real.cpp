@@ -21,7 +21,6 @@ real_t ApaInt2Real(DdApaNumber value, int digits) {
     for(int  i = 0; i < digits; ++i) {
         ss << value[i];
     }
-    std::cout << ss.str() << std::endl;
 
     real_t converted_val;
     ss >> converted_val;
