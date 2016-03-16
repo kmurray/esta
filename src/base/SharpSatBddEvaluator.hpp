@@ -1,6 +1,7 @@
 #pragma once
 #include "ep_real.hpp"
 #include "SharpSatEvaluator.hpp"
+#include "CuddSharpSatFraction.h"
 
 //#define BDD_CALC_DEBUG
 //#define DEBUG_PRINT_MINTERMS
@@ -80,19 +81,17 @@ class SharpSatBddEvaluator : public SharpSatEvaluator<Analyzer> {
     protected:
 
         real_t bdd_sharpsat(BDD f) {
-            //Take care not to use CUDD's Epd (Extended Precision Double) 
-            //CountMinterm related functions these sometimes give the wrong
-            //result!
-            //
-            //Instead we use the Apa (Arbitrary Presiction Arithmetic, i.e. Arbitrary Precision Int)
-            //related functions.
-            int n_apa_digits = 0;
-            DdApaNumber apa_count_cudd = Cudd_ApaCountMinterm(f.manager(), f.getNode(), this->nvars_, &n_apa_digits);
 
-            //Convert to our extended floating point type
-            real_t f_count_apa = ApaInt2Real(apa_count_cudd, n_apa_digits);
+            double dbl_count_cudd = Cudd_CountMinterm(f.manager(), f.getNode(), this->nvars_);
+            double dbl_count_cudd_frac = dbl_count_cudd / pow(2, this->nvars_);
 
-            return f_count_apa;
+            double dbl_count_custom_frac = CountMintermFraction(f.getNode());
+
+            assert(dbl_count_cudd_frac == dbl_count_custom_frac);
+
+            real_t f_count_dbl = dbl_count_custom_frac * pow(2, this->nvars_);
+
+            return f_count_dbl;
         }
 
 
