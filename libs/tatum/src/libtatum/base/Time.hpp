@@ -46,7 +46,8 @@ class Time {
         Time& operator+=(const Time& rhs);
         Time& operator-=(const Time& rhs);
 
-        friend bool operator==(const Time& lhs, const Time& rhs) { return lhs.time_ == rhs.time_; }
+        friend bool operator==(const Time& lhs, const Time& rhs) { return lhs.value() == rhs.value(); }
+        friend bool operator<(const Time& lhs, const Time& rhs) { return lhs.value() < rhs.value(); }
         friend Time operator+(Time lhs, const Time& rhs) { return lhs += rhs; }
         friend Time operator-(Time lhs, const Time& rhs) { return lhs -= rhs; }
         friend std::ostream& operator<<(std::ostream& os, const Time& time) { return os << time.value(); }
