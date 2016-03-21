@@ -21,9 +21,8 @@
 #define TAG_MATCH_DELAY
 //#define TAG_MATCH_SWITCH_FUNC
 
-
-
-//#define DEBUG_TAG_PRINT
+//Print out extra tag deub information
+#define DEBUG_TAG_PRINT
 
 class ExtTimingTag {
     public:
