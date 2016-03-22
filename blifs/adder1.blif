@@ -1,0 +1,18 @@
+.model top
+.inputs cin a0 b0
+.outputs s0 cout
+
+#Bit 0
+.names a0 b0 cin s0
+001 1
+010 1
+100 1
+111 1
+
+.names a0 b0 cin cout
+011 1
+101 1
+110 1
+111 1
+
+.end
