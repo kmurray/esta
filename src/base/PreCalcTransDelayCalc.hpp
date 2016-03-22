@@ -22,11 +22,8 @@ class PreCalcTransDelayCalculator {
             }
         }
 
-        Time min_edge_delay(const TimingGraph& tg, EdgeId edge_id, TransitionType trans) const { 
-            return max_edge_delay(tg, edge_id, trans);
-        };
-        Time max_edge_delay(const TimingGraph& tg, EdgeId edge_id, TransitionType trans) const {
-            auto iter = edge_delays_.find(trans);
+        Time max_edge_delay(const TimingGraph& tg, EdgeId edge_id, TransitionType input_trans, TransitionType output_trans) const {
+            auto iter = edge_delays_.find(output_trans);
             assert(iter != edge_delays_.end());
             const std::vector<Time>& trans_delays = iter->second;
             return trans_delays[edge_id];

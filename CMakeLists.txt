@@ -31,8 +31,11 @@ include(CheckCXXCompilerFlag)
 #
 # We require c++11 support
 #
+CHECK_CXX_COMPILER_FLAG("-std=c++14" COMPILER_SUPPORTS_CXX14_FLAG)
 CHECK_CXX_COMPILER_FLAG("-std=c++11" COMPILER_SUPPORTS_CXX11_FLAG)
 CHECK_CXX_COMPILER_FLAG("-std=c++0x" COMPILER_SUPPORTS_CXX0X_FLAG)
+#if(COMPILER_SUPPORTS_CXX14_FLAG)
+    #set(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} -std=c++14")
 if(COMPILER_SUPPORTS_CXX11_FLAG)
     set(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} -std=c++11")
 elseif(COMPILER_SUPPORTS_CXX0X_FLAG)
@@ -182,6 +185,8 @@ message(STATUS "CUDD INSTALL DIR: ${install_dir}")
 
 #Export include dirs to we can compile against CUDD
 include_directories(${install_dir}/src/project_cudd/include/ ${install_dir}/src/project_cudd/obj/ ${install_dir}/src/project_cudd/cudd/)
+
+include_directories(libs/jsoncpp/json)
 
 enable_testing()
 

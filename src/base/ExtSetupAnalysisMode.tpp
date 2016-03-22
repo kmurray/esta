@@ -110,7 +110,7 @@ void ExtSetupAnalysisMode<BaseAnalysisMode,Tags>::forward_traverse_finalize_node
              * Convert the clock tag into a data tag at this node
              */
             //Edge delay for the clock
-            const Time& edge_delay = dc.max_edge_delay(tg, edge_id, TransitionType::CLOCK);
+            const Time& edge_delay = dc.max_edge_delay(tg, edge_id, TransitionType::CLOCK, TransitionType::CLOCK);
 
             Tags& sink_data_tags = setup_data_tags_[node_id];
             for(const Tag* clk_tag : src_clock_tags) {
@@ -125,7 +125,7 @@ void ExtSetupAnalysisMode<BaseAnalysisMode,Tags>::forward_traverse_finalize_node
             //TODO: annotate required time
         } else {
             //Standard clock tag propogation
-            const Time& edge_delay = dc.max_edge_delay(tg, edge_id, TransitionType::CLOCK);
+            const Time& edge_delay = dc.max_edge_delay(tg, edge_id, TransitionType::CLOCK, TransitionType::CLOCK);
             Tags& sink_clock_tags = setup_clock_tags_[node_id];
 
             for(const Tag* clk_tag : src_clock_tags) {
@@ -180,6 +180,7 @@ void ExtSetupAnalysisMode<BaseAnalysisMode,Tags>::forward_traverse_finalize_node
 
             std::vector<const ExtTimingTag*> input_tags;
 
+            //Take the worst-case arrival and delay
             for(int edge_idx = 0; edge_idx < tg.num_node_in_edges(node_id); edge_idx++) {
                 EdgeId edge_id = tg.node_in_edge(node_id, edge_idx);
                 NodeId src_node_id = tg.edge_src_node(edge_id);
@@ -189,11 +190,9 @@ void ExtSetupAnalysisMode<BaseAnalysisMode,Tags>::forward_traverse_finalize_node
 
                 const Tag* src_tag = src_tags[edge_idx];
 
-                Time edge_delay = dc.max_edge_delay(tg, edge_id, output_transition);
+                Time edge_delay = dc.max_edge_delay(tg, edge_id, src_tag->trans_type(), output_transition);
 
                 Time new_arr = src_tag->arr_time() + edge_delay;
-
-                input_tags.push_back(src_tag);
 
                 if(edge_idx == 0) {
                     scenario_tag.set_clock_domain(src_tag->clock_domain());

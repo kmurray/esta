@@ -29,6 +29,8 @@
 
 #include "SharpSatEvaluator.hpp"
 #include "SharpSatBddEvaluator.hpp"
+
+#include "load_delay_model.hpp"
 //#include "SharpSatDecompBddEvaluator.hpp"
 
 using std::cout;
@@ -62,6 +64,12 @@ optparse::Values parse_args(int argc, char** argv) {
           .dest("blif_file")
           .metavar("BLIF_FILE")
           .help("The blif file to load and analyze.")
+          ;
+
+    parser.add_option("-d", "--delay_model")
+          .dest("delay_model_file")
+          .metavar("DELAY_MODEL_FILE")
+          .help("The delay model to be loaded (in JSON format).")
           ;
 
     parser.add_option("--print_graph")
@@ -147,6 +155,13 @@ optparse::Values parse_args(int argc, char** argv) {
         std::exit(1);
     }
 
+    if(!options.is_set("delay_model_file")) {
+        cout << "Missing required argument for delay model file\n";
+        cout << "\n";
+        parser.print_help();
+        std::exit(1);
+    }
+
     return options;
 }
 
@@ -227,7 +242,18 @@ int main(int argc, char** argv) {
     cout << "Timing Graph Num Levels: " << timing_graph.num_levels() << "\n";
     print_level_histogram(timing_graph, 10);
     cout << "\n";
+
+    g_action_timer.push_timer("Load Delay Model");
+
+    auto delay_model = load_delay_model(options.get_as<string>("delay_model_file"));
+
+    g_action_timer.pop_timer("Load Delay Model");
     
+    g_action_timer.push_timer("Building Delay Calculator");
+
+    
+
+    g_action_timer.pop_timer("Building Delay Calculator");
 
     //Initialize PIs with zero input delay
     TimingConstraints timing_constraints;

@@ -26,6 +26,7 @@ add_library(libeta STATIC ${ETA_SOURCES} ${ETA_HEADERS})
 target_link_libraries(libeta
                       tatum
                       blifparse
+                      libyaml-cpp.a #TODO: find this properly...
                       ${CUDD_LIBS})
 
 #Library Includes
