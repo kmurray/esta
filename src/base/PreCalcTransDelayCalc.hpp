@@ -10,24 +10,28 @@
  */
 class PreCalcTransDelayCalculator {
     public:
+        using EdgeDelayModelKey = std::tuple<TransitionType,TransitionType>; //EdgId, Input trans, output trans
+        using EdgeDelayModel = std::vector<std::map<EdgeDelayModelKey,Time>>;
 
         ///Initializes the edge delays
         ///\param edge_delays A vector specifying the delay for every edge
-        PreCalcTransDelayCalculator(std::map<TransitionType,std::vector<float>>& edge_delays) {
-            for(auto trans : {TransitionType::RISE, TransitionType::FALL, TransitionType::HIGH, TransitionType::LOW, TransitionType::CLOCK}) {
-                edge_delays_[trans].reserve(edge_delays.size());
-                for(float delay : edge_delays[trans]) {
-                    edge_delays_[trans].emplace_back(delay);
-                }
-            }
-        }
+        PreCalcTransDelayCalculator(const EdgeDelayModel& edge_delays)
+            : edge_delays_(edge_delays) 
+        {}
 
         Time max_edge_delay(const TimingGraph& tg, EdgeId edge_id, TransitionType input_trans, TransitionType output_trans) const {
-            auto iter = edge_delays_.find(output_trans);
-            assert(iter != edge_delays_.end());
-            const std::vector<Time>& trans_delays = iter->second;
-            return trans_delays[edge_id];
-        };
+            Time delay;
+            if(input_trans == TransitionType::CLOCK || output_trans == TransitionType::CLOCK) {
+                delay = Time(0.);
+            } else {
+                auto iter = edge_delays_[edge_id].find(std::make_tuple(input_trans, output_trans));
+                assert(iter != edge_delays_[edge_id].end());
+                delay = iter->second;
+            }
+            return delay;
+        }
+
+
     private:
-        std::map<TransitionType,std::vector<Time>> edge_delays_;
+        EdgeDelayModel edge_delays_;
 };

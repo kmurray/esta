@@ -251,7 +251,7 @@ int main(int argc, char** argv) {
     
     g_action_timer.push_timer("Building Delay Calculator");
 
-    
+    auto delay_calc = get_pre_calc_trans_delay_calculator(delay_model, timing_graph);
 
     g_action_timer.pop_timer("Building Delay Calculator");
 
@@ -263,27 +263,29 @@ int main(int argc, char** argv) {
 
 
 
-    //The actual delay calculator
-    std::map<TransitionType,std::vector<float>> delays;
-    //Initialize all edge delays to zero
-    for(auto trans : {TransitionType::RISE, TransitionType::FALL, TransitionType::HIGH, TransitionType::LOW, TransitionType::CLOCK}) {
-        delays[trans] = std::vector<float>(timing_graph.num_edges(), 0.0);
-    }
-
-    //Override primitive edges to have unit delay when switching
-    for(EdgeId edge_id = 0; edge_id < timing_graph.num_edges(); edge_id++) {
-        NodeId src = timing_graph.edge_src_node(edge_id);
-        NodeId sink = timing_graph.edge_sink_node(edge_id);
-        TN_Type src_type = timing_graph.node_type(src);
-        TN_Type sink_type = timing_graph.node_type(sink);
-        if(src_type == TN_Type::PRIMITIVE_IPIN && sink_type == TN_Type::PRIMITIVE_OPIN) {
-            for(auto trans : {TransitionType::RISE, TransitionType::FALL}) {
-                delays[trans][edge_id] = 1.0;
-            }
-        }
-    }
-
-    auto delay_calc = DelayCalcType(delays);
+/*
+ *    //The actual delay calculator
+ *    std::map<TransitionType,std::vector<float>> delays;
+ *    //Initialize all edge delays to zero
+ *    for(auto trans : {TransitionType::RISE, TransitionType::FALL, TransitionType::HIGH, TransitionType::LOW, TransitionType::CLOCK}) {
+ *        delays[trans] = std::vector<float>(timing_graph.num_edges(), 0.0);
+ *    }
+ *
+ *    //Override primitive edges to have unit delay when switching
+ *    for(EdgeId edge_id = 0; edge_id < timing_graph.num_edges(); edge_id++) {
+ *        NodeId src = timing_graph.edge_src_node(edge_id);
+ *        NodeId sink = timing_graph.edge_sink_node(edge_id);
+ *        TN_Type src_type = timing_graph.node_type(src);
+ *        TN_Type sink_type = timing_graph.node_type(sink);
+ *        if(src_type == TN_Type::PRIMITIVE_IPIN && sink_type == TN_Type::PRIMITIVE_OPIN) {
+ *            for(auto trans : {TransitionType::RISE, TransitionType::FALL}) {
+ *                delays[trans][edge_id] = 1.0;
+ *            }
+ *        }
+ *    }
+ *
+ *    auto delay_calc = DelayCalcType(delays);
+ */
 
     //The actual analyzer
     auto analyzer = std::make_shared<AnalyzerType>(timing_graph, timing_constraints, delay_calc);

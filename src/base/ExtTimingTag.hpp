@@ -199,7 +199,7 @@ inline bool ExtTimingTag::matches(const ExtTimingTag* other) const {
     return match;
 }
 
-std::ostream& operator<<(std::ostream& os, const ExtTimingTag& tag) {
+inline std::ostream& operator<<(std::ostream& os, const ExtTimingTag& tag) {
     os << &tag << " ";
     //os << "Domain: " << tag.clock_domain() << " ";
     //os << "Launch Node: " << tag.launch_node() << " ";

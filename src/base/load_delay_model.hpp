@@ -3,7 +3,9 @@
 #include <string>
 #include <tuple>
 #include <iosfwd>
+#include <memory>
 #include "TransitionType.hpp"
+#include "PreCalcTransDelayCalc.hpp"
 
 using CellDelayKey = std::tuple<
                          std::string, //Input pin name
@@ -23,4 +25,5 @@ using DelayModel = std::map<
                    >;
 
 DelayModel load_delay_model(const std::string& filename);
-DelayModel load_delay_model(std::istream& filename);
+
+PreCalcTransDelayCalculator get_pre_calc_trans_delay_calculator(DelayModel& delay_model, const TimingGraph& tg);

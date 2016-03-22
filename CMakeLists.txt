@@ -186,8 +186,6 @@ message(STATUS "CUDD INSTALL DIR: ${install_dir}")
 #Export include dirs to we can compile against CUDD
 include_directories(${install_dir}/src/project_cudd/include/ ${install_dir}/src/project_cudd/obj/ ${install_dir}/src/project_cudd/cudd/)
 
-include_directories(libs/jsoncpp/json)
-
 enable_testing()
 
 add_subdirectory(src)
