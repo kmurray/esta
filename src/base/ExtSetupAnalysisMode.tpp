@@ -195,17 +195,16 @@ void ExtSetupAnalysisMode<BaseAnalysisMode,Tags>::forward_traverse_finalize_node
                 const Tag* src_tag = src_tags[edge_idx];
 
 
-                input_tags.push_back(src_tag);
+                input_tags.push_back(src_tag); //We still need to track this input for #SAT calculation purposes
 
-                Time edge_delay;
                 if(filtered_tags.count(src_tag)) {
 #ifdef TAG_DEBUG
                     std::cout << "\t\tFiltered: input " << edge_idx << std::endl;
 #endif
-                    edge_delay = Time(0.); //This tag doesn't effect output timing 
-                } else {
-                    edge_delay = dc.max_edge_delay(tg, edge_id, src_tag->trans_type(), output_transition);
+                    continue; //No effect on output delay
                 }
+
+                Time edge_delay = dc.max_edge_delay(tg, edge_id, src_tag->trans_type(), output_transition);
 
                 Time new_arr = src_tag->arr_time() + edge_delay;
 
@@ -219,7 +218,7 @@ void ExtSetupAnalysisMode<BaseAnalysisMode,Tags>::forward_traverse_finalize_node
             sink_tags.max_arr(&scenario_tag); 
 
 #ifdef TAG_DEBUG
-            std::cout << "\t\toutput: " << output_transition << "\n";
+            std::cout << "\t\toutput: " << output_transition << " at " << scenario_tag.arr_time() << "\n";
             /*std::cout << "\t\tScenario Func: " << scenario_switch_func << " #SAT: " << scenario_switch_func.CountMinterm(2*tg.primary_inputs().size()) << "\n";*/
             auto pred = [output_transition](const Tag* tag) {
                 return tag->trans_type() == output_transition;
