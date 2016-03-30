@@ -1,0 +1,29 @@
+.model top
+.inputs a b
+.outputs c
+
+.subckt inv \
+i0=a o0=a_inv
+
+.subckt and2 \
+i0=a_inv i1=b o0=c
+
+.end
+
+.model and2
+.inputs i0 i1
+.outputs o0
+
+.names i0 i1 o0
+11 1
+
+.end
+
+.model inv
+.inputs i0
+.outputs o0
+
+.names i0 o0
+0 1
+
+.end
