@@ -11,7 +11,16 @@ using std::cerr;
 using std::endl;
 using std::string;
 
-void print_blif_nets(const BlifData* blif_data);
+struct Options {
+    bool print = false;
+    bool clean_nets = true;
+    bool sweep_ios = true;
+};
+
+bool process_option(Options& options, const std::string option);
+
+void print_blif_net_sizes(const BlifModel* blif_model, std::string prefix);
+//void print_blif_net_details(const BlifModel* blif_model, std::string prefix);
 void print_blif(const BlifData* blif_data);
 
 void print_blif_model(const BlifModel* model);
@@ -20,50 +29,87 @@ void print_blif_latch(const BlifLatch* latch);
 void print_blif_subckt(const BlifSubckt* subckt);
 
 
+
 int main(int argc, char** argv) {
     if(argc < 2) {
-        std::cout << "Usage: " << argv[0] << " filename1.blif [filename2.blif [filename3.blif [...]]]" << endl;
+        cout << "Usage: " << argv[0] << " [-print | -no_print*] [-clean_nets* | -no_clean_nets] [-sweep_ios* | -no_sweep_ios] filename1.blif [filename2.blif [filename3.blif [...]]]" << endl;
+        cout << "Defaults marked with '*'" << endl;
         return 1;
     }
 
-    for(int i = 1; i < argc; i++) {
+    Options options;
+
+    int i = 1;
+    while(process_option(options, argv[1])) {
+        i++;
+    }
+
+    for(; i < argc; i++) {
         cerr << "Parsing file: " << argv[i] << endl;
 
         //Create the parser
         BlifParser parser;
+        parser.set_clean_nets(true)
+              .set_sweep_dangling_ios(true);
 
         //Load the file
         BlifData* blif_data = nullptr;
         try {
             blif_data = parser.parse(argv[i]);;
-        } catch (BlifParseError& e) {
+        } catch (BlifParseLocationError& e) {
             cerr << argv[i] << ":" << e.line_num << " " << e.what() << " (near text '" << e.near_text << "')" << endl; 
+            return 1;
+        } catch (BlifParseError& e) {
+            cerr << argv[i] << ":" << " " << e.what() << endl; 
             return 1;
         }
 
         if(blif_data != nullptr) {
             //Walk and print the blif
-            //print_blif(blif_data);
-            //print_blif_nets(blif_data);
+            if(options.print) {
+                print_blif(blif_data);
+            }
             cerr << "\tOK" << endl;
             delete blif_data;
+        } else {
+            cerr << "\tFailed to parse " << argv[i] << endl;
+            return 1;
         }
     }
 
     return 0;
 }
 
-void print_blif_nets(const BlifData* blif_data) {
-    for(BlifNet* net : blif_data->nets) {
-        cout << "Net: " << *net->name << "\n";
-        cout << "\tDrivers: " << net->drivers.size() << "\n";
-/*
- *        for(BlifPortConn* conn : net->drivers) {
- *            cout << "\t\t";
- *
- *        }
- */
-        cout << "\tSinks: " << net->sinks.size() << "\n";
+bool process_option(Options& options, const std::string option) {
+    if(option == "-print") {
+        options.print = true;
+        return true;
+    } else if (option == "-no_print") {
+        options.print = false;
+        return true;
+    } else if (option == "-clean_nets") {
+        options.clean_nets = true;
+        return true;
+    } else if (option == "-no_clean_nets") {
+        options.clean_nets = false;
+        return true;
+    } else if (option == "-sweep_ios") {
+        options.sweep_ios = true;
+        return true;
+    } else if (option == "-no_sweep_ios") {
+        options.sweep_ios = false;
+        return true;
+    }
+    return false;
+}
+
+void print_blif_net_sizes(const BlifModel* blif_model, std::string prefix) {
+    for(BlifNet* net : blif_model->nets) {
+        cout << prefix;
+        cout << "Net: '" << *net->name << "'";
+        cout << " Drivers: " << net->drivers.size();
+        cout << " Sinks: " << net->sinks.size();
+        cout << "\n";
     }
 }
 
@@ -100,6 +146,10 @@ void print_blif_model(const BlifModel* model) {
             cout << " " << *port->name;
         }
         cout << "\n";
+    }
+
+    if(model->nets.size() > 0) {
+        print_blif_net_sizes(model, "#");
     }
 
     if(model->names.size() > 0) {

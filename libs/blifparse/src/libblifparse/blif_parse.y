@@ -13,7 +13,9 @@ using std::vector;
 using std::string;
 using std::cout;
 
-void add_port_conn(BlifParser* context, BlifPort* port, std::string* net_name);
+void add_port_conn(BlifModel* model, BlifPort* port, std::string* net_name);
+
+BlifModel* curr_model;
 %}
 
 %union {
@@ -134,7 +136,8 @@ blif_data
 
 model
     : DOT_MODEL id EOL {
-        $$ = new BlifModel($2); 
+        curr_model = new BlifModel($2); 
+        $$ = curr_model;
       }
     | model DOT_INPUTS id_list EOL {
         assert(!$$->ended);
@@ -151,7 +154,7 @@ model
 
             //Add port -> net connections
             //Models generate nets with the same name as ports
-            add_port_conn(parser_context, port, port_name);
+            add_port_conn($1, port, port_name);
 
             //Add the connected port to the model
             $$->inputs.push_back(port);
@@ -173,7 +176,7 @@ model
 
             //Add port -> net connections
             //Models generate nets with the same name as ports
-            add_port_conn(parser_context, port, port_name);
+            add_port_conn($1, port, port_name);
 
             //Add the connected port to the model
             $$->outputs.push_back(port);
@@ -195,7 +198,7 @@ model
 
             //Add port -> net connections
             //Models generate nets with the same name as ports
-            add_port_conn(parser_context, port, port_name);
+            add_port_conn($1, port, port_name);
 
             //Add the connected port to the model
             $$->clocks.push_back(port);
@@ -234,7 +237,7 @@ names
 
             //Add port -> net connections
             //Names generate nets with the same name as ports
-            add_port_conn(parser_context, port, port_name);
+            add_port_conn(curr_model, port, port_name);
 
             //Add the connected port to the model
             $$->ports.push_back(port);
@@ -269,9 +272,9 @@ latch
 
         //Add port -> net connections
         //Latches use net names the same as ports
-        add_port_conn(parser_context, $$->input, $2);
-        add_port_conn(parser_context, $$->output, $3);
-        add_port_conn(parser_context, $$->control, $4->control);
+        add_port_conn(curr_model, $$->input, $2);
+        add_port_conn(curr_model, $$->output, $3);
+        add_port_conn(curr_model, $$->control, $4->control);
 
         $$->type = $4->type;
         $$->initial_state = $5;
@@ -321,7 +324,7 @@ subckt
     | subckt id '=' id {
         BlifPort* port = new BlifPort($2, $$);
 
-        add_port_conn(parser_context, port, $4);
+        add_port_conn(curr_model, port, $4);
 
         $$->ports.push_back(port); 
       }
@@ -345,16 +348,15 @@ id: STRING { $$ = $1; }
 
 %%
 
-void add_port_conn(BlifParser* parser_context, BlifPort* port, std::string* net_name) {
+void add_port_conn(BlifModel* model, BlifPort* port, std::string* net_name) {
 
     assert(port->port_conn == nullptr);
 
     if(net_name != nullptr) {
-        BlifData* blif_data = parser_context->get_blif_data();
 
         //Get/create the associated net
         // Models create nets with the names of their ports
-        BlifNet* net = blif_data->get_net(net_name);
+        BlifNet* net = model->get_net(net_name);
 
         //Create the connection between net and port
         BlifPortConn* conn = new BlifPortConn(port, net);
