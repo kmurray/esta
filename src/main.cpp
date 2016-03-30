@@ -45,6 +45,8 @@ using AnalyzerType = SerialTimingAnalyzer<AnalysisType,DelayCalcType>;
 using SharpSatType = SharpSatBddEvaluator<AnalyzerType>;
 //using SharpSatType = SharpSatDecompBddEvaluator<AnalyzerType>;
 
+template class std::vector<const ExtTimingTag*>; //Debuging visiblitity
+
 //XXX: global variable
 //TODO: Clean up and pass appropriately....
 BlifData* g_blif_data = nullptr;

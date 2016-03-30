@@ -6,6 +6,7 @@
 #include "BaseAnalysisMode.hpp"
 #include "object_cache.hpp"
 #include <iostream>
+#include <unordered_set>
 
 template<class BaseAnalysisMode = BaseAnalysisMode, class Tags=TimingTags>
 class ExtSetupAnalysisMode : public BaseAnalysisMode {
@@ -38,6 +39,8 @@ class ExtSetupAnalysisMode : public BaseAnalysisMode {
          *template<class DelayCalc>
          *void backward_traverse_edge(const TimingGraph& tg, const DelayCalc& dc, const NodeId node_id, const EdgeId edge_id);
          */
+        std::unordered_set<const Tag*> identify_filtered_tags(const std::vector<const Tag*>& input_tags, BDD node_func);
+        bool input_is_filtered(size_t input_idx, const std::vector<TransitionType>& input_transitions, BDD f);
 
         BDD generate_pi_switch_func(NodeId node_id, TransitionType trans);
 
