@@ -10,7 +10,7 @@
  */
 class PreCalcTransDelayCalculator {
     public:
-        using EdgeDelayModelKey = std::tuple<TransitionType,TransitionType>; //EdgId, Input trans, output trans
+        using EdgeDelayModelKey = std::tuple<TransitionType,TransitionType>; //Input trans, output trans
         using EdgeDelayModel = std::vector<std::map<EdgeDelayModelKey,Time>>;
 
         ///Initializes the edge delays
@@ -24,7 +24,8 @@ class PreCalcTransDelayCalculator {
             if(input_trans == TransitionType::CLOCK || output_trans == TransitionType::CLOCK) {
                 delay = Time(0.);
             } else {
-                auto iter = edge_delays_[edge_id].find(std::make_tuple(input_trans, output_trans));
+                auto key = std::make_tuple(input_trans, output_trans);
+                auto iter = edge_delays_[edge_id].find(key);
                 assert(iter != edge_delays_[edge_id].end());
                 delay = iter->second;
             }

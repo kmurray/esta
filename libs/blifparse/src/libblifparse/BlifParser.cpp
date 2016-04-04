@@ -1,4 +1,5 @@
 #include <iostream>
+#include <cassert>
 
 #include "BlifParser.hpp"
 
@@ -33,6 +34,8 @@ BlifData* BlifParser::parse(std::string filename) {
     if(sweep_dangling_ios_) {
         blif_data_->sweep_dangling_ios();
     }
+
+    assert(blif_data_->verify());
 
     return blif_data_;
 }

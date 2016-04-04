@@ -62,7 +62,9 @@ struct BlifData {
 
     void sweep_dangling_ios();
 
-    BlifModel* find_model(std::string* model_name);
+    BlifModel* find_model(std::string* model_name) const;
+
+    bool verify() const;
 
     ~BlifData();
 };
@@ -177,8 +179,12 @@ struct BlifModel {
     bool ended;
     std::unordered_map<std::string*,BlifNet*> net_name_lookup;
 
+    BlifPort* find_input_port(std::string* port_name);
+    BlifPort* find_output_port(std::string* port_name);
+    BlifPort* find_clock_port(std::string* port_name);
     bool is_input_port(std::string* port_name);
     bool is_output_port(std::string* port_name);
+    bool is_clock_port(std::string* port_name);
 
     BlifNet* get_net(std::string* net_name);
 
@@ -187,6 +193,10 @@ struct BlifModel {
 
     void resolve_nets(BlifData* blif_data);
     void update_net(BlifPortConn* port_conn, NetTermType term_type);
+
+    bool verify();
+
+    bool verify_port_conn_consistent(BlifPortConn* port_conn);
 
     ~BlifModel();
 };

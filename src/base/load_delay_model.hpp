@@ -27,3 +27,6 @@ using DelayModel = std::map<
 DelayModel load_delay_model(const std::string& filename);
 
 PreCalcTransDelayCalculator get_pre_calc_trans_delay_calculator(DelayModel& delay_model, const TimingGraph& tg);
+
+TransitionType delay_model_trans_str_to_type(const std::string& trans_str);
+extern const std::vector<std::string> delay_model_transitions;

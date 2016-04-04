@@ -33,7 +33,7 @@ void BlifData::sweep_dangling_ios() {
     }
 }
 
-BlifModel* BlifData::find_model(std::string* model_name) {
+BlifModel* BlifData::find_model(std::string* model_name) const {
     for(BlifModel* model : models) {
         if(model->name == model_name) {
             return model;
@@ -42,25 +42,53 @@ BlifModel* BlifData::find_model(std::string* model_name) {
     return nullptr;
 }
 
+bool BlifData::verify() const {
+    for(auto model : models) {
+        if(!model->verify()) return false;
+    }
+    return true;
+}
+
 /*
  * BlifModel
  */
-bool BlifModel::is_input_port(std::string* port_name) {
+BlifPort* BlifModel::find_input_port(std::string* port_name) {
     for(BlifPort* port : inputs) {
         if(port->name == port_name) {
-            return true;
+            return port;
         }
     }
-    return false;
+    return nullptr;
+}
+
+BlifPort* BlifModel::find_output_port(std::string* port_name) {
+    for(BlifPort* port : outputs) {
+        if(port->name == port_name) {
+            return port;
+        }
+    }
+    return nullptr;
+}
+
+BlifPort* BlifModel::find_clock_port(std::string* port_name) {
+    for(BlifPort* port : clocks) {
+        if(port->name == port_name) {
+            return port;
+        }
+    }
+    return nullptr;
+}
+
+bool BlifModel::is_input_port(std::string* port_name) {
+    return nullptr != find_input_port(port_name);
 }
 
 bool BlifModel::is_output_port(std::string* port_name) {
-    for(BlifPort* port : outputs) {
-        if(port->name == port_name) {
-            return true;
-        }
-    }
-    return false;
+    return nullptr != find_output_port(port_name);
+}
+
+bool BlifModel::is_clock_port(std::string* port_name) {
+    return nullptr != find_clock_port(port_name);
 }
 
 BlifNet* BlifModel::get_net(std::string* net_name) {
@@ -225,6 +253,59 @@ void BlifModel::update_net(BlifPortConn* port_conn, NetTermType term_type) {
             net->sinks.push_back(port_conn);
         }
     }
+}
+
+bool BlifModel::verify() {
+    //Basic checks for now, ensure that each net is consistent
+    for(auto net : nets) {
+        for(auto driver_conn : net->drivers) {
+            if(!verify_port_conn_consistent(driver_conn)) {
+                return false;
+            }
+        }
+
+        for(auto sink_conn : net->sinks) {
+            if(!verify_port_conn_consistent(sink_conn)) {
+                return false;
+            }
+        }
+    }
+
+    return true;
+}
+
+bool BlifModel::verify_port_conn_consistent(BlifPortConn* port_conn) {
+    BlifPort* port_conn_port = port_conn->port;
+    std::vector<BlifPort*> ports;
+    if(port_conn_port->node_type == BlifNodeType::NAMES) {
+        BlifNames* names_obj = port_conn_port->names;
+        ports = names_obj->ports;
+    } else if(port_conn_port->node_type == BlifNodeType::SUBCKT) {
+        BlifSubckt* subckt = port_conn_port->subckt;
+        ports = subckt->ports;
+    } else if(port_conn_port->node_type == BlifNodeType::LATCH) {
+        BlifLatch* latch = port_conn_port->latch;
+        ports.push_back(latch->input);
+        ports.push_back(latch->output);
+        ports.push_back(latch->control);
+
+    } else if(port_conn_port->node_type == BlifNodeType::MODEL) {
+        BlifModel* model = port_conn_port->model;
+
+        auto iter = std::copy(model->inputs.begin(), model->inputs.end(), std::back_inserter(ports));
+        iter = std::copy(model->outputs.begin(), model->outputs.end(), iter);
+        iter = std::copy(model->clocks.begin(), model->clocks.end(), iter);
+    }
+
+    //Check that the port_conn matches the one used in the ports
+    bool seen_port_conn = false;
+    for(auto port : ports) {
+        if(port->port_conn == port_conn) {
+            seen_port_conn = true;
+        }
+    }
+    assert(seen_port_conn);
+    return seen_port_conn;
 }
 
 BlifModel::~BlifModel() {

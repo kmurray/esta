@@ -57,6 +57,8 @@ optparse::Values parse_args(int argc, char** argv);
 //void print_node_tags(const TimingGraph& tg, std::shared_ptr<AnalyzerType> analyzer, std::shared_ptr<SharpSatType> sharp_sat_eval, NodeId node_id, double nvars, double nassigns, float progress, bool print_sat_cnt, bool print_switch);
 void print_node_tags(const TimingGraph& tg, std::shared_ptr<AnalyzerType> analyzer, std::shared_ptr<SharpSatType> sharp_sat_eval, NodeId node_id, int nvars, real_t nassigns, float progress, bool print_sat_cnt);
 
+PreCalcTransDelayCalculator get_pre_calc_trans_delay_calculator(std::map<EdgeId,std::map<std::tuple<TransitionType,TransitionType>,Time>>& set_edge_delays, const TimingGraph& tg);
+
 optparse::Values parse_args(int argc, char** argv) {
     auto parser = optparse::OptionParser()
         .description("Performs Extended Timing Analysis on a blif netlist.")
@@ -109,12 +111,19 @@ optparse::Values parse_args(int argc, char** argv) {
           ;
     parser.add_option("--xfunc_cache_nelem")
           .set_default("0")
-          .help("Number of BDDs to cache while building switch functions. Note a value of 0 causes all xfuncs to be memoized (unbounded cache). A larger value prevents switch functions from being re-calculated, but also increases (perhaps exponentially) the size of the composite BDD CUDD must manage. This can causing a large amount of time to be spent re-ordering the BDD.  Default %default")
+          .help("Number of BDDs to cache while building switch functions. "
+                "Note a value of 0 causes all xfuncs to be memoized (unbounded cache). "
+                "A larger value prevents switch functions from being re-calculated, but "
+                "also increases (perhaps exponentially) the size of the composite BDD CUDD must manage. "
+                "This can causing a large amount of time to be spent re-ordering the BDD. "
+                "Default %default")
           ;
 
     parser.add_option("--approx_threshold")
           .set_default("-1")
-          .help("The number of BDD nodes beyond which BDDs are approximated. Negative thresholds ensure no approximation occurs. Default %default")
+          .help("The number of BDD nodes beyond which BDDs are approximated. "
+                "Negative thresholds ensure no approximation occurs. "
+                "Default %default")
           ;
     parser.add_option("--approx_ratio")
           .set_default("0.5")
@@ -122,7 +131,8 @@ optparse::Values parse_args(int argc, char** argv) {
           ;
     parser.add_option("--approx_quality")
           .set_default("1.5")
-          .help("The worst degredation in #SAT quality (0.5 would accept up to a 50% under approximation, 1.0 only an exact approximation, and 1.5 a 50% over approximation). Default %default")
+          .help("The worst degredation in #SAT quality (0.5 would accept up to a 50% under approximation, "
+                "1.0 only an exact approximation, and 1.5 a 50% over approximation). Default %default")
           ;
 
     std::vector<std::string> print_tags_choices = {"po", "pi", "all", "none"};
@@ -186,6 +196,12 @@ int main(int argc, char** argv) {
     g_cudd.SetMaxGrowth(options.get_as<double>("sift_max_growth"));
     g_cudd.SetMaxCacheHard(options.get_as<double>("cudd_cache_ratio") * g_cudd.ReadMaxCacheHard());
 
+    g_action_timer.push_timer("Load Delay Model");
+
+    auto delay_model = load_delay_model(options.get_as<string>("delay_model_file"));
+
+    g_action_timer.pop_timer("Load Delay Model");
+    
 
     //Load the file
     g_action_timer.push_timer("Loading Blif");
@@ -195,8 +211,11 @@ int main(int argc, char** argv) {
     BlifParser parser;
     try {
         g_blif_data = parser.parse(options.get_as<string>("blif_file"));
-    } catch (BlifParseError& e) {
+    } catch (BlifParseLocationError& e) {
         cerr << argv[1] << ":" << e.line_num << " " << e.what() << " (near text '" << e.near_text << "')" << endl; 
+        return 1;
+    } catch (BlifParseError& e) {
+        cerr << argv[1] << ":" << e.what() << endl; 
         return 1;
     }
 
@@ -206,13 +225,16 @@ int main(int argc, char** argv) {
     cout << "\n";
 
     //Create the builder
-    BlifTimingGraphBuilder tg_builder(g_blif_data);
+    BlifTimingGraphBuilder tg_builder(g_blif_data, delay_model);
 
     TimingGraph timing_graph;
 
     g_action_timer.push_timer("Building Timing Graph");
 
     tg_builder.build(timing_graph);
+
+    auto set_edge_delays = tg_builder.specified_edge_delays(); 
+
     const auto& lo_dep_stats = tg_builder.get_logical_output_dependancy_stats();
 
     g_action_timer.pop_timer("Building Timing Graph");
@@ -245,15 +267,9 @@ int main(int argc, char** argv) {
     print_level_histogram(timing_graph, 10);
     cout << "\n";
 
-    g_action_timer.push_timer("Load Delay Model");
-
-    auto delay_model = load_delay_model(options.get_as<string>("delay_model_file"));
-
-    g_action_timer.pop_timer("Load Delay Model");
-    
     g_action_timer.push_timer("Building Delay Calculator");
 
-    auto delay_calc = get_pre_calc_trans_delay_calculator(delay_model, timing_graph);
+    auto delay_calc = get_pre_calc_trans_delay_calculator(set_edge_delays, timing_graph);
 
     g_action_timer.pop_timer("Building Delay Calculator");
 
@@ -262,32 +278,6 @@ int main(int argc, char** argv) {
     for(NodeId id : timing_graph.primary_inputs()) {
         timing_constraints.add_input_constraint(id, 0.);
     }
-
-
-
-/*
- *    //The actual delay calculator
- *    std::map<TransitionType,std::vector<float>> delays;
- *    //Initialize all edge delays to zero
- *    for(auto trans : {TransitionType::RISE, TransitionType::FALL, TransitionType::HIGH, TransitionType::LOW, TransitionType::CLOCK}) {
- *        delays[trans] = std::vector<float>(timing_graph.num_edges(), 0.0);
- *    }
- *
- *    //Override primitive edges to have unit delay when switching
- *    for(EdgeId edge_id = 0; edge_id < timing_graph.num_edges(); edge_id++) {
- *        NodeId src = timing_graph.edge_src_node(edge_id);
- *        NodeId sink = timing_graph.edge_sink_node(edge_id);
- *        TN_Type src_type = timing_graph.node_type(src);
- *        TN_Type sink_type = timing_graph.node_type(sink);
- *        if(src_type == TN_Type::PRIMITIVE_IPIN && sink_type == TN_Type::PRIMITIVE_OPIN) {
- *            for(auto trans : {TransitionType::RISE, TransitionType::FALL}) {
- *                delays[trans][edge_id] = 1.0;
- *            }
- *        }
- *    }
- *
- *    auto delay_calc = DelayCalcType(delays);
- */
 
     //The actual analyzer
     auto analyzer = std::make_shared<AnalyzerType>(timing_graph, timing_constraints, delay_calc);
@@ -471,3 +461,25 @@ void print_node_tags(const TimingGraph& tg, std::shared_ptr<AnalyzerType> analyz
     }
 }
 
+PreCalcTransDelayCalculator get_pre_calc_trans_delay_calculator(std::map<EdgeId,std::map<std::tuple<TransitionType,TransitionType>,Time>>& set_edge_delays, const TimingGraph& tg) {
+    PreCalcTransDelayCalculator::EdgeDelayModel edge_delay_model(tg.num_edges());
+
+    std::map<std::tuple<TransitionType,TransitionType>,Time> edge_zero_delays;
+    for(auto in_trans : {TransitionType::RISE, TransitionType::FALL, TransitionType::HIGH, TransitionType::LOW}) {
+        for(auto out_trans : {TransitionType::RISE, TransitionType::FALL, TransitionType::HIGH, TransitionType::LOW}) {
+            edge_zero_delays[std::make_tuple(in_trans,out_trans)] = Time(0.);
+        }
+    }
+
+    for(EdgeId i = 0; i < tg.num_edges(); ++i) {
+        auto iter = set_edge_delays.find(i);
+        if(iter != set_edge_delays.end()) {
+            std::cout << "Setting non-zero delay on edge " << i << std::endl;
+            edge_delay_model[i] = iter->second;
+        } else {
+            edge_delay_model[i] = edge_zero_delays;
+        }
+    }
+
+    return PreCalcTransDelayCalculator(edge_delay_model);
+}

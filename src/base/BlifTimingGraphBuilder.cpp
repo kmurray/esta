@@ -4,14 +4,12 @@
 #include <queue>
 #include <algorithm>
 #include "BlifTimingGraphBuilder.hpp"
+#include "load_delay_model.hpp"
 
 #include <iostream>
 using std::cout;
 
 #include "bdd.hpp"
-
-BlifTimingGraphBuilder::BlifTimingGraphBuilder(BlifData* data)
-    : blif_data_(data) { }
 
 void BlifTimingGraphBuilder::build(TimingGraph& tg) {
     /*
@@ -27,7 +25,7 @@ void BlifTimingGraphBuilder::build(TimingGraph& tg) {
      */
     assert(blif_data_->models.size() > 0);
 
-    BlifModel* top_model = blif_data_->get_top_model();
+    const BlifModel* top_model = blif_data_->get_top_model();
 
     cout << "Blif Info: \n";
     cout << "\tInputs : " << top_model->inputs.size() << "\n";
@@ -35,7 +33,7 @@ void BlifTimingGraphBuilder::build(TimingGraph& tg) {
     cout << "\tNames  : " << top_model->names.size() << "\n";
     cout << "\tLatches: " << top_model->latches.size() << "\n";
     cout << "\tSubckts: " << top_model->subckts.size() << "\n";
-    cout << "\tNets   : " << blif_data_->nets.size() << "\n";
+    cout << "\tNets   : " << top_model->nets.size() << "\n";
 
     identify_clock_drivers();
 
@@ -225,9 +223,71 @@ void BlifTimingGraphBuilder::create_names(TimingGraph& tg, const BlifNames* name
     }
 }
 
-void BlifTimingGraphBuilder::create_subckt(TimingGraph& tg, const BlifSubckt* names) {
-    assert(0); //Unimplemented
-    //TODO: determine whether a port is combinational or clocked
+void BlifTimingGraphBuilder::create_subckt(TimingGraph& tg, const BlifSubckt* subckt) {
+    /*
+     * A blif .subckt is used to introduce hierarchy and corresponds the instantiation 
+     * of another model.
+     *
+     * We currently support only multi-input to single-output combinational .subckts 
+     * which are flattened in the timing graph.
+     *
+     * We also assume the model wraps a single .names (this enables us to map a different
+     * delay model on different logic functions based on the .subckt type)
+     */
+    BlifModel* subckt_model = blif_data_->find_model(subckt->type);
+
+    assert(subckt_model->subckts.size() == 0); //No internal hierarhcy
+    assert(subckt_model->latches.size() == 0); //Combinational
+
+    assert(subckt_model->outputs.size() == 1); //Single-output
+    assert(subckt_model->names.size() == 1); //Single names inside
+
+    //Build the nodes
+    std::vector<NodeId> input_ids;
+    std::vector<BDD> input_vars;
+    for(size_t i = 0; i < subckt_model->inputs.size(); i++) {
+        const BlifPort* input_port = subckt_model->inputs[i];
+
+        NodeId node_id = tg.add_node(TN_Type::PRIMITIVE_IPIN, INVALID_CLOCK_DOMAIN, false);
+        input_ids.push_back(node_id);
+
+        input_vars.push_back(g_cudd.bddVar(i));
+
+        //Record the mapping from blif netlist to timing graph nodes
+        std::cout << "Subckt: " << *subckt->type << " Adding input port: " << input_port << "(" << *input_port->name << ") -> NodeID: " << node_id << std::endl;
+        port_to_node_lookup_[input_port] = node_id;
+    }
+
+    const BlifPort* output_port = subckt_model->outputs[0];
+    NodeId output_node_id;
+    if(input_ids.size() == 0) {
+        //Constant generator
+        output_node_id = tg.add_node(TN_Type::CONSTANT_GEN_SOURCE, INVALID_CLOCK_DOMAIN, false);
+    } else {
+        //Regular combinational primitive
+        output_node_id = tg.add_node(TN_Type::PRIMITIVE_OPIN, INVALID_CLOCK_DOMAIN, false);
+    }
+
+    //Record the mapping from blif netlist to timing graph nodes
+    std::cout << "Subckt: " << *subckt->type << " Adding output port: " << output_port << "(" << *output_port->name << ") -> NodeID: " << output_node_id << std::endl;
+    port_to_node_lookup_[output_port] = output_node_id;
+
+    //Define the opin logic function in terms of its input edges
+    BDD opin_node_func = create_func_from_names(subckt_model->names[0], input_vars);
+    tg.set_node_func(output_node_id, opin_node_func);
+
+    auto cell_delay_model_iter = delay_model_.find(*subckt_model->name);
+    assert(cell_delay_model_iter != delay_model_.end());
+
+    //Build the internal edges
+    for(size_t i = 0; i < subckt_model->inputs.size(); ++i) {
+        NodeId input_node_id = input_ids[i];
+
+        EdgeId edge_id = tg.add_edge(input_node_id, output_node_id);
+
+        //Map on the delay model
+        edge_delays_[edge_id] = find_edge_delays(subckt_model, subckt_model->inputs[i], subckt_model->outputs[0]);
+    }
 }
 
 void BlifTimingGraphBuilder::create_net_edges(TimingGraph& tg) {
@@ -237,11 +297,12 @@ void BlifTimingGraphBuilder::create_net_edges(TimingGraph& tg) {
      * We also collect equivalent variables, which we tell
      * the BDD package to re-map.
      */
+    const BlifModel* top_model = blif_data_->get_top_model();
 
-    for(const BlifNet* net : blif_data_->nets) {
+    for(const BlifNet* net : top_model->nets) {
         //cout << "Net: " << *net->name << "\n";
         assert(net->drivers.size() == 1);
-        const BlifPort* driver_port= net->drivers[0]->port;
+        const BlifPort* driver_port = get_real_port(net->drivers[0]->port);
         
         auto iter_driver = port_to_node_lookup_.find(driver_port);
         assert(iter_driver != port_to_node_lookup_.end());
@@ -249,7 +310,7 @@ void BlifTimingGraphBuilder::create_net_edges(TimingGraph& tg) {
         NodeId driver_node = iter_driver->second;
 
         for(const BlifPortConn* sink_conn : net->sinks) {
-            const BlifPort* sink_port = sink_conn->port;
+            const BlifPort* sink_port = get_real_port(sink_conn->port);
 
             auto iter_sink = port_to_node_lookup_.find(sink_port);
             assert(iter_sink != port_to_node_lookup_.end());
@@ -263,6 +324,28 @@ void BlifTimingGraphBuilder::create_net_edges(TimingGraph& tg) {
         }
     }
 
+}
+
+BlifPort* BlifTimingGraphBuilder::get_real_port(BlifPort* port) {
+    BlifPort* real_port = port;
+    if(port->node_type == BlifNodeType::SUBCKT) {
+        BlifModel* model = blif_data_->find_model(port->subckt->type);
+
+        //Check if it is an input
+        real_port = model->find_input_port(port->name);
+
+        //Check if it is an output
+        if(!real_port) {
+            real_port = model->find_output_port(port->name);
+        }
+
+        //Check if it is a clock
+        if(!real_port) {
+            real_port = model->find_clock_port(port->name);
+        }
+        assert(real_port);
+    }
+    return real_port;
 }
 
 BDD BlifTimingGraphBuilder::create_func_from_names(const BlifNames* names, const std::vector<BDD>& input_vars) {
@@ -346,10 +429,10 @@ void BlifTimingGraphBuilder::verify(const TimingGraph& tg) {
 }
 
 void BlifTimingGraphBuilder::identify_clock_drivers() {
-    BlifModel* top = blif_data_->get_top_model();
+    const BlifModel* top_model = blif_data_->get_top_model();
 
     std::set<BlifNet*> clock_nets;
-    for(BlifLatch* latch : top->latches) {
+    for(BlifLatch* latch : top_model->latches) {
         BlifPort* clk_port = latch->control;
         BlifPortConn* clk_port_conn = clk_port->port_conn;
         assert(clk_port_conn != nullptr);
@@ -459,4 +542,34 @@ void BlifTimingGraphBuilder::check_logical_output_dependancies(const TimingGraph
         //Save stats
         logical_output_dependancy_stats_[std::make_pair(transitive_fanin.size(), pi_fanin)].push_back(po_node_id);
     }
+}
+
+std::map<std::tuple<TransitionType,TransitionType>,Time> BlifTimingGraphBuilder::find_edge_delays(BlifModel* model, BlifPort* input_port, BlifPort* output_port) {
+    auto cell_delay_model_iter = delay_model_.find(*model->name);
+    assert(cell_delay_model_iter != delay_model_.end());
+
+    auto& cell_delay_model = cell_delay_model_iter->second;
+
+    std::map<std::tuple<TransitionType,TransitionType>,Time> curr_edge_delays;
+
+    for(auto in_trans : delay_model_transitions) {
+        for(auto out_trans : delay_model_transitions) {
+            auto key = std::make_tuple(*input_port->name, *output_port->name, in_trans, out_trans);
+
+            auto kv_iter = cell_delay_model.find(key);
+            if(kv_iter != cell_delay_model.end()) {
+                //Have a real delay
+                auto delay = kv_iter->second;
+
+                auto in_trans_type = delay_model_trans_str_to_type(in_trans);
+                auto out_trans_type = delay_model_trans_str_to_type(out_trans);
+
+                //Insert it in the current edges delays
+                auto ret = curr_edge_delays.insert(std::make_pair(std::make_tuple(in_trans_type,out_trans_type), Time(delay)));
+
+                assert(ret.second); //Was inserted
+            }
+        }
+    }
+    return curr_edge_delays;
 }
