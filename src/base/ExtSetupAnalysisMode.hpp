@@ -7,6 +7,7 @@
 #include "object_cache.hpp"
 #include <iostream>
 #include <unordered_set>
+#include "transition_filters.hpp"
 
 template<class BaseAnalysisMode = BaseAnalysisMode, class Tags=TimingTags>
 class ExtSetupAnalysisMode : public BaseAnalysisMode {
@@ -55,6 +56,8 @@ class ExtSetupAnalysisMode : public BaseAnalysisMode {
         //BDD variable information
         std::unordered_map<NodeId,BDD> pi_curr_bdd_vars_;
         std::unordered_map<NodeId,BDD> pi_next_bdd_vars_;
+
+        NextStateTransitionFilter transition_filter_;
 
         ObjectCacheMap<std::pair<NodeId,TransitionType>,BDD> bdd_cache_;
 };
