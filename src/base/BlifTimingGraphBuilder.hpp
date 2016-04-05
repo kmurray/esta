@@ -33,7 +33,7 @@ class BlifTimingGraphBuilder : public TimingGraphBuilder {
 
         std::map<std::tuple<TransitionType,TransitionType>,Time> find_edge_delays(BlifModel* model, BlifPort* input_port, BlifPort* output_port);
 
-        BlifPort* get_real_port(BlifPort* port);
+        const BlifPort* find_subckt_port_from_model_port(const BlifSubckt* subckt, const BlifPort* model_input_port);
 
     private:
         const BlifData* blif_data_;

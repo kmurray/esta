@@ -228,25 +228,24 @@ void BlifTimingGraphBuilder::create_subckt(TimingGraph& tg, const BlifSubckt* su
      * A blif .subckt is used to introduce hierarchy and corresponds the instantiation 
      * of another model.
      *
-     * We currently support only multi-input to single-output combinational .subckts 
+     * We currently support only flat multi-input to multi-output combinational .subckts 
      * which are flattened in the timing graph.
      *
-     * We also assume the model wraps a single .names (this enables us to map a different
-     * delay model on different logic functions based on the .subckt type)
+     * We currently assume a flat hierarhcy with a single .names driving each output,
+     * and each output depending on all inputs
      */
     BlifModel* subckt_model = blif_data_->find_model(subckt->type);
 
     assert(subckt_model->subckts.size() == 0); //No internal hierarhcy
     assert(subckt_model->latches.size() == 0); //Combinational
 
-    assert(subckt_model->outputs.size() == 1); //Single-output
-    assert(subckt_model->names.size() == 1); //Single names inside
+    assert(subckt_model->names.size() == subckt_model->outputs.size());
 
     //Build the nodes
     std::vector<NodeId> input_ids;
     std::vector<BDD> input_vars;
     for(size_t i = 0; i < subckt_model->inputs.size(); i++) {
-        const BlifPort* input_port = subckt_model->inputs[i];
+        const BlifPort* input_port = find_subckt_port_from_model_port(subckt, subckt_model->inputs[i]);
 
         NodeId node_id = tg.add_node(TN_Type::PRIMITIVE_IPIN, INVALID_CLOCK_DOMAIN, false);
         input_ids.push_back(node_id);
@@ -258,23 +257,30 @@ void BlifTimingGraphBuilder::create_subckt(TimingGraph& tg, const BlifSubckt* su
         port_to_node_lookup_[input_port] = node_id;
     }
 
-    const BlifPort* output_port = subckt_model->outputs[0];
-    NodeId output_node_id;
-    if(input_ids.size() == 0) {
-        //Constant generator
-        output_node_id = tg.add_node(TN_Type::CONSTANT_GEN_SOURCE, INVALID_CLOCK_DOMAIN, false);
-    } else {
-        //Regular combinational primitive
-        output_node_id = tg.add_node(TN_Type::PRIMITIVE_OPIN, INVALID_CLOCK_DOMAIN, false);
+    std::vector<NodeId> output_ids;
+    for(size_t i = 0; i < subckt_model->outputs.size(); i++) {
+        const BlifPort* output_port = find_subckt_port_from_model_port(subckt, subckt_model->outputs[i]);
+
+        NodeId node_id;
+        if(input_ids.size() == 0) {
+            //Constant generator
+            node_id = tg.add_node(TN_Type::CONSTANT_GEN_SOURCE, INVALID_CLOCK_DOMAIN, false);
+        } else {
+            //Regular combinational primitive
+            node_id = tg.add_node(TN_Type::PRIMITIVE_OPIN, INVALID_CLOCK_DOMAIN, false);
+        }
+        output_ids.push_back(node_id);
+
+        //Record the mapping from blif netlist to timing graph nodes
+        std::cout << "Subckt: " << *subckt->type << " Adding output port: " << output_port << "(" << *output_port->name << ") -> NodeID: " << node_id << std::endl;
+        port_to_node_lookup_[output_port] = node_id;
+
+        //Define the opin logic function in terms of its input edges
+        BDD opin_node_func = create_func_from_names(subckt_model->names[i], input_vars);
+        tg.set_node_func(node_id, opin_node_func);
     }
 
-    //Record the mapping from blif netlist to timing graph nodes
-    std::cout << "Subckt: " << *subckt->type << " Adding output port: " << output_port << "(" << *output_port->name << ") -> NodeID: " << output_node_id << std::endl;
-    port_to_node_lookup_[output_port] = output_node_id;
 
-    //Define the opin logic function in terms of its input edges
-    BDD opin_node_func = create_func_from_names(subckt_model->names[0], input_vars);
-    tg.set_node_func(output_node_id, opin_node_func);
 
     auto cell_delay_model_iter = delay_model_.find(*subckt_model->name);
     assert(cell_delay_model_iter != delay_model_.end());
@@ -282,11 +288,14 @@ void BlifTimingGraphBuilder::create_subckt(TimingGraph& tg, const BlifSubckt* su
     //Build the internal edges
     for(size_t i = 0; i < subckt_model->inputs.size(); ++i) {
         NodeId input_node_id = input_ids[i];
+        for(size_t j = 0; j < subckt_model->outputs.size(); ++j) {
+            NodeId output_node_id = output_ids[j];
 
-        EdgeId edge_id = tg.add_edge(input_node_id, output_node_id);
+            EdgeId edge_id = tg.add_edge(input_node_id, output_node_id);
 
-        //Map on the delay model
-        edge_delays_[edge_id] = find_edge_delays(subckt_model, subckt_model->inputs[i], subckt_model->outputs[0]);
+            //Map on the delay model
+            edge_delays_[edge_id] = find_edge_delays(subckt_model, subckt_model->inputs[i], subckt_model->outputs[0]);
+        }
     }
 }
 
@@ -300,9 +309,9 @@ void BlifTimingGraphBuilder::create_net_edges(TimingGraph& tg) {
     const BlifModel* top_model = blif_data_->get_top_model();
 
     for(const BlifNet* net : top_model->nets) {
-        //cout << "Net: " << *net->name << "\n";
+        cout << "Net: " << *net->name << "\n";
         assert(net->drivers.size() == 1);
-        const BlifPort* driver_port = get_real_port(net->drivers[0]->port);
+        const BlifPort* driver_port = net->drivers[0]->port;
         
         auto iter_driver = port_to_node_lookup_.find(driver_port);
         assert(iter_driver != port_to_node_lookup_.end());
@@ -310,7 +319,7 @@ void BlifTimingGraphBuilder::create_net_edges(TimingGraph& tg) {
         NodeId driver_node = iter_driver->second;
 
         for(const BlifPortConn* sink_conn : net->sinks) {
-            const BlifPort* sink_port = get_real_port(sink_conn->port);
+            const BlifPort* sink_port = sink_conn->port;
 
             auto iter_sink = port_to_node_lookup_.find(sink_port);
             assert(iter_sink != port_to_node_lookup_.end());
@@ -320,33 +329,45 @@ void BlifTimingGraphBuilder::create_net_edges(TimingGraph& tg) {
             //Identity logic function
             tg.set_node_func(sink_node, g_cudd.bddVar(0));
 
+            std::cout << "Adding edge " << driver_node << " -> " << sink_node << std::endl;
             tg.add_edge(driver_node, sink_node);
         }
     }
 
 }
 
-BlifPort* BlifTimingGraphBuilder::get_real_port(BlifPort* port) {
-    BlifPort* real_port = port;
-    if(port->node_type == BlifNodeType::SUBCKT) {
-        BlifModel* model = blif_data_->find_model(port->subckt->type);
-
-        //Check if it is an input
-        real_port = model->find_input_port(port->name);
-
-        //Check if it is an output
-        if(!real_port) {
-            real_port = model->find_output_port(port->name);
+const BlifPort* BlifTimingGraphBuilder::find_subckt_port_from_model_port(const BlifSubckt* subckt, const BlifPort* model_port) {
+    for(const auto subckt_port : subckt->ports) {
+        if(model_port->name == subckt_port->name) {
+            return subckt_port;
         }
-
-        //Check if it is a clock
-        if(!real_port) {
-            real_port = model->find_clock_port(port->name);
-        }
-        assert(real_port);
     }
-    return real_port;
+    assert(false);
 }
+
+/*
+ *BlifPort* BlifTimingGraphBuilder::get_real_port(BlifPort* port) {
+ *    BlifPort* real_port = port;
+ *    if(port->node_type == BlifNodeType::SUBCKT) {
+ *        BlifModel* model = blif_data_->find_model(port->subckt->type);
+ *
+ *        //Check if it is an input
+ *        real_port = model->find_input_port(port->name);
+ *
+ *        //Check if it is an output
+ *        if(!real_port) {
+ *            real_port = model->find_output_port(port->name);
+ *        }
+ *
+ *        //Check if it is a clock
+ *        if(!real_port) {
+ *            real_port = model->find_clock_port(port->name);
+ *        }
+ *        assert(real_port);
+ *    }
+ *    return real_port;
+ *}
+ */
 
 BDD BlifTimingGraphBuilder::create_func_from_names(const BlifNames* names, const std::vector<BDD>& input_vars) {
     //Convert the single-output cover representing the .names logic function
