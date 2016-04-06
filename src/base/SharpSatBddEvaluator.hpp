@@ -78,24 +78,7 @@ class SharpSatBddEvaluator : public SharpSatEvaluator<Analyzer> {
              g_cudd.SetNextReordering(4096);
         }
 
-    protected:
-
-        real_t bdd_sharpsat(BDD f) {
-
-            double dbl_count_cudd = Cudd_CountMinterm(f.manager(), f.getNode(), this->nvars_);
-            double dbl_count_cudd_frac = dbl_count_cudd / pow(2, this->nvars_);
-
-            double dbl_count_custom_frac = CountMintermFraction(f.getNode());
-
-            assert(dbl_count_cudd_frac == dbl_count_custom_frac);
-
-            real_t f_count_dbl = dbl_count_custom_frac * pow(2, this->nvars_);
-
-            return f_count_dbl;
-        }
-
-
-        BDD build_bdd_xfunc(const ExtTimingTag* tag, const NodeId node_id, int level) {
+        BDD build_bdd_xfunc(const ExtTimingTag* tag, const NodeId node_id, int level=0) {
             /*std::cout << "build_xfunc at Node: " << node_id << " TAG: " << tag << "\n";*/
             auto key = tag;
 
@@ -160,6 +143,24 @@ class SharpSatBddEvaluator : public SharpSatEvaluator<Analyzer> {
             }
             assert(0);
         }
+
+    protected:
+
+        real_t bdd_sharpsat(BDD f) {
+
+            double dbl_count_cudd = Cudd_CountMinterm(f.manager(), f.getNode(), this->nvars_);
+            double dbl_count_cudd_frac = dbl_count_cudd / pow(2, this->nvars_);
+
+            double dbl_count_custom_frac = CountMintermFraction(f.getNode());
+
+            assert(dbl_count_cudd_frac == dbl_count_custom_frac);
+
+            real_t f_count_dbl = dbl_count_custom_frac * pow(2, this->nvars_);
+
+            return f_count_dbl;
+        }
+
+
 
         BDD generate_pi_switch_func(NodeId node_id, TransitionType trans) {
             auto curr_iter = pi_curr_bdd_vars_.find(node_id);

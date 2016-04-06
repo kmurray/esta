@@ -56,6 +56,11 @@ EtaStats g_eta_stats;
 optparse::Values parse_args(int argc, char** argv);
 //void print_node_tags(const TimingGraph& tg, std::shared_ptr<AnalyzerType> analyzer, std::shared_ptr<SharpSatType> sharp_sat_eval, NodeId node_id, double nvars, double nassigns, float progress, bool print_sat_cnt, bool print_switch);
 void print_node_tags(const TimingGraph& tg, std::shared_ptr<AnalyzerType> analyzer, std::shared_ptr<SharpSatType> sharp_sat_eval, NodeId node_id, int nvars, real_t nassigns, float progress, bool print_sat_cnt);
+void dump_exhaustive_csv(std::ostream& os, const TimingGraph& tg, std::shared_ptr<AnalyzerType> analyzer, std::shared_ptr<SharpSatType> sharp_sat_eval, NodeId node_id, int nvars);
+std::vector<std::vector<int>> get_cubes(BDD f, int trans_var_start_idx);
+std::vector<std::vector<int>> get_minterms(BDD f, int nvars);
+std::vector<std::vector<int>> cube_to_minterms(std::vector<int> cube);
+std::vector<std::vector<TransitionType>> get_transitions(BDD f, int nvars);
 
 PreCalcTransDelayCalculator get_pre_calc_trans_delay_calculator(std::map<EdgeId,std::map<std::tuple<TransitionType,TransitionType>,Time>>& set_edge_delays, const TimingGraph& tg);
 
@@ -74,6 +79,17 @@ optparse::Values parse_args(int argc, char** argv) {
           .dest("delay_model_file")
           .metavar("DELAY_MODEL_FILE")
           .help("The delay model to be loaded (in JSON format).")
+          ;
+
+    parser.add_option("--csv_base")
+          .dest("csv_base")
+          .metavar("CSV_OUTPUT_FILE_BASE")
+          .help("The base name for output csv files")
+          ;
+
+    parser.add_option("--csv_node")
+          .dest("csv_node")
+          .help("Node to write to CSV file")
           ;
 
     parser.add_option("--print_graph")
@@ -302,7 +318,7 @@ int main(int argc, char** argv) {
     auto sharp_sat_eval = std::make_shared<SharpSatType>(timing_graph, analyzer, nvars, options.get_as<int>("approx_threshold"), options.get_as<float>("approx_ratio"), options.get_as<float>("approx_quality"));
 
 
-#if 1
+#if 0
     g_action_timer.push_timer("Raw tags");
 
     for(LevelId level_id = 0; level_id < timing_graph.num_levels(); level_id++) {
@@ -337,6 +353,24 @@ int main(int argc, char** argv) {
 
         g_action_timer.pop_timer(action_name);
     }
+
+
+    if(options.is_set("csv_base")) {
+        std::string csv_filename = options.get_as<std::string>("csv_base") + ".csv";
+
+
+        if(options.is_set("csv_node")) {
+            NodeId csv_dump_node_id = options.get_as<NodeId>("csv_node");
+
+            std::ofstream csv_os(csv_filename);
+
+            dump_exhaustive_csv(csv_os, timing_graph, analyzer, sharp_sat_eval, csv_dump_node_id, nvars);
+
+        }
+    }
+
+    
+
 
 /*
  *    bool print_switch = options.get_as<bool>("print_tag_switch");
@@ -411,6 +445,8 @@ int main(int argc, char** argv) {
         g_cudd.info();
     }
 
+
+
     g_action_timer.pop_timer("Output Results");
 
     cout << endl;
@@ -424,6 +460,7 @@ int main(int argc, char** argv) {
     delete g_blif_data;
     return 0;
 }
+
 
 void print_node_tags(const TimingGraph& tg, std::shared_ptr<AnalyzerType> analyzer, std::shared_ptr<SharpSatType> sharp_sat_eval, NodeId node_id, int nvars, real_t nassigns, float progress, bool print_sat_cnt) {
 
@@ -459,6 +496,177 @@ void print_node_tags(const TimingGraph& tg, std::shared_ptr<AnalyzerType> analyz
             assert(total_sat_cnt == nassigns);
         }
     }
+}
+
+void dump_exhaustive_csv(std::ostream& os, const TimingGraph& tg, std::shared_ptr<AnalyzerType> analyzer, std::shared_ptr<SharpSatType> sharp_sat_eval, NodeId node_id, int nvars) {
+    auto& data_tags = analyzer->setup_data_tags(node_id);
+
+    using TupleVal = std::tuple<std::vector<TransitionType>,TransitionType,double>;
+    std::vector<TupleVal> exhaustive_values;
+
+    for(auto tag : data_tags) {
+        auto sat_cnt = sharp_sat_eval->count_sat(tag, node_id).count;
+
+        auto bdd = sharp_sat_eval->build_bdd_xfunc(tag, node_id);
+
+        std::cout << std::endl;
+
+        auto input_transitions = get_transitions(bdd, nvars);
+
+        assert(input_transitions.size() == sat_cnt);
+
+        for(auto input_case : input_transitions) {
+            assert(input_case.size() == (size_t) nvars / 2);
+            auto tuple = std::make_tuple(input_case, tag->trans_type(), tag->arr_time().value());
+            //for(auto trans : std::get<0>(tuple)) {
+                //std::cout << trans << " ";
+            //}
+            //std::cout << "-> " << std::get<1>(tuple) << ": " << std::get<2>(tuple) << std::endl;
+            exhaustive_values.push_back(tuple);
+        }
+    }
+
+    //Covered all exhaustive cases
+    assert(exhaustive_values.size() == pow(2, nvars));
+
+    //Radix-style sort on input transitions
+    for(int i = (nvars / 2) - 1; i >= 0; --i) {
+        auto sort_order = [&](const TupleVal& lhs, const TupleVal& rhs) {
+            return std::get<0>(lhs)[i] < std::get<0>(rhs)[i]; 
+        };
+        std::stable_sort(exhaustive_values.begin(), exhaustive_values.end(), sort_order);
+    }
+
+    
+    //CSV Header
+    for(int i = g_cudd.ReadSize() - nvars; i < g_cudd.ReadSize(); i += 2) {
+        os << g_cudd.getVariableName(i) << ",";
+    }
+    os << "n" << node_id << ",";
+    os << "delay" << ",";
+    os << "exact_prob" << ",";
+    os << "measured_prob" << ",";
+    os << "\n";
+
+    //CSV Values
+    for(auto tuple : exhaustive_values) {
+        //Input transitions
+        for(auto trans : std::get<0>(tuple)) {
+            os << trans << ",";
+        }
+        //Output transition
+        os << std::get<1>(tuple) << ",";
+        //Delay
+        os << std::get<2>(tuple) << ",";
+        
+        //Exact/measured probability
+        double prob = 1. / pow(2, nvars);
+        os.precision(std::numeric_limits<double>::digits10);
+        os << prob << ",";
+        os << prob;
+        os << "\n";
+    }
+}
+
+std::vector<std::vector<TransitionType>> get_transitions(BDD f, int nvars) {
+    std::vector<std::vector<TransitionType>> transitions;
+    auto minterms = get_minterms(f, nvars);
+
+    for(auto minterm : minterms) {
+        std::vector<TransitionType> input_transitions;
+
+        //Expect pairs of variables
+        assert(minterm.size() % 2 == 0);
+        assert(minterm.size() == (size_t) nvars);
+
+        for(size_t i = 0; i < minterm.size() - 1; i += 2) {
+            auto prev = minterm[i];
+            auto next = minterm[i+1];
+
+            TransitionType trans;
+            if(prev == 0 && next == 1) trans = TransitionType::RISE;
+            else if(prev == 1 && next == 0) trans = TransitionType::FALL;
+            else if(prev == 1 && next == 1) trans = TransitionType::HIGH;
+            else if(prev == 0 && next == 0) trans = TransitionType::LOW;
+            else assert(false);
+
+            input_transitions.push_back(trans);
+        }
+
+
+        transitions.push_back(input_transitions);
+    }
+
+    return transitions;
+}
+
+std::vector<std::vector<int>> get_minterms(BDD f, int nvars) {
+    //Determine the starting index of the transition vars
+    //(rather than those used to store logic functions)
+
+    //Get the cubes (which include don't cares)
+    //for the function f
+    auto cubes = get_cubes(f, nvars);
+
+    //We want minterms, so we need to expand the cubes into minterms
+    //(i.e. without don't cares)
+    std::vector<std::vector<int>> minterms;
+    for(auto cube : cubes) {
+
+        int num_dc = 0;
+        for(auto val : cube) {
+            if(val == 2) num_dc++;
+        }
+
+        auto expanded_minterms = cube_to_minterms(cube); 
+
+        auto expected_num_minterms = pow(2, num_dc);
+
+        assert(expanded_minterms.size() == expected_num_minterms);
+        
+        std::copy(expanded_minterms.begin(), expanded_minterms.end(), std::back_inserter(minterms));
+    }
+
+    return minterms;
+}
+
+std::vector<std::vector<int>> cube_to_minterms(std::vector<int> cube) {
+    std::vector<std::vector<int>> minterms;
+
+    auto iter = std::find(cube.begin(), cube.end(), 2);
+    if(iter == cube.end()) {
+        minterms.push_back(cube);
+        return minterms;
+    } else {
+        //Call with DC set to 0
+        *iter = 0;
+        auto minterms_0 = cube_to_minterms(cube); 
+        auto back_insert_iter = std::copy(minterms_0.begin(), minterms_0.end(), std::back_inserter(minterms));
+
+        //Call with DC set to 1
+        *iter = 1;
+        auto minterms_1 = cube_to_minterms(cube);
+        std::copy(minterms_1.begin(), minterms_1.end(), back_insert_iter);
+    }
+
+    return minterms;
+}
+
+std::vector<std::vector<int>> get_cubes(BDD f, int nvars) {
+    std::vector<std::vector<int>> cubes;
+
+    int* cube_data;
+    CUDD_VALUE_TYPE val;
+    DdGen* gen;
+    Cudd_ForeachCube(f.manager(), f.getNode(), gen, cube_data, val) {
+        assert(val == 1); //Always holds for BDDs
+
+        std::vector<int> cube;
+        std::copy(cube_data + g_cudd.ReadSize() - nvars, cube_data + g_cudd.ReadSize(), std::back_inserter(cube));
+        cubes.push_back(cube);
+    }
+
+    return cubes;
 }
 
 PreCalcTransDelayCalculator get_pre_calc_trans_delay_calculator(std::map<EdgeId,std::map<std::tuple<TransitionType,TransitionType>,Time>>& set_edge_delays, const TimingGraph& tg) {
