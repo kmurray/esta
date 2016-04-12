@@ -1,5 +1,6 @@
 #!/usr/bin/env python
 import argparse
+import pandas as pd
 from itertools import product
 from bisect import bisect_left
 from collections import OrderedDict
@@ -59,22 +60,14 @@ def parse_args():
 
     return args
 
-def compare_exhaustive_csv(reference_file, comparison_file, show_pessimistic):
+def compare_exhaustive_csv(reference_file_data, comparison_file_data, show_pessimistic):
 
 
     print "Comparing"
     for input_transitions, reference_scenario in reference_file_data.iteritems():
         comparison_scenario = comparison_file_data[input_transitions]
 
-        assert reference_scenario.output_transition == comparison_scenario.output_transition
-
-        if reference_scenario.delay not in reference_delays:
-            reference_delays[reference_scenario.delay] = 0
-        reference_delays[reference_scenario.delay] += 1
-
-        if comparison_scenario.delay not in comparison_delays:
-            comparison_delays[comparison_scenario.delay] = 0
-        comparison_delays[comparison_scenario.delay] += 1
+        assert reference_scenario.output_transition == comparison_scenario.output_transition, "Missmatched output transitions. Ref: {ref_trans}, Comp: {comp_trans}, Input: {input_trans}".format(ref_trans=reference_scenario.output_transition, comp_trans=comparison_scenario.output_transition, input_trans=input_transitions)
 
         if reference_scenario.delay != comparison_scenario.delay:
             delay_difference = comparison_scenario.delay - reference_scenario.delay
@@ -88,21 +81,17 @@ def print_delay_histogram(transition_data):
     print "delay prob  count"
     print "----- ----- -----"
 
-    delay_counts = {}
-    for input_transitions, scenario_data in transition_data.iteritems():
-        if scenario_data.delay not in delay_counts:
-            delay_counts[scenario_data.delay] = 1
-        else:
-            delay_counts[scenario_data.delay] += 1
+    delay_data = transition_data['delay']
 
-    
-    total_cnt = sum(delay_counts.values())
-
-    for delay, count in delay_counts.iteritems():
+    total_cnt = delay_data.shape[0]
+    for delay, count in delay_data.value_counts(sort=False).iteritems():
         prob = float(count) / total_cnt
         print "{delay:5} {prob:1.3f} {count:5}".format(delay=delay, prob=prob, count=count)
 
 def load_csv(filename):
+    return pd.read_csv(filename)
+
+def load_csv_old(filename):
     transition_data = {}
     with open(filename, 'r') as f:
         reader = csv.DictReader(f)
