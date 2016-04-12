@@ -101,16 +101,16 @@ def main():
         print "Writting CSV"
         with open(args.csv_out, 'w') as f:
             #header
-            header_vals = args.inputs + [args.output] + ['delay', 'exact_prob', 'measured_prob']
+            header_vals = args.inputs + [args.output] + ['delay', 'exact_prob', 'measured_prob', 'sim_time']
             print >>f, ','.join(header_vals)
 
             #Rows
             for key, value in unique_transitions.iteritems():
                 row = [x for x in key]
                 if value:
-                    row += [value[0], str(value[1]), str(1./4**len(args.inputs)), str(value[2]/4**len(args.inputs))]
+                    row += [value[0], str(value[1]), str(1./4**len(args.inputs)), str(value[2]/4**len(args.inputs)), str(value[3])]
                 else:
-                    row += ["", "", str(1./4**len(args.inputs)), str(0)]
+                    row += ["", "", str(1./4**len(args.inputs)), str(0), str(-1)]
                 print >>f, ",".join(row)
 
     #print build_historgram('o_c', trans_delay['o_c'])
@@ -180,9 +180,10 @@ def uniquify_input_transitions(args, cycle_data):
         input_trans = tuple(input_trans)
         output_trans = cycle_trans.output_transition(args.output)
         output_delay = cycle_trans.output_delay(args.output) 
+        sim_time = cycle_trans.launch_edge() 
         if unique_transitions[input_trans] == None:
             #First time this input transition is seen
-            unique_transitions[input_trans] = output_trans, output_delay, 1
+            unique_transitions[input_trans] = output_trans, output_delay, 1, sim_time
         else:
             #Seen again, 
             assert unique_transitions[input_trans][0] == output_trans, "Missmatched output transition for input: " + str(input_trans) + " expected: " + str(unique_transitions[input_trans][0]) + " was: " + str(output_trans) + " at time " + str(cycle_trans.launch_edge())
@@ -190,7 +191,7 @@ def uniquify_input_transitions(args, cycle_data):
 
 
             #unique_transitions[input_trans][2] += 1
-            unique_transitions[input_trans] = (output_trans, output_delay, unique_transitions[input_trans][2] + 1)
+            unique_transitions[input_trans] = (output_trans, output_delay, unique_transitions[input_trans][2] + 1, sim_time)
 
     return unique_transitions
 
