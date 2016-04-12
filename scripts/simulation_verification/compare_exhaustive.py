@@ -20,39 +20,87 @@ class TransitionScenario:
 def main():
     args = parse_args()
 
-    compare_exhaustive_csv(args.csv_file1, args.csv_file2)
+    print "Loading ", args.reference_csv, "..."
+    reference_file_data = load_csv(args.reference_csv)
+
+    comparison_file_data = None
+    if args.comparison_csv:
+        print "Loading ", args.comparison_csv, "..."
+        comparison_file_data = load_csv(args.comparison_csv)
+
+        compare_exhaustive_csv(reference_file_data, comparison_file_data, args.show_pessimistic)
+
+    #Histograms
+    print "Delay Histogram for ", args.reference_csv
+    print_delay_histogram(reference_file_data)
+
+    if comparison_file_data:
+        print
+        print "Delay Histogram for ", args.comparison_csv
+        print_delay_histogram(comparison_file_data)
 
 def parse_args():
     parser = argparse.ArgumentParser()
 
-    parser.add_argument("csv_file1",
+    parser.add_argument("reference_csv",
                         help="First CSV files to compare")
 
-    parser.add_argument("csv_file2",
+    parser.add_argument("comparison_csv",
+                        nargs="?",
+                        default=None,
                         help="Second CSV files to compare")
+
+    parser.add_argument("--show_pessimistic",
+                        default=False,
+                        action="store_true",
+                        help="Print info about pessimisitic differences")
 
     args = parser.parse_args()
 
     return args
 
-def compare_exhaustive_csv(file1, file2):
+def compare_exhaustive_csv(reference_file, comparison_file, show_pessimistic):
 
-    print "Loading ", file1, "..."
-    file1_data = load_csv(file1)
-    print "Loading ", file2, "..."
-    file2_data = load_csv(file2)
 
     print "Comparing"
-    for input_transitions, first_scenario in file1_data.iteritems():
-        second_scenario = file2_data[input_transitions]
+    for input_transitions, reference_scenario in reference_file_data.iteritems():
+        comparison_scenario = comparison_file_data[input_transitions]
 
-        assert first_scenario.output_transition == second_scenario.output_transition
+        assert reference_scenario.output_transition == comparison_scenario.output_transition
 
-        if first_scenario.delay != second_scenario.delay:
-            delay_difference = first_scenario.delay - second_scenario.delay
+        if reference_scenario.delay not in reference_delays:
+            reference_delays[reference_scenario.delay] = 0
+        reference_delays[reference_scenario.delay] += 1
 
-            print "Delay diff: {diff:+3.2f} for scenario {input_trans} -> {output_trans}".format(diff=delay_difference, input_trans=input_transitions, output_trans=first_scenario.output_transition)
+        if comparison_scenario.delay not in comparison_delays:
+            comparison_delays[comparison_scenario.delay] = 0
+        comparison_delays[comparison_scenario.delay] += 1
 
+        if reference_scenario.delay != comparison_scenario.delay:
+            delay_difference = comparison_scenario.delay - reference_scenario.delay
+
+            if delay_difference < 0 or show_pessimistic:
+                print "Delay diff: {diff:+3.2f} for scenario {input_trans} -> {output_trans}".format(diff=delay_difference, input_trans=input_transitions, output_trans=reference_scenario.output_transition)
+
+
+
+def print_delay_histogram(transition_data):
+    print "delay prob  count"
+    print "----- ----- -----"
+
+    delay_counts = {}
+    for input_transitions, scenario_data in transition_data.iteritems():
+        if scenario_data.delay not in delay_counts:
+            delay_counts[scenario_data.delay] = 1
+        else:
+            delay_counts[scenario_data.delay] += 1
+
+    
+    total_cnt = sum(delay_counts.values())
+
+    for delay, count in delay_counts.iteritems():
+        prob = float(count) / total_cnt
+        print "{delay:5} {prob:1.3f} {count:5}".format(delay=delay, prob=prob, count=count)
 
 def load_csv(filename):
     transition_data = {}
