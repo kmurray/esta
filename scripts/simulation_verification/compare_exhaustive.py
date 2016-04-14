@@ -1,6 +1,7 @@
 #!/usr/bin/env python
 import argparse
 import pandas as pd
+import numpy as np
 from itertools import product
 from bisect import bisect_left
 from collections import OrderedDict
@@ -22,23 +23,24 @@ def main():
     args = parse_args()
 
     print "Loading ", args.reference_csv, "..."
-    reference_file_data = load_csv(args.reference_csv)
+    reference_data = load_csv(args.reference_csv)
 
-    comparison_file_data = None
+    comparison_data = None
     if args.comparison_csv:
         print "Loading ", args.comparison_csv, "..."
-        comparison_file_data = load_csv(args.comparison_csv)
+        comparison_data = load_csv(args.comparison_csv)
 
-        compare_exhaustive_csv(reference_file_data, comparison_file_data, args.show_pessimistic)
+        print "Comparing ..."
+        compare_exhaustive_csv(reference_data, comparison_data, args.show_pessimistic)
 
     #Histograms
     print "Delay Histogram for ", args.reference_csv
-    print_delay_histogram(reference_file_data)
+    print_delay_histogram(reference_data)
 
-    if comparison_file_data:
+    if args.comparison_csv:
         print
         print "Delay Histogram for ", args.comparison_csv
-        print_delay_histogram(comparison_file_data)
+        print_delay_histogram(comparison_data)
 
 def parse_args():
     parser = argparse.ArgumentParser()
@@ -60,22 +62,46 @@ def parse_args():
 
     return args
 
-def compare_exhaustive_csv(reference_file_data, comparison_file_data, show_pessimistic):
+def compare_exhaustive_csv(ref_data, cmp_data, show_pessimistic):
+    assert ref_data.shape == cmp_data.shape
+    #Identify the output column
+    ref_col_names = ref_data.columns.values.tolist()
+    cmp_col_names = cmp_data.columns.values.tolist()
+    ref_output_col_name = None
+    ref_input_col_names = None
+    cmp_output_col_name = None
+    cmp_input_col_names = None
+    for i in xrange(len(ref_col_names)):
+        ref_col_name = ref_col_names[i]
+        cmp_col_name = cmp_col_names[i]
+        if ref_col_name == 'delay':
+            assert cmp_col_name == ref_col_name
+            ref_output_col_name = ref_col_names[i-1]
+            ref_input_col_names = ref_col_names[:i-2]
+            cmp_output_col_name = cmp_col_names[i-1]
+            cmp_input_col_names = cmp_col_names[:i-2]
 
+    if not np.array_equal(ref_data.loc[:,ref_input_col_names].values, cmp_data.loc[:,cmp_input_col_names].values):
+        assert False, "Mismtached input transitions"
+        
+    if not np.array_equal(ref_data.loc[:,ref_output_col_name].values, cmp_data.loc[:,cmp_output_col_name].values):
+        assert False, "Mismtached outputput transitions"
 
-    print "Comparing"
-    for input_transitions, reference_scenario in reference_file_data.iteritems():
-        comparison_scenario = comparison_file_data[input_transitions]
+    print "Comparing delays"
+    delay_difference = cmp_data['delay'] - ref_data['delay']
 
-        assert reference_scenario.output_transition == comparison_scenario.output_transition, "Missmatched output transitions. Ref: {ref_trans}, Comp: {comp_trans}, Input: {input_trans}".format(ref_trans=reference_scenario.output_transition, comp_trans=comparison_scenario.output_transition, input_trans=input_transitions)
+    #Filter out exact matches
+    delay_difference = delay_difference[delay_difference != 0]
 
-        if reference_scenario.delay != comparison_scenario.delay:
-            delay_difference = comparison_scenario.delay - reference_scenario.delay
+    if not show_pessimistic:
+        #Filter out safely pessimsitic values
+        delay_difference = delay_difference[delay_difference < 0]
 
-            if delay_difference < 0 or show_pessimistic:
-                print "Delay diff: {diff:+3.2f} for scenario {input_trans} -> {output_trans}".format(diff=delay_difference, input_trans=input_transitions, output_trans=reference_scenario.output_transition)
+    for idx, val in delay_difference.iteritems():
 
-
+        input_trans = ref_data.loc[idx,ref_input_col_names]
+        output_trans = ref_data.loc[idx,ref_output_col_name]
+        print "Delay diff: {diff:+3.2f} for scenario {input_trans} -> {output_trans}".format(diff=val, input_trans=list(input_trans), output_trans=output_trans)
 
 def print_delay_histogram(transition_data):
     print "delay prob  count"
