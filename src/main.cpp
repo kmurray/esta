@@ -261,7 +261,7 @@ int main(int argc, char** argv) {
 
     auto set_edge_delays = tg_builder.specified_edge_delays(); 
 
-    const auto& lo_dep_stats = tg_builder.get_logical_output_dependancy_stats();
+    //const auto& lo_dep_stats = tg_builder.get_logical_output_dependancy_stats();
 
     g_action_timer.pop_timer("Building Timing Graph");
     cout << "\n";
@@ -284,7 +284,7 @@ int main(int argc, char** argv) {
 
     if(options.get_as<bool>("characterize")) {
         
-        for(size_t node_id = 0; node_id < timing_graph.num_nodes(); ++node_id) {
+        for(NodeId node_id = 0; node_id < timing_graph.num_nodes(); ++node_id) {
             if(timing_graph.node_type(node_id) == TN_Type::PRIMITIVE_OPIN) {
                 BDD f = timing_graph.node_func(node_id);
                 
