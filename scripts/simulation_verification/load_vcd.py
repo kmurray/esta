@@ -1,6 +1,6 @@
 #!/usr/bin/env python
 import argparse
-from Verilog_VCD import parse_vcd
+from Verilog_VCD import parse_vcd, list_sigs
 
 from itertools import product
 from bisect import bisect_left
@@ -19,25 +19,9 @@ class TransType:
     High = "H"
     Low = "L"
 
-class Transition:
-
-    def __init__(self, time, trans):
-        self._trans = trans
-        self._time = time
-
-    def type(self):
-        return self._trans
-
-    def time(self):
-        return self._time
-
-    def __str__(self):
-        return self.__repr__()
-
-    def __repr__(self):
-        return "Trans: {trans} Time: {time}".format(trans=self._trans, time=self._time)
-
 class CycleTransitions(object):
+    __slots__ = ['launch_edge_', 'input_transitions_', 'output_transitions_', 'output_delays_']
+
     def __init__(self, launch_edge, input_transitions, output_transitions, output_delays):
         self.launch_edge_ = launch_edge
         self.input_transitions_ = input_transitions
@@ -70,7 +54,7 @@ def main():
     args = parse_args()
 
     print "Parsing VCD"
-    vcd = parse_vcd(args.vcd_file)
+    vcd = load_vcd(args)
 
     print "Extracting Cycle data"
     cycle_data = vcd_to_cycle_data(vcd, clock=args.clock, inputs=args.inputs, outputs=[args.output], exhaustive=args.exhaustive)
@@ -145,6 +129,22 @@ def parse_args():
     args = parser.parse_args()
 
     return args
+
+def load_vcd(args):
+    #Determine the signals we want to keep
+    sigs = list_sigs(args.vcd_file)
+
+    base_sig_names = args.inputs + [args.clock] + [args.output]
+
+    signal_list = []
+    for sig in sigs:
+        for base_sig_name in base_sig_names:
+            if base_sig_name in sig:
+                signal_list.append(sig)
+
+    vcd = parse_vcd(args.vcd_file, siglist=signal_list)
+
+    return vcd
 
 def build_historgram(net, trans_delay):
     count = {TransType.Rise: {}, TransType.Fall: {}, TransType.High: {}, TransType.Low: {}}
