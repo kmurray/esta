@@ -2,7 +2,7 @@
 #include <sstream>
 #include "util.hpp"
 
-#define TAG_DEBUG
+/*#define TAG_DEBUG*/
 
 extern EtaStats g_eta_stats;
 
