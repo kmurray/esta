@@ -33,6 +33,8 @@
 #include "load_delay_model.hpp"
 //#include "SharpSatDecompBddEvaluator.hpp"
 
+#include "cell_characterize.hpp"
+
 using std::cout;
 using std::cerr;
 using std::endl;
@@ -97,6 +99,14 @@ optparse::Values parse_args(int argc, char** argv) {
           .set_default("false")
           .help("Print the timing graph. Default %default")
           ;
+
+
+    parser.add_option("--characterize")
+          .action("store_true")
+          .set_default("false")
+          .help("Characterize all models in the blif file and exit. Default %default")
+          ;
+
     parser.add_option("--write_graph_dot")
           .action("store_true")
           .set_default("false")
@@ -272,6 +282,28 @@ int main(int argc, char** argv) {
         print_levelization(timing_graph);
     }
 
+    if(options.get_as<bool>("characterize")) {
+        
+        for(size_t node_id = 0; node_id < timing_graph.num_nodes(); ++node_id) {
+            if(timing_graph.node_type(node_id) == TN_Type::PRIMITIVE_OPIN) {
+                BDD f = timing_graph.node_func(node_id);
+                
+                auto vals = identify_active_transition_arcs(f);
+                for(size_t i = 0; i < vals.size(); ++i) {
+                    for(auto trans_tuple : vals[i]) {
+                        TransitionType input_trans = std::get<0>(trans_tuple);
+                        TransitionType output_trans = std::get<1>(trans_tuple);
+
+                        cout << "node: " << node_id << " input " << i << " " << input_trans << " -> " << output_trans << endl;
+                    }
+                }
+            }
+        }
+
+        return 0;
+    }
+
+
     if(options.get_as<bool>("write_graph_dot")) {
         std::ofstream outfile("timing_graph.dot");
         write_timing_graph_dot(outfile, timing_graph);
@@ -318,7 +350,7 @@ int main(int argc, char** argv) {
     auto sharp_sat_eval = std::make_shared<SharpSatType>(timing_graph, analyzer, nvars, options.get_as<int>("approx_threshold"), options.get_as<float>("approx_ratio"), options.get_as<float>("approx_quality"));
 
 
-#if 0
+#if 1
     g_action_timer.push_timer("Raw tags");
 
     for(LevelId level_id = 0; level_id < timing_graph.num_levels(); level_id++) {
@@ -330,20 +362,13 @@ int main(int argc, char** argv) {
     g_action_timer.pop_timer("Raw tags");
 #endif
 
-    //Try to keep outputs with common dependancies together
-    //hopefully will maximize cache re-use
-    std::vector<NodeId> sorted_lo_nodes;
-    for(const auto& kv : lo_dep_stats) {
-        const std::vector<NodeId>& nodes = kv.second;
-        sorted_lo_nodes.insert(sorted_lo_nodes.end(), nodes.begin(), nodes.end());
-    }
-    std::reverse(sorted_lo_nodes.begin(), sorted_lo_nodes.end());
-
+#if 0
     size_t nodes_processed = 0;
-    for(auto node_id : sorted_lo_nodes) {
+    auto po_nodes = timing_graph.primary_outputs();
+    for(auto node_id : po_nodes) {
         std::string action_name = "Node " + to_string(node_id) + " eval";
         g_action_timer.push_timer(action_name);
-        float progress = (float) nodes_processed / sorted_lo_nodes.size();
+        float progress = (float) nodes_processed / po_nodes.size();
         print_node_tags(timing_graph, analyzer, sharp_sat_eval, node_id, nvars, nassigns, progress, print_sat_cnt);
 
         //Clear the cache - this should shrink the size of CUDDs bdds
@@ -353,6 +378,7 @@ int main(int argc, char** argv) {
 
         g_action_timer.pop_timer(action_name);
     }
+#endif
 
 
     if(options.is_set("csv_base")) {
