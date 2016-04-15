@@ -35,6 +35,12 @@ class SharpSatBddEvaluator : public SharpSatEvaluator<Analyzer> {
             }
         }
 
+        double count_sat_fraction(const ExtTimingTag* tag, NodeId node_id) override {
+            BDD f = build_bdd_xfunc(tag, node_id, 0);
+
+            return bdd_sharpsat_fraction(f);
+        }
+
         count_support count_sat(const ExtTimingTag* tag, NodeId node_id) override {
             BDD f = build_bdd_xfunc(tag, node_id, 0);
 
@@ -149,16 +155,19 @@ class SharpSatBddEvaluator : public SharpSatEvaluator<Analyzer> {
 
     protected:
 
+        double bdd_sharpsat_fraction(BDD f) {
+            double dbl_count_custom_frac = CountMintermFraction(f.getNode());
+            return dbl_count_custom_frac;
+        }
+
         real_t bdd_sharpsat(BDD f) {
 
-            double dbl_count_cudd = Cudd_CountMinterm(f.manager(), f.getNode(), this->nvars_);
-            double dbl_count_cudd_frac = dbl_count_cudd / pow(2, this->nvars_);
 
-            double dbl_count_custom_frac = CountMintermFraction(f.getNode());
+            //double dbl_count_cudd = Cudd_CountMinterm(f.manager(), f.getNode(), this->nvars_);
+            //double dbl_count_cudd_frac = dbl_count_cudd / pow(2, this->nvars_);
+            //assert(dbl_count_cudd_frac == dbl_count_custom_frac);
 
-            assert(dbl_count_cudd_frac == dbl_count_custom_frac);
-
-            real_t f_count_dbl = dbl_count_custom_frac * pow(2, this->nvars_);
+            real_t f_count_dbl = bdd_sharpsat_fraction(f) * pow(2, this->nvars_);
 
             return f_count_dbl;
         }

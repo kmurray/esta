@@ -38,6 +38,10 @@ class SharpSatEvaluator {
         };
 
         virtual count_support count_sat(const ExtTimingTag* tag, NodeId node_id) = 0;
+        virtual double count_sat_fraction(const ExtTimingTag* tag, NodeId node_id) {
+            auto val = count_sat(tag, node_id).count / pow(2., nvars_);    
+            return static_cast<double>(val);
+        }
         virtual void reset() {}
 
     protected:

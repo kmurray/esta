@@ -58,6 +58,7 @@ EtaStats g_eta_stats;
 optparse::Values parse_args(int argc, char** argv);
 //void print_node_tags(const TimingGraph& tg, std::shared_ptr<AnalyzerType> analyzer, std::shared_ptr<SharpSatType> sharp_sat_eval, NodeId node_id, double nvars, double nassigns, float progress, bool print_sat_cnt, bool print_switch);
 void print_node_tags(const TimingGraph& tg, std::shared_ptr<AnalyzerType> analyzer, std::shared_ptr<SharpSatType> sharp_sat_eval, NodeId node_id, int nvars, real_t nassigns, float progress, bool print_sat_cnt);
+void print_node_histogram(const TimingGraph& tg, std::shared_ptr<AnalyzerType> analyzer, std::shared_ptr<SharpSatType> sharp_sat_eval, NodeId node_id, float progress);
 void dump_exhaustive_csv(std::ostream& os, const TimingGraph& tg, std::shared_ptr<AnalyzerType> analyzer, std::shared_ptr<SharpSatType> sharp_sat_eval, NodeId node_id, int nvars);
 std::vector<std::vector<int>> get_cubes(BDD f, int trans_var_start_idx);
 std::vector<std::vector<int>> get_minterms(BDD f, int nvars);
@@ -350,7 +351,7 @@ int main(int argc, char** argv) {
     auto sharp_sat_eval = std::make_shared<SharpSatType>(timing_graph, analyzer, nvars, options.get_as<int>("approx_threshold"), options.get_as<float>("approx_ratio"), options.get_as<float>("approx_quality"));
 
 
-#if 1
+#if 0
     g_action_timer.push_timer("Raw tags");
 
     for(LevelId level_id = 0; level_id < timing_graph.num_levels(); level_id++) {
@@ -362,6 +363,19 @@ int main(int argc, char** argv) {
     g_action_timer.pop_timer("Raw tags");
 #endif
 
+#if 1
+
+    g_action_timer.push_timer("Raw tag histograms");
+
+    for(LevelId level_id = 0; level_id < timing_graph.num_levels(); level_id++) {
+        for(auto node_id : timing_graph.level(level_id)) {
+            print_node_histogram(timing_graph, analyzer, sharp_sat_eval, node_id, 0);
+        }
+    }
+
+    g_action_timer.pop_timer("Raw tag histograms");
+
+#endif
 #if 0
     size_t nodes_processed = 0;
     auto po_nodes = timing_graph.primary_outputs();
@@ -521,6 +535,39 @@ void print_node_tags(const TimingGraph& tg, std::shared_ptr<AnalyzerType> analyz
             cout << "\n";
             assert(total_sat_cnt == nassigns);
         }
+    }
+}
+
+void print_node_histogram(const TimingGraph& tg, std::shared_ptr<AnalyzerType> analyzer, std::shared_ptr<SharpSatType> sharp_sat_eval, NodeId node_id, float progress) {
+
+    cout << "Node: " << node_id << " " << tg.node_type(node_id) << " (" << progress*100 << "%)\n";
+
+    auto& raw_data_tags = analyzer->setup_data_tags(node_id);
+
+    //Sort the tags so they come out in order
+    std::vector<ExtTimingTag*> sorted_data_tags(raw_data_tags.begin(), raw_data_tags.end());
+    auto tag_sorter = [](const ExtTimingTag* lhs, const ExtTimingTag* rhs) {
+        return lhs->arr_time().value() < rhs->arr_time().value();
+    };
+    std::sort(sorted_data_tags.begin(), sorted_data_tags.end(), tag_sorter);
+
+    std::map<double,double> delay_prob_histo;
+    for(auto tag : sorted_data_tags) {
+
+        auto delay = tag->arr_time().value();
+        auto switch_prob = sharp_sat_eval->count_sat_fraction(tag, node_id);
+
+        delay_prob_histo[delay] += switch_prob;
+    }
+
+    cout << "\tDelay Prob\n";
+    cout << "\t----- ----\n";
+    for(auto kv : delay_prob_histo) {
+
+        auto delay = kv.first;
+        auto switch_prob = kv.second;
+
+        std::cout << "\t" << std::setw(5) << delay << " " << switch_prob << "\n";
     }
 }
 
