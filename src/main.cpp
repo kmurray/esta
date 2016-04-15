@@ -402,9 +402,13 @@ int main(int argc, char** argv) {
         if(options.is_set("csv_node")) {
             NodeId csv_dump_node_id = options.get_as<NodeId>("csv_node");
 
+            g_action_timer.push_timer("Exhaustive CSV");
+
             std::ofstream csv_os(csv_filename);
 
             dump_exhaustive_csv(csv_os, timing_graph, analyzer, sharp_sat_eval, csv_dump_node_id, nvars);
+
+            g_action_timer.pop_timer("Exhaustive CSV");
 
         }
     }
@@ -582,8 +586,6 @@ void dump_exhaustive_csv(std::ostream& os, const TimingGraph& tg, std::shared_pt
 
         auto bdd = sharp_sat_eval->build_bdd_xfunc(tag, node_id);
 
-        std::cout << std::endl;
-
         auto input_transitions = get_transitions(bdd, nvars);
 
         assert(input_transitions.size() == sat_cnt);
@@ -591,10 +593,6 @@ void dump_exhaustive_csv(std::ostream& os, const TimingGraph& tg, std::shared_pt
         for(auto input_case : input_transitions) {
             assert(input_case.size() == (size_t) nvars / 2);
             auto tuple = std::make_tuple(input_case, tag->trans_type(), tag->arr_time().value());
-            //for(auto trans : std::get<0>(tuple)) {
-                //std::cout << trans << " ";
-            //}
-            //std::cout << "-> " << std::get<1>(tuple) << ": " << std::get<2>(tuple) << std::endl;
             exhaustive_values.push_back(tuple);
         }
     }
