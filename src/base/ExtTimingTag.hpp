@@ -164,10 +164,11 @@ inline ExtTimingTag::ExtTimingTag(const Time& arr_time_val, const Time& req_time
     {}
 
 inline void ExtTimingTag::update_arr(const Time new_arr, const ExtTimingTag* base_tag) {
-    assert(clock_domain() == base_tag->clock_domain()); //Domain must be the same
-    set_arr_time(new_arr);
-    set_launch_node(base_tag->launch_node());
-
+    if(base_tag->clock_domain() != INVALID_CLOCK_DOMAIN) {
+        assert(clock_domain() == base_tag->clock_domain()); //Domain must be the same
+        set_arr_time(new_arr);
+        set_launch_node(base_tag->launch_node());
+    }
 }
 
 inline void ExtTimingTag::max_arr(const Time new_arr, const ExtTimingTag* base_tag) {

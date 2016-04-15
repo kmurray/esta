@@ -67,9 +67,9 @@ class ExtTimingTags {
 inline ExtTimingTags::iterator ExtTimingTags::add_tag(Tag* tag) {
     //Don't add invalid clock domains
     //Some sources like constant generators may yeild illegal clock domains
-    if(tag->clock_domain() == INVALID_CLOCK_DOMAIN) {
-        return end();;
-    }
+    //if(tag->clock_domain() == INVALID_CLOCK_DOMAIN) {
+        //return end();;
+    //}
 
     tags_.push_back(tag);
 

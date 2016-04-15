@@ -98,6 +98,9 @@ class SharpSatBddEvaluator : public SharpSatEvaluator<Analyzer> {
                     /*std::cout << "Node " << node_id << " Base";*/
                     f = generate_pi_switch_func(node_id, tag->trans_type());
                     /*std::cout << " xfunc: " << f << "\n";*/
+                } else if(node_type == TN_Type::CONSTANT_GEN_SOURCE) {
+                    //Constant generator always satisifes any input combination
+                    f = g_cudd.bddOne(); 
                 } else {
                     f = g_cudd.bddZero();
                     int scenario_cnt = 0;

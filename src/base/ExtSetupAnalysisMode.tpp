@@ -48,6 +48,20 @@ void ExtSetupAnalysisMode<BaseAnalysisMode,Tags>::pre_traverse_node(const Timing
         //since they do not effect they dynamic timing behaviour of the
         //system
 
+        //Determine if this is a static high, or static low constant generator
+        BDD node_func = tg.node_func(node_id);
+        TransitionType trans;
+        if(node_func.IsOne()) {
+            trans = TransitionType::HIGH;
+        } else {
+            assert(node_func.IsZero());
+            trans = TransitionType::LOW;
+        }
+        assert(trans == TransitionType::HIGH || trans == TransitionType::LOW);
+
+        Tag* constant_tag = new Tag(Time(0.), Time(NAN), tg.node_clock_domain(node_id), node_id, trans);
+        setup_data_tags_[node_id].add_tag(constant_tag);
+
     } else if(node_type == TN_Type::CLOCK_SOURCE) {
         ASSERT_MSG(setup_clock_tags_[node_id].num_tags() == 0, "Clock source already has clock tags");
 
