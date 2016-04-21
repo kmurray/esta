@@ -170,12 +170,22 @@ optparse::Values parse_args(int argc, char** argv) {
                 "1.0 only an exact approximation, and 1.5 a 50% over approximation). Default %default")
           ;
 
-    std::vector<std::string> print_tags_choices = {"po", "pi", "all", "none"};
-    parser.add_option("-p", "--print_tags")
-          .dest("print_tags")
-          .choices(print_tags_choices.begin(), print_tags_choices.end())
+    //Sets of possible node choices
+    std::vector<std::string> node_choices = {"po", "pi", "all", "none"};
+
+    parser.add_option("-p", "--print_histograms")
+          .dest("print_histograms")
+          .choices(node_choices.begin(), node_choices.end())
           .metavar("VALUE")
           .set_default("po")
+          .help("What node delay histograms to print. Must be one of {'po', 'pi', 'all', 'none'} (primary inputs, primary outputs, all nodes). Default: %default")
+          ;
+
+    parser.add_option("-p", "--print_tags")
+          .dest("print_tags")
+          .choices(node_choices.begin(), node_choices.end())
+          .metavar("VALUE")
+          .set_default("none")
           .help("What node tags to print. Must be one of {'po', 'pi', 'all', 'none'} (primary inputs, primary outputs, all nodes). Default: %default")
           ;
 
@@ -239,11 +249,13 @@ int main(int argc, char** argv) {
     
     g_action_timer.push_timer("Load SDF");
 
-    sdfparse::Loader sdf_loader;
+    if(options.is_set("sdf_file")) {
+        sdfparse::Loader sdf_loader;
 
-    sdf_loader.load(options.get_as<string>("sdf_file"));
+        sdf_loader.load(options.get_as<string>("sdf_file"));
 
-    auto sdf_data = sdf_loader.get_delayfile();
+        auto sdf_data = sdf_loader.get_delayfile();
+    }
 
     g_action_timer.pop_timer("Load SDF");
 
@@ -359,7 +371,6 @@ int main(int argc, char** argv) {
     g_action_timer.push_timer("Output Results");
 
 
-    //bool print_sat_cnt = true;
     int nvars = 2*timing_graph.logical_inputs().size();
     real_t nassigns = pow(2,(real_t) nvars);
     cout << "Num Logical Inputs: " << timing_graph.logical_inputs().size() << " Num BDD Vars: " << nvars << " Num Possible Assignments: " << nassigns << endl;
@@ -368,50 +379,51 @@ int main(int argc, char** argv) {
     auto sharp_sat_eval = std::make_shared<SharpSatType>(timing_graph, analyzer, nvars, options.get_as<int>("approx_threshold"), options.get_as<float>("approx_ratio"), options.get_as<float>("approx_quality"));
 
 
-#if 0
-    g_action_timer.push_timer("Raw tags");
+    if(options.get_as<string>("print_tags") != "none") {
+        g_action_timer.push_timer("Output tags");
 
-    for(LevelId level_id = 0; level_id < timing_graph.num_levels(); level_id++) {
-        for(auto node_id : timing_graph.level(level_id)) {
-            print_node_tags(timing_graph, analyzer, sharp_sat_eval, node_id, nvars, nassigns, 0 , print_sat_cnt);
+        if(options.get_as<string>("print_tags") == "pi") {
+            for(auto node_id : timing_graph.primary_inputs()) {
+                print_node_tags(timing_graph, analyzer, sharp_sat_eval, node_id, nvars, nassigns, 0, true);
+            }
+        } else if(options.get_as<string>("print_tags") == "po") {
+            for(auto node_id : timing_graph.primary_outputs()) {
+                print_node_tags(timing_graph, analyzer, sharp_sat_eval, node_id, nvars, nassigns, 0, true);
+            }
+        } else if(options.get_as<string>("print_tags") == "all") {
+            for(LevelId level_id = 0; level_id < timing_graph.num_levels(); level_id++) {
+                for(auto node_id : timing_graph.level(level_id)) {
+                print_node_tags(timing_graph, analyzer, sharp_sat_eval, node_id, nvars, nassigns, 0, true);
+                }
+            }
+        } else {
+            assert(0);
         }
+        g_action_timer.pop_timer("Output tags"); 
     }
 
-    g_action_timer.pop_timer("Raw tags");
-#endif
+    if(options.get_as<string>("print_histogram") != "none") {
+        g_action_timer.push_timer("Output tag histograms");
 
-#if 1
-
-    g_action_timer.push_timer("Raw tag histograms");
-
-    for(LevelId level_id = 0; level_id < timing_graph.num_levels(); level_id++) {
-        for(auto node_id : timing_graph.level(level_id)) {
-            print_node_histogram(timing_graph, analyzer, sharp_sat_eval, node_id, 0);
+        if(options.get_as<string>("print_histograms") == "pi") {
+            for(auto node_id : timing_graph.primary_inputs()) {
+                print_node_histogram(timing_graph, analyzer, sharp_sat_eval, node_id, 0);
+            }
+        } else if(options.get_as<string>("print_histograms") == "po") {
+            for(auto node_id : timing_graph.primary_outputs()) {
+                print_node_histogram(timing_graph, analyzer, sharp_sat_eval, node_id, 0);
+            }
+        } else if(options.get_as<string>("print_histograms") == "all") {
+            for(LevelId level_id = 0; level_id < timing_graph.num_levels(); level_id++) {
+                for(auto node_id : timing_graph.level(level_id)) {
+                    print_node_histogram(timing_graph, analyzer, sharp_sat_eval, node_id, 0);
+                }
+            }
+        } else {
+            assert(0);
         }
+        g_action_timer.pop_timer("Output tag histograms"); 
     }
-
-    g_action_timer.pop_timer("Raw tag histograms");
-
-#endif
-
-#if 0
-    size_t nodes_processed = 0;
-    auto po_nodes = timing_graph.primary_outputs();
-    for(auto node_id : po_nodes) {
-        std::string action_name = "Node " + to_string(node_id) + " eval";
-        g_action_timer.push_timer(action_name);
-        float progress = (float) nodes_processed / po_nodes.size();
-        print_node_tags(timing_graph, analyzer, sharp_sat_eval, node_id, nvars, nassigns, progress, print_sat_cnt);
-
-        //Clear the cache - this should shrink the size of CUDDs bdds
-        sharp_sat_eval->reset();
-
-        nodes_processed++;
-
-        g_action_timer.pop_timer(action_name);
-    }
-#endif
-
 
     if(options.is_set("csv_base")) {
         std::string csv_filename = options.get_as<std::string>("csv_base") + ".csv";
@@ -434,54 +446,6 @@ int main(int argc, char** argv) {
     
 
 
-/*
- *    bool print_switch = options.get_as<bool>("print_tag_switch");
- *
- *    if(options.get_as<string>("print_tags") == "pi") {
- *        print_tags(timing_graph, analyzer, print_switch,
- *                    [] (TimingGraph& tg, NodeId node_id) {
- *                        return tg.num_node_in_edges(node_id) == 0; 
- *                    }
- *                );
- *    } else if(options.get_as<string>("print_tags") == "po") {
- *        print_tags(timing_graph, analyzer, print_switch,
- *                    [](TimingGraph& tg, NodeId node_id) {
- *                        return tg.num_node_out_edges(node_id) == 0; 
- *                    }
- *                );
- *    } else if(options.get_as<string>("print_tags") == "all") {
- *        print_tags(timing_graph, analyzer, print_switch,
- *                    [](TimingGraph& tg, NodeId node_id) {
- *                        return true; 
- *                    }
- *                );
- *    } else if(options.get_as<string>("print_tags") == "none") {
- *        //pass
- *    } else {
- *        assert(0);
- *    }
- */
-
-    /*
-     *std::cout << "\n";
-     *std::cout << "Worst Arrival:\n";
-     *ExtTimingTags worst_tags;
-     *auto nvars = timing_graph.logical_inputs().size();
-     *auto nassigns = pow(2,2*nvars); //4 types of transitions
-     *for(auto node_id : timing_graph.primary_outputs()) {
-     *    for(const auto& tag : analyzer->setup_data_tags(node_id)) {
-     *        auto new_tag = ExtTimingTag(tag);
-     *        new_tag.set_next(nullptr);
-     *        worst_tags.max_arr(new_tag);
-     *    }
-     *}
-     *for(const auto& tag : worst_tags) {
-     *    double sat_cnt = tag.switch_func().CountMinterm(2*nvars);
-     *    double switch_prob = sat_cnt / nassigns;
-     *    cout << "\t" << tag;
-     *    cout << ", #SAT: " << sat_cnt << " (" << switch_prob << ")\n";
-     *}
-     */
 
     cout << "\n";
     cout << "BDD Stats after analysis:\n";
@@ -494,12 +458,14 @@ int main(int argc, char** argv) {
     cout << "\treorder time (s): " << reorder_time_sec << " (" << reorder_time_sec / g_action_timer.elapsed("ETA Application") << " total)\n";
     cout << "\n";
 
+#if 0
     cout << "Switch Func Approx Stats:\n";
     cout << "\tApprox Attempts  : " << g_eta_stats.approx_attempts << "\n";
     cout << "\tApprox Accepted  : " << g_eta_stats.approx_accepted << " (" << (float) g_eta_stats.approx_accepted / g_eta_stats.approx_attempts << ")\n";
     cout << "\tApprox Time      : " << g_eta_stats.approx_time << " (" << g_eta_stats.approx_time / g_action_timer.elapsed("ETA Application") << " total)\n";
     cout << "\tApprox Eval Time : " << g_eta_stats.approx_eval_time << " (" << g_eta_stats.approx_eval_time / g_action_timer.elapsed("ETA Application") << " total)\n";
     cout << "\n";
+#endif
 
 
     if(options.get_as<bool>("show_bdd_stats")) {
