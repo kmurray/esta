@@ -184,6 +184,17 @@ void BlifTimingGraphBuilder::create_names(TimingGraph& tg, const BlifNames* name
      *                             /
      *       PRIMTIVE_IPIN --------
      */
+
+    //Skip disconnected .names
+    assert(names->ports.size() > 0);
+
+    const BlifPort* output_port = names->ports[names->ports.size()-1];
+
+    if(names->ports.size() == 1 && output_port->port_conn == nullptr) {
+        //This is a floating .names with no inputs or outputs connected
+        //Do not generate any nodes for it.
+        return;
+    }
      
     //Build the nodes
     std::vector<NodeId> input_ids;
@@ -200,11 +211,11 @@ void BlifTimingGraphBuilder::create_names(TimingGraph& tg, const BlifNames* name
         port_to_node_lookup_[input_port] = node_id;
     }
 
-    const BlifPort* output_port = names->ports[names->ports.size()-1];
     NodeId output_node_id;
     if(input_ids.size() == 0) {
-        //Constant generator
+        //Constant generator, with connected output
         output_node_id = tg.add_node(TN_Type::CONSTANT_GEN_SOURCE, INVALID_CLOCK_DOMAIN, false);
+        std::cout << "Creating CONST_GEN_SOURCE node " << output_node_id << " outport " << *output_port->name << std::endl;
     } else {
         //Regular combinational primitive
         output_node_id = tg.add_node(TN_Type::PRIMITIVE_OPIN, INVALID_CLOCK_DOMAIN, false);
@@ -442,6 +453,7 @@ void BlifTimingGraphBuilder::verify(const TimingGraph& tg) {
 
     for(NodeId node_id : tg.primary_outputs()) {
         assert(tg.num_node_out_edges(node_id) == 0);
+        assert(tg.num_node_in_edges(node_id) > 0);
 
         auto node_type = tg.node_type(node_id);
         assert(node_type == TN_Type::OUTPAD_SINK 

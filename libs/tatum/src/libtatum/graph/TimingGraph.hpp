@@ -29,6 +29,8 @@ enum class TN_Type {
 	CONSTANT_GEN_SOURCE, //Source of a constant logic 1 or 0
     UNKOWN //Unrecognized type, if encountered this is almost certainly an error
 };
+inline bool is_source(const TN_Type t) { return (t == TN_Type::INPAD_SOURCE || t == TN_Type::FF_SOURCE || t == TN_Type::CONSTANT_GEN_SOURCE); }
+inline bool is_sink(const TN_Type t) { return (t == TN_Type::FF_SINK || t == TN_Type::OUTPAD_SINK); }
 inline bool is_ipin(const TN_Type t) { return (t == TN_Type::OUTPAD_IPIN || t == TN_Type::PRIMITIVE_IPIN || t == TN_Type::FF_IPIN); }
 inline bool is_opin(const TN_Type t) { return (t == TN_Type::INPAD_OPIN || t == TN_Type::PRIMITIVE_OPIN || t == TN_Type::FF_OPIN || t == TN_Type::CLOCK_OPIN); }
 
@@ -202,7 +204,7 @@ class TimingGraph {
         const std::vector<NodeId>& primary_outputs() const { return primary_outputs_; }
 
         ///\pre The graph must be levelized
-        ///\returns The logical inputs of the graph (i.e. INPAD_SOURCEs and FF_SOURCEs)
+        ///\returns The logical inputs of the graph (i.e. INPAD_SOURCEs, FF_SOURCEs, CONSTANT_GEN_SINKS)
         ///\warning The logical inputs may be on different levels of the graph
         ///\see levelize()
         const std::vector<NodeId>& logical_inputs() const { return logical_inputs_; }

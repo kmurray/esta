@@ -110,11 +110,11 @@ void TimingGraph::levelize() {
         }
 
 
-        if(node_type_val == TN_Type::INPAD_SOURCE || node_type_val == TN_Type::FF_SOURCE) {
+        if(is_source(node_type_val)) {
             logical_inputs_.push_back(node_id);
         }
 
-        if(node_type_val == TN_Type::OUTPAD_SINK || node_type_val == TN_Type::FF_SINK) {
+        if(is_sink(node_type_val)) {
             logical_outputs_.push_back(node_id);
         }
                  

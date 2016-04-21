@@ -30,6 +30,8 @@
 #include "SharpSatEvaluator.hpp"
 #include "SharpSatBddEvaluator.hpp"
 
+#include "sdfparse.hpp"
+
 #include "load_delay_model.hpp"
 //#include "SharpSatDecompBddEvaluator.hpp"
 
@@ -82,6 +84,12 @@ optparse::Values parse_args(int argc, char** argv) {
           .dest("delay_model_file")
           .metavar("DELAY_MODEL_FILE")
           .help("The delay model to be loaded (in JSON format).")
+          ;
+
+    parser.add_option("-s", "--sdf")
+          .dest("sdf_file")
+          .metavar("SDF_FILE")
+          .help("The SDF file to be loaded.")
           ;
 
     parser.add_option("--csv_base")
@@ -229,6 +237,15 @@ int main(int argc, char** argv) {
 
     g_action_timer.pop_timer("Load Delay Model");
     
+    g_action_timer.push_timer("Load SDF");
+
+    sdfparse::Loader sdf_loader;
+
+    sdf_loader.load(options.get_as<string>("sdf_file"));
+
+    auto sdf_data = sdf_loader.get_delayfile();
+
+    g_action_timer.pop_timer("Load SDF");
 
     //Load the file
     g_action_timer.push_timer("Loading Blif");
@@ -342,7 +359,7 @@ int main(int argc, char** argv) {
     g_action_timer.push_timer("Output Results");
 
 
-    bool print_sat_cnt = true;
+    //bool print_sat_cnt = true;
     int nvars = 2*timing_graph.logical_inputs().size();
     real_t nassigns = pow(2,(real_t) nvars);
     cout << "Num Logical Inputs: " << timing_graph.logical_inputs().size() << " Num BDD Vars: " << nvars << " Num Possible Assignments: " << nassigns << endl;
@@ -376,6 +393,7 @@ int main(int argc, char** argv) {
     g_action_timer.pop_timer("Raw tag histograms");
 
 #endif
+
 #if 0
     size_t nodes_processed = 0;
     auto po_nodes = timing_graph.primary_outputs();
