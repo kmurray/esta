@@ -42,5 +42,6 @@ add_executable(eta
 #target_link_libraries(eta blifparse tatum cudd_mtr cudd_st cudd_epd cudd_util cudd_obj cudd)
 target_link_libraries(eta 
                       cpp-argparse 
+                      sdfparse
                       libeta)
 
