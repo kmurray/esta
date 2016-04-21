@@ -12,6 +12,7 @@ class LogicValue:
     High = "1"
     Low = "0"
     Unkown = "X"
+    Z = "Z"
 
 class TransType:
     Rise = "R"
@@ -307,6 +308,8 @@ def str_val_to_logic(str_val):
         return LogicValue.High
     elif str_val == "0":
         return LogicValue.Low
+    elif str_val == "z":
+        return LogicValue.Z
     else:
         assert str_val == "x"
         return LogicValue.Unkown

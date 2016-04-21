@@ -2,6 +2,7 @@
 import argparse
 import pandas as pd
 import numpy as np
+import matplotlib.pyplot as plt
 from itertools import product
 from bisect import bisect_left
 from collections import OrderedDict
@@ -42,6 +43,14 @@ def main():
         print "Delay Histogram for ", args.comparison_csv
         print_delay_histogram(comparison_data)
 
+    if args.plot:
+        data_sets = {'Modelsim': reference_data}
+
+        if args.comparison_csv:
+            data_sets['ESTA'] = comparison_data
+
+        plot_histogram(data_sets)
+
 def parse_args():
     parser = argparse.ArgumentParser()
 
@@ -57,6 +66,11 @@ def parse_args():
                         default=False,
                         action="store_true",
                         help="Print info about pessimisitic differences")
+
+    parser.add_argument("--plot",
+                        default=False,
+                        action="store_true",
+                        help="Plot the delay histograms")
 
     args = parser.parse_args()
 
@@ -117,35 +131,26 @@ def print_delay_histogram(transition_data):
 def load_csv(filename):
     return pd.read_csv(filename)
 
-def load_csv_old(filename):
-    transition_data = {}
-    with open(filename, 'r') as f:
-        reader = csv.DictReader(f)
-        
-        fieldnames = reader.fieldnames
-        
-        transition_fields = []
-        for field in fieldnames:
-            if field == "delay":
-                break
-            transition_fields.append(field)
-        data_fields = fieldnames[len(transition_fields):]
 
-        for row in reader:
-            transitions = []
-            for field in transition_fields:
-                transitions.append(row[field])
-            #print input_transitions,
+def plot_histogram(transition_data_sets):
+    plt.figure()
 
-            #for data_field in data_fields:
-                #print row[data_field],
-            #print
+    for label, transition_data in transition_data_sets.iteritems():
+        delay_data = transition_data['delay']
 
-            input_transitions = tuple(transitions[:-1])
-            output_transition = transitions[-1]
-            transition_data[input_transitions] = TransitionScenario(input_transitions, output_transition, float(row['delay']), float(row['exact_prob']), float(row['measured_prob']))
+        hist, bins = np.histogram(delay_data.dropna().values, bins=100)
 
-    return transition_data
+        #Normalize to 1
+        hist = hist.astype(np.float32) / hist.sum()
+
+        plt.bar(bins[:-1], hist, width=bins[1] - bins[0], label=label, alpha=0.5)
+
+    plt.ylim(ymax=1.)
+    plt.grid()
+    plt.ylabel('Probability')
+    plt.xlabel('Delay')
+    plt.legend()
+    plt.show()
 
 
 if __name__ == "__main__":
