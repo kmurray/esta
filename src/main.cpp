@@ -292,6 +292,16 @@ int main(int argc, char** argv) {
 
     auto set_edge_delays = tg_builder.specified_edge_delays(); 
 
+#if 0
+    std::cout << "SET_EDGE_DELAYS: " << std::endl;
+    for(auto edge_delay : set_edge_delays) {
+        std::cout << "Edge: " << edge_delay.first << "\n";
+        for(auto delay_scenario : edge_delay.second) {
+            std::cout << "\t" << std::get<0>(delay_scenario.first) << " -> " << std::get<1>(delay_scenario.first) << ": " << delay_scenario.second << "\n";
+        }
+    }
+#endif
+
     //const auto& lo_dep_stats = tg_builder.get_logical_output_dependancy_stats();
 
     g_action_timer.pop_timer("Building Timing Graph");
@@ -341,6 +351,7 @@ int main(int argc, char** argv) {
     }
 
     cout << "Timing Graph Nodes: " << timing_graph.num_nodes() << "\n";
+    cout << "Timing Graph Edges: " << timing_graph.num_edges() << "\n";
     cout << "Timing Graph Num Logical Inputs: " << timing_graph.logical_inputs().size() << "\n";
     cout << "Timing Graph Num Levels: " << timing_graph.num_levels() << "\n";
     print_level_histogram(timing_graph, 10);
@@ -738,7 +749,7 @@ PreCalcTransDelayCalculator get_pre_calc_trans_delay_calculator(std::map<EdgeId,
     for(EdgeId i = 0; i < tg.num_edges(); ++i) {
         auto iter = set_edge_delays.find(i);
         if(iter != set_edge_delays.end()) {
-            std::cout << "Setting non-zero delay on edge " << i << std::endl;
+            //std::cout << "Setting non-zero delay on edge " << i << std::endl;
             edge_delay_model[i] = iter->second;
         } else {
             edge_delay_model[i] = edge_zero_delays;

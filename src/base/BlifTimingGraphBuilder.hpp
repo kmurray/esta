@@ -37,7 +37,8 @@ class BlifTimingGraphBuilder : public TimingGraphBuilder {
 
         const BlifPort* find_subckt_port_from_model_port(const BlifSubckt* subckt, const BlifPort* model_input_port);
 
-        void set_names_edge_delays_from_sdf(const BlifNames* names, const NodeId output_node_id, BDD opin_node_func);
+        void set_names_edge_delays_from_sdf(const TimingGraph& tg, const BlifNames* names, const NodeId output_node_id, BDD opin_node_func);
+        void set_net_edge_delay_from_sdf(const TimingGraph& tg, const BlifPort* driver_port, const BlifPort* sink_port, const NodeId output_node_id);
     private:
         const BlifData* blif_data_;
         const DelayModel delay_model_;
