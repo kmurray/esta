@@ -1,7 +1,11 @@
+#include <memory>
+
 #include "TimingGraphBuilder.hpp"
 #include "load_delay_model.hpp"
 #include "Time.hpp"
 #include "sdfparse.hpp"
+
+#include "TimingGraphBlifNameResolver.hpp"
 
 class BlifTimingGraphBuilder : public TimingGraphBuilder {
     public:
@@ -17,6 +21,9 @@ class BlifTimingGraphBuilder : public TimingGraphBuilder {
         const std::map<std::pair<size_t,size_t>,std::vector<NodeId>>& get_logical_output_dependancy_stats() { return logical_output_dependancy_stats_; }
 
         std::map<EdgeId,std::map<std::tuple<TransitionType,TransitionType>,Time>> specified_edge_delays() { return edge_delays_; }
+
+
+        std::shared_ptr<TimingGraphNameResolver> get_name_resolver();
 
     private:
         virtual void create_input(TimingGraph& tg, const BlifPort* input_port);
@@ -43,11 +50,11 @@ class BlifTimingGraphBuilder : public TimingGraphBuilder {
         const BlifData* blif_data_;
         const DelayModel delay_model_;
         const sdfparse::DelayFile sdf_data_;
+        std::shared_ptr<TimingGraphBlifNameResolver> name_resolver_;
 
         std::map<EdgeId,std::map<std::tuple<TransitionType,TransitionType>, Time>> edge_delays_;
 
         std::unordered_map<const BlifPort*,NodeId> port_to_node_lookup_;
-        std::unordered_map<NodeId,const BlifPort*> node_to_port_lookup_;
         std::unordered_map<const BlifPort*,DomainId> clock_driver_to_domain_;
         std::map<std::pair<size_t,size_t>,std::vector<NodeId>> logical_output_dependancy_stats_;
 };

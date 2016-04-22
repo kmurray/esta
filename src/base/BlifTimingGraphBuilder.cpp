@@ -662,7 +662,7 @@ void BlifTimingGraphBuilder::set_names_edge_delays_from_sdf(const TimingGraph& t
         assert(ret.second); //Was inserted
     }
 
-    std::cout << "Setting node edge delays" << std::endl; 
+    //std::cout << "Setting node edge delays" << std::endl; 
 }
 
 void BlifTimingGraphBuilder::set_net_edge_delay_from_sdf(const TimingGraph& tg, const BlifPort* driver_port, const BlifPort* sink_port,
@@ -714,7 +714,7 @@ void BlifTimingGraphBuilder::set_net_edge_delay_from_sdf(const TimingGraph& tg, 
     for(const auto& sdf_cell : sdf_cells) {
         std::smatch matches;
         if(std::regex_match(sdf_cell.instance(), matches, interconnect_regex)) {
-            std::cout << "Matched: " << sdf_cell.instance() << std::endl;
+            //std::cout << "Matched: " << sdf_cell.instance() << std::endl;
 
             assert(matches.size() == 7);
 
@@ -774,10 +774,24 @@ void BlifTimingGraphBuilder::set_net_edge_delay_from_sdf(const TimingGraph& tg, 
     EdgeId edge_id = tg.node_in_edge(output_node_id, 0);
 
     assert(!delays.empty());
-    std::cout << "Setting net edge delays on edge " << edge_id << std::endl;
+    //std::cout << "Setting net edge delays on edge " << edge_id << std::endl;
 
     //Insert the delays for this edge
     auto ret = edge_delays_.insert(std::make_pair(edge_id, delays));
     assert(ret.second); //Was inserted
 }
 
+
+std::shared_ptr<TimingGraphNameResolver> BlifTimingGraphBuilder::get_name_resolver() {
+    if(!name_resolver_) {
+
+        std::unordered_map<NodeId, const BlifPort*> node_to_port_lookup;
+        for(auto kv : port_to_node_lookup_) {
+            node_to_port_lookup[kv.second] = kv.first;
+        }
+
+        name_resolver_ = std::make_shared<TimingGraphBlifNameResolver>(node_to_port_lookup);
+    }
+
+    return name_resolver_;
+}

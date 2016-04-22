@@ -60,7 +60,7 @@ EtaStats g_eta_stats;
 optparse::Values parse_args(int argc, char** argv);
 //void print_node_tags(const TimingGraph& tg, std::shared_ptr<AnalyzerType> analyzer, std::shared_ptr<SharpSatType> sharp_sat_eval, NodeId node_id, double nvars, double nassigns, float progress, bool print_sat_cnt, bool print_switch);
 void print_node_tags(const TimingGraph& tg, std::shared_ptr<AnalyzerType> analyzer, std::shared_ptr<SharpSatType> sharp_sat_eval, NodeId node_id, int nvars, real_t nassigns, float progress, bool print_sat_cnt);
-void print_node_histogram(const TimingGraph& tg, std::shared_ptr<AnalyzerType> analyzer, std::shared_ptr<SharpSatType> sharp_sat_eval, NodeId node_id, float progress);
+void print_node_histogram(const TimingGraph& tg, std::shared_ptr<AnalyzerType> analyzer, std::shared_ptr<SharpSatType> sharp_sat_eval, std::shared_ptr<TimingGraphNameResolver> name_resolver, NodeId node_id, float progress);
 void dump_exhaustive_csv(std::ostream& os, const TimingGraph& tg, std::shared_ptr<AnalyzerType> analyzer, std::shared_ptr<SharpSatType> sharp_sat_eval, NodeId node_id, int nvars);
 std::vector<std::vector<int>> get_cubes(BDD f, int trans_var_start_idx);
 std::vector<std::vector<int>> get_minterms(BDD f, int nvars);
@@ -292,6 +292,8 @@ int main(int argc, char** argv) {
 
     auto set_edge_delays = tg_builder.specified_edge_delays(); 
 
+    std::shared_ptr<TimingGraphNameResolver> name_resolver = tg_builder.get_name_resolver();
+
 #if 0
     std::cout << "SET_EDGE_DELAYS: " << std::endl;
     for(auto edge_delay : set_edge_delays) {
@@ -419,16 +421,16 @@ int main(int argc, char** argv) {
 
         if(options.get_as<string>("print_histograms") == "pi") {
             for(auto node_id : timing_graph.primary_inputs()) {
-                print_node_histogram(timing_graph, analyzer, sharp_sat_eval, node_id, 0);
+                print_node_histogram(timing_graph, analyzer, sharp_sat_eval, name_resolver, node_id, 0);
             }
         } else if(options.get_as<string>("print_histograms") == "po") {
             for(auto node_id : timing_graph.primary_outputs()) {
-                print_node_histogram(timing_graph, analyzer, sharp_sat_eval, node_id, 0);
+                print_node_histogram(timing_graph, analyzer, sharp_sat_eval, name_resolver, node_id, 0);
             }
         } else if(options.get_as<string>("print_histograms") == "all") {
             for(LevelId level_id = 0; level_id < timing_graph.num_levels(); level_id++) {
                 for(auto node_id : timing_graph.level(level_id)) {
-                    print_node_histogram(timing_graph, analyzer, sharp_sat_eval, node_id, 0);
+                    print_node_histogram(timing_graph, analyzer, sharp_sat_eval, name_resolver, node_id, 0);
                 }
             }
         } else {
@@ -538,9 +540,9 @@ void print_node_tags(const TimingGraph& tg, std::shared_ptr<AnalyzerType> analyz
     }
 }
 
-void print_node_histogram(const TimingGraph& tg, std::shared_ptr<AnalyzerType> analyzer, std::shared_ptr<SharpSatType> sharp_sat_eval, NodeId node_id, float progress) {
+void print_node_histogram(const TimingGraph& tg, std::shared_ptr<AnalyzerType> analyzer, std::shared_ptr<SharpSatType> sharp_sat_eval, std::shared_ptr<TimingGraphNameResolver> name_resolver, NodeId node_id, float progress) {
 
-    cout << "Node: " << node_id << " " << tg.node_type(node_id) << " (" << progress*100 << "%)\n";
+    cout << "Node: " << node_id << " (" << name_resolver->get_node_name(node_id) << ") " << tg.node_type(node_id) << " (" << progress*100 << "%)\n";
 
     auto& raw_data_tags = analyzer->setup_data_tags(node_id);
 
