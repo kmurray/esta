@@ -232,6 +232,8 @@ void BlifTimingGraphBuilder::create_names(TimingGraph& tg, const BlifNames* name
     for(NodeId input_node_id : input_ids) {
         tg.add_edge(input_node_id, output_node_id);
     }
+
+    set_names_edge_delays_from_sdf(names, output_node_id, opin_node_func);
 }
 
 void BlifTimingGraphBuilder::create_subckt(TimingGraph& tg, const BlifSubckt* subckt) {
@@ -606,3 +608,37 @@ std::map<std::tuple<TransitionType,TransitionType>,Time> BlifTimingGraphBuilder:
     }
     return curr_edge_delays;
 }
+
+void BlifTimingGraphBuilder::set_names_edge_delays_from_sdf(const BlifNames* blif_names, const NodeId output_node_id, BDD opin_node_func) {
+    //Determine the sdf name for this .names 
+    std::string sdf_cell_name = "lut_" + *blif_names->ports[blif_names->ports.size()-1]->name;
+
+    //Find the matching SDF cell by name
+    const auto& sdf_cells = sdf_data_.cells();
+
+    auto name_match = [&](const sdfparse::Cell& cell) {
+        return cell.instance() == sdf_cell_name;
+    };
+    auto cell_iter = std::find_if(sdf_cells.begin(), sdf_cells.end(), name_match);
+    assert(cell_iter != sdf_cells.end());
+
+    //Verify the delays make sense
+    const auto& cell_delays = cell_iter->delay();
+    assert(cell_delays.type() == sdfparse::Delay::Type::ABSOLUTE);
+    assert(blif_names->ports.size()-1 == cell_delays.iopaths().size()); //Same number of inputs
+
+    std::vector<TransitionType> valid_transitions = {TransitionType::RISE, TransitionType::FALL, TransitionType::HIGH, TransitionType::LOW};
+
+    //Iterate through the inputs applying the delays
+    for(const auto& iopath : cell_delays.iopaths()) {
+        const auto& rise_delay_val = iopath.rise();
+        const auto& fall_delay_val = iopath.rise();
+
+        //For now we expect rise and fall to be equal
+        assert(rise_delay_val == fall_delay_val);
+
+    }
+
+    std::cout << "Setting node edge delays" << std::endl; 
+}
+

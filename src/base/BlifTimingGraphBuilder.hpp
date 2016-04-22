@@ -1,12 +1,14 @@
 #include "TimingGraphBuilder.hpp"
 #include "load_delay_model.hpp"
 #include "Time.hpp"
+#include "sdfparse.hpp"
 
 class BlifTimingGraphBuilder : public TimingGraphBuilder {
     public:
-        BlifTimingGraphBuilder(BlifData* data, const DelayModel& delay_model)
+        BlifTimingGraphBuilder(BlifData* data, const DelayModel& delay_model, const sdfparse::DelayFile& sdf_data)
             : blif_data_(data) 
             , delay_model_(delay_model)
+            , sdf_data_(sdf_data)
             {}
  
 
@@ -35,9 +37,11 @@ class BlifTimingGraphBuilder : public TimingGraphBuilder {
 
         const BlifPort* find_subckt_port_from_model_port(const BlifSubckt* subckt, const BlifPort* model_input_port);
 
+        void set_names_edge_delays_from_sdf(const BlifNames* names, const NodeId output_node_id, BDD opin_node_func);
     private:
         const BlifData* blif_data_;
         const DelayModel delay_model_;
+        const sdfparse::DelayFile sdf_data_;
 
         std::map<EdgeId,std::map<std::tuple<TransitionType,TransitionType>, Time>> edge_delays_;
 

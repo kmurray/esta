@@ -249,12 +249,13 @@ int main(int argc, char** argv) {
     
     g_action_timer.push_timer("Load SDF");
 
+    sdfparse::DelayFile sdf_data;
     if(options.is_set("sdf_file")) {
         sdfparse::Loader sdf_loader;
 
         sdf_loader.load(options.get_as<string>("sdf_file"));
 
-        auto sdf_data = sdf_loader.get_delayfile();
+        sdf_data = sdf_loader.get_delayfile();
     }
 
     g_action_timer.pop_timer("Load SDF");
@@ -280,12 +281,12 @@ int main(int argc, char** argv) {
     g_action_timer.pop_timer("Loading Blif");
     cout << "\n";
 
+    g_action_timer.push_timer("Building Timing Graph");
+
     //Create the builder
-    BlifTimingGraphBuilder tg_builder(g_blif_data, delay_model);
+    BlifTimingGraphBuilder tg_builder(g_blif_data, delay_model, sdf_data);
 
     TimingGraph timing_graph;
-
-    g_action_timer.push_timer("Building Timing Graph");
 
     tg_builder.build(timing_graph);
 
