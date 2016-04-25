@@ -80,12 +80,6 @@ optparse::Values parse_args(int argc, char** argv) {
           .help("The blif file to load and analyze.")
           ;
 
-    parser.add_option("-d", "--delay_model")
-          .dest("delay_model_file")
-          .metavar("DELAY_MODEL_FILE")
-          .help("The delay model to be loaded (in JSON format).")
-          ;
-
     parser.add_option("-s", "--sdf")
           .dest("sdf_file")
           .metavar("SDF_FILE")
@@ -212,13 +206,6 @@ optparse::Values parse_args(int argc, char** argv) {
         std::exit(1);
     }
 
-    if(!options.is_set("delay_model_file")) {
-        cout << "Missing required argument for delay model file\n";
-        cout << "\n";
-        parser.print_help();
-        std::exit(1);
-    }
-
     return options;
 }
 
@@ -241,12 +228,6 @@ int main(int argc, char** argv) {
     g_cudd.SetMaxGrowth(options.get_as<double>("sift_max_growth"));
     g_cudd.SetMaxCacheHard(options.get_as<double>("cudd_cache_ratio") * g_cudd.ReadMaxCacheHard());
 
-    g_action_timer.push_timer("Load Delay Model");
-
-    auto delay_model = load_delay_model(options.get_as<string>("delay_model_file"));
-
-    g_action_timer.pop_timer("Load Delay Model");
-    
     g_action_timer.push_timer("Load SDF");
 
     sdfparse::DelayFile sdf_data;
@@ -284,7 +265,7 @@ int main(int argc, char** argv) {
     g_action_timer.push_timer("Building Timing Graph");
 
     //Create the builder
-    BlifTimingGraphBuilder tg_builder(g_blif_data, delay_model, sdf_data);
+    BlifTimingGraphBuilder tg_builder(g_blif_data, sdf_data);
 
     TimingGraph timing_graph;
 

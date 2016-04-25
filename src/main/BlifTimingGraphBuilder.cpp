@@ -297,19 +297,13 @@ void BlifTimingGraphBuilder::create_subckt(TimingGraph& tg, const BlifSubckt* su
 
 
 
-    auto cell_delay_model_iter = delay_model_.find(*subckt_model->name);
-    assert(cell_delay_model_iter != delay_model_.end());
-
     //Build the internal edges
     for(size_t i = 0; i < subckt_model->inputs.size(); ++i) {
         NodeId input_node_id = input_ids[i];
         for(size_t j = 0; j < subckt_model->outputs.size(); ++j) {
             NodeId output_node_id = output_ids[j];
 
-            EdgeId edge_id = tg.add_edge(input_node_id, output_node_id);
-
-            //Map on the delay model
-            edge_delays_[edge_id] = find_edge_delays(subckt_model, subckt_model->inputs[i], subckt_model->outputs[0]);
+            tg.add_edge(input_node_id, output_node_id);
         }
     }
 }
@@ -581,36 +575,6 @@ void BlifTimingGraphBuilder::check_logical_output_dependancies(const TimingGraph
         //Save stats
         logical_output_dependancy_stats_[std::make_pair(transitive_fanin.size(), pi_fanin)].push_back(po_node_id);
     }
-}
-
-std::map<std::tuple<TransitionType,TransitionType>,Time> BlifTimingGraphBuilder::find_edge_delays(BlifModel* model, BlifPort* input_port, BlifPort* output_port) {
-    auto cell_delay_model_iter = delay_model_.find(*model->name);
-    assert(cell_delay_model_iter != delay_model_.end());
-
-    auto& cell_delay_model = cell_delay_model_iter->second;
-
-    std::map<std::tuple<TransitionType,TransitionType>,Time> curr_edge_delays;
-
-    for(auto in_trans : delay_model_transitions) {
-        for(auto out_trans : delay_model_transitions) {
-            auto key = std::make_tuple(*input_port->name, *output_port->name, in_trans, out_trans);
-
-            auto kv_iter = cell_delay_model.find(key);
-            if(kv_iter != cell_delay_model.end()) {
-                //Have a real delay
-                auto delay = kv_iter->second;
-
-                auto in_trans_type = delay_model_trans_str_to_type(in_trans);
-                auto out_trans_type = delay_model_trans_str_to_type(out_trans);
-
-                //Insert it in the current edges delays
-                auto ret = curr_edge_delays.insert(std::make_pair(std::make_tuple(in_trans_type,out_trans_type), Time(delay)));
-
-                assert(ret.second); //Was inserted
-            }
-        }
-    }
-    return curr_edge_delays;
 }
 
 void BlifTimingGraphBuilder::set_names_edge_delays_from_sdf(const TimingGraph& tg, const BlifNames* blif_names, const NodeId output_node_id, BDD opin_node_func) {
