@@ -1,7 +1,7 @@
 #include <memory>
 
+#include "TransitionType.hpp"
 #include "TimingGraphBuilder.hpp"
-#include "load_delay_model.hpp"
 #include "Time.hpp"
 #include "sdfparse.hpp"
 
@@ -9,9 +9,8 @@
 
 class BlifTimingGraphBuilder : public TimingGraphBuilder {
     public:
-        BlifTimingGraphBuilder(BlifData* data, const DelayModel& delay_model, const sdfparse::DelayFile& sdf_data)
+        BlifTimingGraphBuilder(BlifData* data, const sdfparse::DelayFile& sdf_data)
             : blif_data_(data) 
-            , delay_model_(delay_model)
             , sdf_data_(sdf_data)
             {}
  
@@ -40,15 +39,12 @@ class BlifTimingGraphBuilder : public TimingGraphBuilder {
         virtual void check_logical_input_dependancies(const TimingGraph& tg);
         virtual void check_logical_output_dependancies(const TimingGraph& tg);
 
-        std::map<std::tuple<TransitionType,TransitionType>,Time> find_edge_delays(BlifModel* model, BlifPort* input_port, BlifPort* output_port);
-
         const BlifPort* find_subckt_port_from_model_port(const BlifSubckt* subckt, const BlifPort* model_input_port);
 
         void set_names_edge_delays_from_sdf(const TimingGraph& tg, const BlifNames* names, const NodeId output_node_id, BDD opin_node_func);
         void set_net_edge_delay_from_sdf(const TimingGraph& tg, const BlifPort* driver_port, const BlifPort* sink_port, const NodeId output_node_id);
     private:
         const BlifData* blif_data_;
-        const DelayModel delay_model_;
         const sdfparse::DelayFile sdf_data_;
         std::shared_ptr<TimingGraphBlifNameResolver> name_resolver_;
 
