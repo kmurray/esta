@@ -191,4 +191,5 @@ enable_testing()
 add_subdirectory(src)
 add_subdirectory(libs)
 add_subdirectory(tests)
+add_subdirectory(scripts)
 

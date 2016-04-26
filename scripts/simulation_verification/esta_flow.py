@@ -78,6 +78,14 @@ def parse_args():
                                     default=1.3,
                                     type=float,
                                     help="Factor to expand critical path delay by to set modelsim clock period. Should be >= 1.0. Default: %(default)s")
+    #
+    # VCD Extractionarguments
+    #
+    transition_extraction_arguments = parser.add_argument_group("Transition Extraction", "Options for processing simulation VCD")
+    transition_extraction_arguments.add_argument("--transition_extractor_exec"
+                                                 default="vcd_extract"
+                                                 help="Tool used to post-process VCD to extract transitions and delays.")
+
     args = parser.parse_args()
 
     return args
@@ -96,13 +104,21 @@ def main():
 
     #Run Modelsim to collect simulation statistics
     if args.run_sim:
+        #Extract port and top instance information
+        print "Extracting verilog information"
+        top_verilog_info = extract_top_verilog_info(vtr_results['post_synth_verilog'])
+
         print "Running Modelsim"
+        vcd_file = "dump.vcd"
         modelsim_results = run_modelsim(args, 
                                         sdf_file=vtr_results['post_synth_sdf'],
                                         cpd_ps=vtr_results['critical_path_delay_ps'],
-                                        top_verilog=vtr_results['post_synth_verilog'],
-                                        vcd_file="dump.vcd"
+                                        verilog_info=top_verilog_info
+                                        vcd_file=vcd_file
                                         )
+
+        print "Extracting Transitions"
+        transition_results = run_transition_extraction(vcd_file, top_verilog_info)
 
 def run_vtr(args):
 
@@ -145,9 +161,8 @@ def run_esta(args, sdf_file):
           ]
     run_command(cmd)
 
-def run_modelsim(args, sdf_file, cpd_ps, top_verilog, vcd_file):
-    #Extract port and top instance information
-    top_verilog_info = extract_top_verilog_info(top_verilog)
+def run_modelsim(args, sdf_file, cpd_ps, top_verilog_info, vcd_file):
+    top_verilog = top_verilog_info["file"]
 
     #Fix the input verilog for Modelsim-Altera if required
     if args.fix_modelsim_altera_sdf_annotation:
@@ -186,6 +201,17 @@ def run_modelsim(args, sdf_file, cpd_ps, top_verilog, vcd_file):
             'vcd_file': vcd_file,
            }
 
+def run_transition_extraction(vcd_file, top_verilog_info):
+    cmd = [
+            args.transition_extractor_exec
+            vcd_file
+          ]
+    for output_port in top_verilog_info['outputs']:
+        cmd.append(output_port)
+
+    run_command(cmd)
+
+    return {}
 
 def fix_modelsim_altera_sdf_annotation(top_verilog):
     base, ext = os.path.splitext(top_verilog)
@@ -243,6 +269,7 @@ def extract_top_verilog_info(top_verilog):
             inputs.append(io.name)
 
     return {
+            'file': top_verilog,
             'module': name,
             'inputs': inputs,
             'outputs': outputs,
