@@ -5,6 +5,7 @@ import argparse
 import subprocess
 import shutil
 import re
+import fnmatch
 
 import pyverilog.vparser.parser as verilog_parser
 import pyverilog.vparser.ast as vast
@@ -33,13 +34,19 @@ def parse_args():
                         action="store_true",
                         dest="run_esta",
                         default=False,
-                        help="")
+                        help="Run ESTA with SDF back-annotation")
 
     parser.add_argument("--sim",
                         action="store_true",
                         dest="run_sim",
                         default=False,
-                        help="")
+                        help="Run Simulation wtih SDF back-annotation")
+
+    parser.add_argument("--compare",
+                        action="store_true",
+                        dest="run_compare",
+                        default=False,
+                        help="Run comparison between Simulation and ESTA for verification.")
 
     #
     # VTR related arguments
@@ -54,7 +61,7 @@ def parse_args():
     #
     esta_arguments = parser.add_argument_group("ESTA", "ESTA related options")
     esta_arguments.add_argument("--esta_exec",
-                                default="eta",
+                                default="esta",
                                 help="ESTA executable. Default %(default)s")
 
     #
@@ -79,12 +86,20 @@ def parse_args():
                                     type=float,
                                     help="Factor to expand critical path delay by to set modelsim clock period. Should be >= 1.0. Default: %(default)s")
     #
-    # VCD Extractionarguments
+    # VCD Extraction arguments
     #
     transition_extraction_arguments = parser.add_argument_group("Transition Extraction", "Options for processing simulation VCD")
-    transition_extraction_arguments.add_argument("--transition_extractor_exec"
-                                                 default="vcd_extract"
-                                                 help="Tool used to post-process VCD to extract transitions and delays.")
+    transition_extraction_arguments.add_argument("--vcd_extract_exec",
+                                                 default="vcd_extract",
+                                                 help="Tool used to post-process VCD to extract transitions and delays. Default: %(default)s")
+
+    #
+    # Comparison/verification related arguments
+    #
+    transition_extraction_arguments = parser.add_argument_group("Comparision and Verification", "Options for comparing the ESTA and Simulation results")
+    transition_extraction_arguments.add_argument("--comparison_exec",
+                                                 default="compare_exhaustive.py",
+                                                 help="Tool used compare ESTA and simulation results. Default: %(default)s")
 
     args = parser.parse_args()
 
@@ -94,38 +109,50 @@ def main():
     args = parse_args()
 
     #Run VTR to generate an SDF file
+    print
     print "Running VTR"
     vtr_results = run_vtr(args)
 
+    #Extract port and top instance information
+    print
+    print "Extracting verilog information"
+    design_info = extract_design_info(vtr_results['post_synth_verilog'], args.blif)
+
     #Run ESTA
     if args.run_esta:
+        print
         print "Running ESTA"
-        esta_results = run_esta(args, vtr_results['post_synth_sdf'])
+        esta_results = run_esta(args, design_info=design_info, sdf_file=vtr_results['post_synth_sdf'])
 
     #Run Modelsim to collect simulation statistics
     if args.run_sim:
-        #Extract port and top instance information
-        print "Extracting verilog information"
-        top_verilog_info = extract_top_verilog_info(vtr_results['post_synth_verilog'])
 
+        print
         print "Running Modelsim"
-        vcd_file = "dump.vcd"
+        vcd_file = "sim.vcd"
         modelsim_results = run_modelsim(args, 
                                         sdf_file=vtr_results['post_synth_sdf'],
                                         cpd_ps=vtr_results['critical_path_delay_ps'],
-                                        verilog_info=top_verilog_info
+                                        verilog_info=design_info,
                                         vcd_file=vcd_file
                                         )
 
+        print
         print "Extracting Transitions"
-        transition_results = run_transition_extraction(vcd_file, top_verilog_info)
+        transition_results = run_transition_extraction(args, vcd_file, design_info)
+
+    if args.run_compare:
+        print 
+        print "Comparing ESTA and Simulation Results"
+        run_comparison(args, design_info)
 
 def run_vtr(args):
 
     #Localize the blif file, since VPR likes to put its files next to it
-    orig_blif_location = args.blif
+    orig_blif_location = os.path.abspath(args.blif)
     new_blif_location = os.path.join(os.getcwd(), os.path.basename(orig_blif_location))
-    shutil.copy(orig_blif_location, new_blif_location)
+    if orig_blif_location != new_blif_location:
+        shutil.copy(orig_blif_location, new_blif_location)
 
     args.blif = new_blif_location
     
@@ -152,17 +179,17 @@ def run_vtr(args):
             'critical_path_delay_ps': cpd_ns*1000,
            }
 
-def run_esta(args, sdf_file):
+def run_esta(args, design_info, sdf_file):
     cmd = [
             args.esta_exec,
             "-b", args.blif,
-            "-s", sdf_file
-
+            "-s", sdf_file,
+            "--dump_exhaustive_csv", ",".join(design_info['outputs'])
           ]
     run_command(cmd)
 
-def run_modelsim(args, sdf_file, cpd_ps, top_verilog_info, vcd_file):
-    top_verilog = top_verilog_info["file"]
+def run_modelsim(args, sdf_file, cpd_ps, verilog_info, vcd_file):
+    top_verilog = verilog_info["file"]
 
     #Fix the input verilog for Modelsim-Altera if required
     if args.fix_modelsim_altera_sdf_annotation:
@@ -177,9 +204,9 @@ def run_modelsim(args, sdf_file, cpd_ps, top_verilog_info, vcd_file):
         for line in create_testbench(args, 
                                      sdf_file=sdf_file,
                                      critical_path_delay_ps=cpd_ps, 
-                                     top_module=top_verilog_info['module'], 
-                                     dut_inputs=top_verilog_info['inputs'], 
-                                     dut_outputs=top_verilog_info['outputs']):
+                                     top_module=verilog_info['module'], 
+                                     dut_inputs=verilog_info['inputs'], 
+                                     dut_outputs=verilog_info['outputs']):
             print >>f, line
 
     #Write out the modelsim .do file
@@ -201,15 +228,45 @@ def run_modelsim(args, sdf_file, cpd_ps, top_verilog_info, vcd_file):
             'vcd_file': vcd_file,
            }
 
-def run_transition_extraction(vcd_file, top_verilog_info):
+def run_transition_extraction(args, vcd_file, top_verilog_info):
+    #Trim vpr's added 'out_'
     cmd = [
-            args.transition_extractor_exec
-            vcd_file
+            args.vcd_extract_exec,
+            vcd_file,
+            '-c', 'clk',
           ]
-    for output_port in top_verilog_info['outputs']:
-        cmd.append(output_port)
+    cmd += ["-i"] + top_verilog_info['inputs']
+    cmd += ["-o"] + top_verilog_info['outputs']
 
     run_command(cmd)
+
+    return {}
+
+def run_comparison(args, design_info):
+
+    for output in design_info['outputs']:
+        print "Comparing output: {port}".format(port=output)
+
+        sim_csv = ".".join(["sim", output, "csv"])
+
+        esta_csvs = []
+        for filename in os.listdir(os.getcwd()):
+            if fnmatch.fnmatch(filename, "esta." + output + "*.csv"):
+                esta_csvs.append(filename)
+
+        assert len(esta_csvs) > 0
+
+        #Only analyze the last one (i.e. highest node number)
+        esta_csv = esta_csvs[-1]
+
+        cmd = [
+                args.comparison_exec,
+                sim_csv,
+                esta_csv,
+                "--plot_histogram", '.'.join(output, histogram, "pdf")
+              ]
+
+        run_command(cmd, log_filename="comparison.log")
 
     return {}
 
@@ -243,20 +300,34 @@ def fix_modelsim_altera_sdf_annotation(top_verilog):
 
     return new_file
 
-def extract_top_verilog_info(top_verilog):
+def extract_design_info(top_verilog, blif_file):
     #
     #Load the original verilog
     #
     ast, directives = verilog_parser.parse([top_verilog])
 
-    #
-    #Add an unused stratixiv cell
-    #
     mod_def = ast.description.definitions[0] #Definition of top
 
+    #Get the module name
     name = mod_def.name
 
-    inputs = []
+    #
+    # For verification purposes we want the inputs to be specified
+    # in the same order as the input blif file.
+    #
+    # To achieve this we quickly grab the inputs from the blif and use
+    # that order.  Otherwise VPR internally changes the order which
+    # makes verification difficult.
+    #
+    inputs = None
+    with open(blif_file) as f:
+        for line in f:
+            line.strip()
+            if line.startswith(".inputs"):
+                inputs = line.split()[1:]
+                break
+    assert inputs
+
     outputs = []
     for port in mod_def.portlist.ports:
 
@@ -266,7 +337,7 @@ def extract_top_verilog_info(top_verilog):
             outputs.append(io.name)
         else:
             assert isinstance(io, vast.Input)
-            inputs.append(io.name)
+            assert io.name in inputs
 
     return {
             'file': top_verilog,
@@ -396,18 +467,28 @@ def create_testbench(args, top_module, sdf_file, critical_path_delay_ps, dut_inp
 #
 # Utility
 #
-def run_command(cmd):
+def run_command(cmd, log_filename=None):
     print "\t" + " " .join(cmd)
     sys.stdout.flush()
 
-    output = subprocess.check_output(" ".join(cmd), 
-                                     shell=True,
-                                     stderr=subprocess.STDOUT, #Also grab stderr
-                                    )
+    output = None
+    try:
+        output = subprocess.check_output(" ".join(cmd), 
+                                         shell=True,
+                                         stderr=subprocess.STDOUT, #Also grab stderr
+                                        )
+    except subprocess.CalledProcessError as e:
+        if e.returncode == 127:
+            print "Error: Could not find executable '{executable}'".format(executable=cmd[0])
+            sys.exit(1);
+        raise e
 
-    base_cmd = os.path.basename(cmd[0])
 
-    with open(base_cmd + ".log", "w") as f:
+    if not log_filename:
+        base_cmd = os.path.basename(cmd[0])
+        log_filename = base_cmd + ".log"
+
+    with open(log_filename, "w") as f:
         print >>f, output
 
     return output
