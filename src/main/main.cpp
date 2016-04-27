@@ -594,8 +594,6 @@ void dump_exhaustive_csv(std::ostream& os, const TimingGraph& tg, std::shared_pt
     }
     os << name_resolver->get_node_name(node_id) << ":n" << node_id << ",";
     os << "delay" << ",";
-    os << "exact_prob" << ",";
-    os << "measured_prob" << ",";
     os << "\n";
 
     //CSV Values
@@ -609,11 +607,6 @@ void dump_exhaustive_csv(std::ostream& os, const TimingGraph& tg, std::shared_pt
         //Delay
         os << std::get<2>(tuple) << ",";
         
-        //Exact/measured probability
-        double prob = 1. / pow(2, nvars);
-        os.precision(std::numeric_limits<double>::digits10);
-        os << prob << ",";
-        os << prob;
         os << "\n";
     }
 }
