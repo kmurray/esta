@@ -61,13 +61,15 @@ optparse::Values parse_args(int argc, char** argv);
 //void print_node_tags(const TimingGraph& tg, std::shared_ptr<AnalyzerType> analyzer, std::shared_ptr<SharpSatType> sharp_sat_eval, NodeId node_id, double nvars, double nassigns, float progress, bool print_sat_cnt, bool print_switch);
 void print_node_tags(const TimingGraph& tg, std::shared_ptr<AnalyzerType> analyzer, std::shared_ptr<SharpSatType> sharp_sat_eval, NodeId node_id, int nvars, real_t nassigns, float progress, bool print_sat_cnt);
 void print_node_histogram(const TimingGraph& tg, std::shared_ptr<AnalyzerType> analyzer, std::shared_ptr<SharpSatType> sharp_sat_eval, std::shared_ptr<TimingGraphNameResolver> name_resolver, NodeId node_id, float progress);
-void dump_exhaustive_csv(std::ostream& os, const TimingGraph& tg, std::shared_ptr<AnalyzerType> analyzer, std::shared_ptr<SharpSatType> sharp_sat_eval, NodeId node_id, int nvars);
+void dump_exhaustive_csv(std::ostream& os, const TimingGraph& tg, std::shared_ptr<AnalyzerType> analyzer, std::shared_ptr<SharpSatType> sharp_sat_eval, std::shared_ptr<TimingGraphNameResolver> name_resolver, NodeId node_id, int nvars);
 std::vector<std::vector<int>> get_cubes(BDD f, int trans_var_start_idx);
 std::vector<std::vector<int>> get_minterms(BDD f, int nvars);
 std::vector<std::vector<int>> cube_to_minterms(std::vector<int> cube);
 std::vector<std::vector<TransitionType>> get_transitions(BDD f, int nvars);
 
 PreCalcTransDelayCalculator get_pre_calc_trans_delay_calculator(std::map<EdgeId,std::map<std::tuple<TransitionType,TransitionType>,Time>>& set_edge_delays, const TimingGraph& tg);
+
+std::vector<std::string> split(const std::string& str, char delim);
 
 optparse::Values parse_args(int argc, char** argv) {
     auto parser = optparse::OptionParser()
@@ -86,29 +88,12 @@ optparse::Values parse_args(int argc, char** argv) {
           .help("The SDF file to be loaded.")
           ;
 
-    parser.add_option("--csv_base")
-          .dest("csv_base")
-          .metavar("CSV_OUTPUT_FILE_BASE")
-          .help("The base name for output csv files")
-          ;
-
-    parser.add_option("--csv_node")
-          .dest("csv_node")
-          .help("Node to write to CSV file")
-          ;
-
     parser.add_option("--print_graph")
           .action("store_true")
           .set_default("false")
           .help("Print the timing graph. Default %default")
           ;
 
-
-    parser.add_option("--characterize")
-          .action("store_true")
-          .set_default("false")
-          .help("Characterize all models in the blif file and exit. Default %default")
-          ;
 
     parser.add_option("--write_graph_dot")
           .action("store_true")
@@ -122,52 +107,52 @@ optparse::Values parse_args(int argc, char** argv) {
           .set_default("CUDD_REORDER_SIFT")
           .help("The method to use for dynamic BDD variable re-ordering. Default: %default")
           ;
-    parser.add_option("--sift_nswaps")
-          .set_default("2000000")
-          .help("Max number of variable swaps per reordering. Default %default")
-          ;
-    parser.add_option("--sift_nvars")
-          .set_default("1000")
-          .help("Max number of variables to be sifted per reordering. Default %default")
-          ;
-    parser.add_option("--sift_max_growth")
-          .set_default("1.2")
-          .help("Max growth in (intermediate) number of BDD nodes during sifting. Default %default")
-          ;
-    parser.add_option("--cudd_cache_ratio")
-          .set_default("1.0")
-          .help("Factor adjusting cache size relative to CUDD default. Default %default")
-          ;
-    parser.add_option("--xfunc_cache_nelem")
-          .set_default("0")
-          .help("Number of BDDs to cache while building switch functions. "
-                "Note a value of 0 causes all xfuncs to be memoized (unbounded cache). "
-                "A larger value prevents switch functions from being re-calculated, but "
-                "also increases (perhaps exponentially) the size of the composite BDD CUDD must manage. "
-                "This can causing a large amount of time to be spent re-ordering the BDD. "
-                "Default %default")
-          ;
+    //parser.add_option("--sift_nswaps")
+          //.set_default("2000000")
+          //.help("Max number of variable swaps per reordering. Default %default")
+          //;
+    //parser.add_option("--sift_nvars")
+          //.set_default("1000")
+          //.help("Max number of variables to be sifted per reordering. Default %default")
+          //;
+    //parser.add_option("--sift_max_growth")
+          //.set_default("1.2")
+          //.help("Max growth in (intermediate) number of BDD nodes during sifting. Default %default")
+          //;
+    //parser.add_option("--cudd_cache_ratio")
+          //.set_default("1.0")
+          //.help("Factor adjusting cache size relative to CUDD default. Default %default")
+          //;
+    //parser.add_option("--xfunc_cache_nelem")
+          //.set_default("0")
+          //.help("Number of BDDs to cache while building switch functions. "
+                //"Note a value of 0 causes all xfuncs to be memoized (unbounded cache). "
+                //"A larger value prevents switch functions from being re-calculated, but "
+                //"also increases (perhaps exponentially) the size of the composite BDD CUDD must manage. "
+                //"This can causing a large amount of time to be spent re-ordering the BDD. "
+                //"Default %default")
+          //;
 
-    parser.add_option("--approx_threshold")
-          .set_default("-1")
-          .help("The number of BDD nodes beyond which BDDs are approximated. "
-                "Negative thresholds ensure no approximation occurs. "
-                "Default %default")
-          ;
-    parser.add_option("--approx_ratio")
-          .set_default("0.5")
-          .help("The desired reduction in number BDD nodes when BDDs are approximated. Default %default")
-          ;
-    parser.add_option("--approx_quality")
-          .set_default("1.5")
-          .help("The worst degredation in #SAT quality (0.5 would accept up to a 50% under approximation, "
-                "1.0 only an exact approximation, and 1.5 a 50% over approximation). Default %default")
-          ;
+    //parser.add_option("--approx_threshold")
+          //.set_default("-1")
+          //.help("The number of BDD nodes beyond which BDDs are approximated. "
+                //"Negative thresholds ensure no approximation occurs. "
+                //"Default %default")
+          //;
+    //parser.add_option("--approx_ratio")
+          //.set_default("0.5")
+          //.help("The desired reduction in number BDD nodes when BDDs are approximated. Default %default")
+          //;
+    //parser.add_option("--approx_quality")
+          //.set_default("1.5")
+          //.help("The worst degredation in #SAT quality (0.5 would accept up to a 50% under approximation, "
+                //"1.0 only an exact approximation, and 1.5 a 50% over approximation). Default %default")
+          //;
 
     //Sets of possible node choices
     std::vector<std::string> node_choices = {"po", "pi", "all", "none"};
 
-    parser.add_option("-p", "--print_histograms")
+    parser.add_option("--print_histograms")
           .dest("print_histograms")
           .choices(node_choices.begin(), node_choices.end())
           .metavar("VALUE")
@@ -175,7 +160,7 @@ optparse::Values parse_args(int argc, char** argv) {
           .help("What node delay histograms to print. Must be one of {'po', 'pi', 'all', 'none'} (primary inputs, primary outputs, all nodes). Default: %default")
           ;
 
-    parser.add_option("-p", "--print_tags")
+    parser.add_option("--print_tags")
           .dest("print_tags")
           .choices(node_choices.begin(), node_choices.end())
           .metavar("VALUE")
@@ -183,11 +168,16 @@ optparse::Values parse_args(int argc, char** argv) {
           .help("What node tags to print. Must be one of {'po', 'pi', 'all', 'none'} (primary inputs, primary outputs, all nodes). Default: %default")
           ;
 
-    parser.add_option("--print_tag_switch")
-          .dest("print_tag_switch")
-          .action("store_true")
-          .set_default("false")
-          .help("Print swithc function of each tag. Default %default")
+    parser.add_option("--dump_exhaustive_csv")
+          .help("Forces the tool to exhaustively dump all the transition scenarios to CSV file(s) for "
+                "the specified nodes. Must be 'po', 'all', a comma sepearted list of node names.")
+          ;
+
+    parser.add_option("--csv_base")
+          .dest("csv_base")
+          .set_default("esta")
+          .metavar("CSV_OUTPUT_FILE_BASE")
+          .help("The base name for output csv files")
           ;
 
     parser.add_option("--bdd_stats")
@@ -223,10 +213,10 @@ int main(int argc, char** argv) {
     g_cudd.AddHook(PostReorderHook, CUDD_POST_REORDERING_HOOK);
     //g_cudd.AddHook(PreGarbageCollectHook, CUDD_PRE_GC_HOOK);
     //g_cudd.AddHook(PostGarbageCollectHook, CUDD_POST_GC_HOOK);
-    g_cudd.SetSiftMaxSwap(options.get_as<int>("sift_nswaps"));
-    g_cudd.SetSiftMaxVar(options.get_as<int>("sift_nvars"));
-    g_cudd.SetMaxGrowth(options.get_as<double>("sift_max_growth"));
-    g_cudd.SetMaxCacheHard(options.get_as<double>("cudd_cache_ratio") * g_cudd.ReadMaxCacheHard());
+    //g_cudd.SetSiftMaxSwap(options.get_as<int>("sift_nswaps"));
+    //g_cudd.SetSiftMaxVar(options.get_as<int>("sift_nvars"));
+    //g_cudd.SetMaxGrowth(options.get_as<double>("sift_max_growth"));
+    //g_cudd.SetMaxCacheHard(options.get_as<double>("cudd_cache_ratio") * g_cudd.ReadMaxCacheHard());
 
     g_action_timer.push_timer("Load SDF");
 
@@ -305,28 +295,6 @@ int main(int argc, char** argv) {
         cout << "TimingGraph Levelization: " << "\n";
         print_levelization(timing_graph);
     }
-
-    if(options.get_as<bool>("characterize")) {
-        
-        for(NodeId node_id = 0; node_id < timing_graph.num_nodes(); ++node_id) {
-            if(timing_graph.node_type(node_id) == TN_Type::PRIMITIVE_OPIN) {
-                BDD f = timing_graph.node_func(node_id);
-                
-                auto vals = identify_active_transition_arcs(f);
-                for(size_t i = 0; i < vals.size(); ++i) {
-                    for(auto trans_tuple : vals[i]) {
-                        TransitionType input_trans = std::get<0>(trans_tuple);
-                        TransitionType output_trans = std::get<1>(trans_tuple);
-
-                        cout << "node: " << node_id << " input " << i << " " << input_trans << " -> " << output_trans << endl;
-                    }
-                }
-            }
-        }
-
-        return 0;
-    }
-
 
     if(options.get_as<bool>("write_graph_dot")) {
         std::ofstream outfile("timing_graph.dot");
@@ -420,22 +388,46 @@ int main(int argc, char** argv) {
         g_action_timer.pop_timer("Output tag histograms"); 
     }
 
-    if(options.is_set("csv_base")) {
-        std::string csv_filename = options.get_as<std::string>("csv_base") + ".csv";
+    if(options.is_set("dump_exhaustive_csv")) {
+        g_action_timer.push_timer("Exhaustive CSV");
+
+        std::vector<NodeId> nodes_to_dump;
+
+        std::string node_spec = options.get_as<string>("dump_exhaustive_csv");
+        if(node_spec == "po") {
+            for(NodeId id : timing_graph.primary_outputs()) {
+                nodes_to_dump.push_back(id);
+            }
+        } else if(node_spec == "all") {
+            for(NodeId id = 0; id < timing_graph.num_nodes(); ++id) {
+                nodes_to_dump.push_back(id);
+            }
+        } else {
+            auto names = split(node_spec, ',');
+
+            //Naieve
+            for(NodeId id = 0; id < timing_graph.num_nodes(); ++id) {
+                for(auto name : names) {
+                    if(name == name_resolver->get_node_name(id)) {
+                        nodes_to_dump.push_back(id);
+                    }
+                }
+            }
+        }
+
+        for(NodeId node_id : nodes_to_dump) {
+            std::string node_name = name_resolver->get_node_name(node_id);
 
 
-        if(options.is_set("csv_node")) {
-            NodeId csv_dump_node_id = options.get_as<NodeId>("csv_node");
-
-            g_action_timer.push_timer("Exhaustive CSV");
-
+            std::string csv_filename = options.get_as<std::string>("csv_base") + "." + node_name + ".n" + std::to_string(node_id) + ".csv";
             std::ofstream csv_os(csv_filename);
 
-            dump_exhaustive_csv(csv_os, timing_graph, analyzer, sharp_sat_eval, csv_dump_node_id, nvars);
+            std::cout << "Writing " << csv_filename << " for node " << node_id << "\n";
 
-            g_action_timer.pop_timer("Exhaustive CSV");
-
+            dump_exhaustive_csv(csv_os, timing_graph, analyzer, sharp_sat_eval, name_resolver, node_id, nvars);
         }
+
+        g_action_timer.pop_timer("Exhaustive CSV");
     }
 
     
@@ -554,7 +546,7 @@ void print_node_histogram(const TimingGraph& tg, std::shared_ptr<AnalyzerType> a
     }
 }
 
-void dump_exhaustive_csv(std::ostream& os, const TimingGraph& tg, std::shared_ptr<AnalyzerType> analyzer, std::shared_ptr<SharpSatType> sharp_sat_eval, NodeId node_id, int nvars) {
+void dump_exhaustive_csv(std::ostream& os, const TimingGraph& tg, std::shared_ptr<AnalyzerType> analyzer, std::shared_ptr<SharpSatType> sharp_sat_eval, std::shared_ptr<TimingGraphNameResolver> name_resolver, NodeId node_id, int nvars) {
     auto& data_tags = analyzer->setup_data_tags(node_id);
 
     using TupleVal = std::tuple<std::vector<TransitionType>,TransitionType,double>;
@@ -590,9 +582,17 @@ void dump_exhaustive_csv(std::ostream& os, const TimingGraph& tg, std::shared_pt
     
     //CSV Header
     for(int i = g_cudd.ReadSize() - nvars; i < g_cudd.ReadSize(); i += 2) {
-        os << g_cudd.getVariableName(i) << ",";
+        auto var_name = g_cudd.getVariableName(i);
+        NodeId pi_node_id;
+
+        //Extract the node id
+        std::stringstream(std::string(var_name.begin() + 1, var_name.end())) >> pi_node_id;
+
+        //We use pi_node_id+1 since we name the input pin, rather than the source
+
+        os << name_resolver->get_node_name(pi_node_id+1) << ":" << var_name << ",";
     }
-    os << "n" << node_id << ",";
+    os << name_resolver->get_node_name(node_id) << ":n" << node_id << ",";
     os << "delay" << ",";
     os << "exact_prob" << ",";
     os << "measured_prob" << ",";
@@ -740,4 +740,14 @@ PreCalcTransDelayCalculator get_pre_calc_trans_delay_calculator(std::map<EdgeId,
     }
 
     return PreCalcTransDelayCalculator(edge_delay_model);
+}
+
+std::vector<std::string> split(const std::string& str, char delim) {
+    std::vector<std::string> elements;
+    std::stringstream ss(str);
+    std::string item;
+    while(std::getline(ss, item, delim)) {
+        elements.push_back(item);
+    }
+    return elements;
 }

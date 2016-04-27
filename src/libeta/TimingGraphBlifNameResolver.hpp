@@ -14,9 +14,8 @@ class TimingGraphBlifNameResolver : public TimingGraphNameResolver {
             if(iter != node_to_port_lookup_.end()) {
                 const BlifPort* port = iter->second;
                 return *port->name;
-            } else {
-                return "<unkown>";
             }
+            return "<unkown>";
         }
 
     private:
