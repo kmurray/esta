@@ -144,7 +144,7 @@ def main():
     if args.run_compare:
         print 
         print "Comparing ESTA and Simulation Results"
-        run_comparison(args, design_info)
+        run_comparison(args, design_info, vtr_results['critical_path_delay_ps'])
 
 def run_vtr(args):
 
@@ -242,7 +242,7 @@ def run_transition_extraction(args, vcd_file, top_verilog_info):
 
     return {}
 
-def run_comparison(args, design_info):
+def run_comparison(args, design_info, sta_cpd):
 
     for output in design_info['outputs']:
         print "Comparing output: {port}".format(port=output)
@@ -263,7 +263,9 @@ def run_comparison(args, design_info):
                 args.comparison_exec,
                 sim_csv,
                 esta_csv,
-                "--plot_histogram", '.'.join(output, histogram, "pdf")
+                "--sta_cpd", sta_cpd,
+                "--plot",
+                "--plot_file", '.'.join([output, "histogram", "pdf"])
               ]
 
         run_command(cmd, log_filename="comparison.log")
@@ -468,6 +470,9 @@ def create_testbench(args, top_module, sdf_file, critical_path_delay_ps, dut_inp
 # Utility
 #
 def run_command(cmd, log_filename=None):
+    #Convert all to string
+    cmd = [str(x) for x in cmd]
+
     print "\t" + " " .join(cmd)
     sys.stdout.flush()
 

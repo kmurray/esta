@@ -155,10 +155,11 @@ def load_csv(filename):
 
 
 def plot_histogram(args, transition_data_sets):
+    color_cycle = cycle("rbgcmyk")
+    alpha = 0.8
 
     plt.figure()
 
-    color_cycle = cycle("bgrcmyk")
     
     min_val = float("inf")
     max_val = float("-inf")
@@ -175,7 +176,10 @@ def plot_histogram(args, transition_data_sets):
     if args.sta_cpd:
         hist, bins = np.histogram([args.sta_cpd], range=histogram_range, bins=args.plot_bins)
 
-        plt.bar(bins[:-1], hist, width=bins[1] - bins[0], label="STA", color=color_cycle.next(), alpha=0.5)
+        #Normalize to 1
+        hist = hist.astype(np.float32) / hist.sum()
+
+        plt.bar(bins[:-1], hist, width=bins[1] - bins[0], label="STA", color=color_cycle.next(), alpha=alpha)
 
     for label, transition_data in transition_data_sets.iteritems():
         delay_data = transition_data['delay']
@@ -185,7 +189,7 @@ def plot_histogram(args, transition_data_sets):
         #Normalize to 1
         hist = hist.astype(np.float32) / hist.sum()
 
-        plt.bar(bins[:-1], hist, width=bins[1] - bins[0], label=label, color=color_cycle.next(), alpha=0.5)
+        plt.bar(bins[:-1], hist, width=bins[1] - bins[0], label=label, color=color_cycle.next(), alpha=alpha)
 
 
     plt.ylim(ymax=1.)
