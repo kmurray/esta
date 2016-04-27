@@ -3,14 +3,13 @@ import argparse
 import pandas as pd
 import numpy as np
 import matplotlib.pyplot as plt
-from itertools import product
+from itertools import product, cycle
 from bisect import bisect_left
 from collections import OrderedDict
 import sys
 import pudb
 import csv
-
-
+import math
 
 class TransitionScenario:
     def __init__(self, input_transitions, output_transition, delay, exact_prob, measured_prob):
@@ -43,13 +42,17 @@ def main():
         print "Delay Histogram for ", args.comparison_csv
         print_delay_histogram(comparison_data)
 
+    if args.sta_cpd:
+        print_sta_delay_histogram(args.sta_cpd)
+
     if args.plot:
         data_sets = {'Modelsim': reference_data}
 
         if args.comparison_csv:
             data_sets['ESTA'] = comparison_data
 
-        plot_histogram(data_sets)
+        plot_histogram(args, data_sets)
+
 
 def parse_args():
     parser = argparse.ArgumentParser()
@@ -62,6 +65,10 @@ def parse_args():
                         default=None,
                         help="Second CSV files to compare")
 
+    parser.add_argument("--sta_cpd",
+                        type=float,
+                        help="STA critical path delay to place on plot")
+
     parser.add_argument("--show_pessimistic",
                         default=False,
                         action="store_true",
@@ -71,6 +78,15 @@ def parse_args():
                         default=False,
                         action="store_true",
                         help="Plot the delay histograms")
+
+    parser.add_argument("--plot_file",
+                        help="File to print plot to")
+
+    parser.add_argument("--plot_bins",
+                        default=50,
+                        metavar="NUM_BINS",
+                        help="How many histogram bins to use")
+
 
     args = parser.parse_args()
 
@@ -128,30 +144,61 @@ def print_delay_histogram(transition_data):
         prob = float(count) / total_cnt
         print "{delay:5} {prob:1.3f} {count:5}".format(delay=delay, prob=prob, count=count)
 
+def print_sta_delay_histogram(sta_cpd):
+    print "delay prob  count"
+    print "----- ----- -----"
+    print "{delay:5} {prob:1.3f} {count:5}".format(delay=sta_cpd, prob=1., count="-")
+
+
 def load_csv(filename):
     return pd.read_csv(filename)
 
 
-def plot_histogram(transition_data_sets):
+def plot_histogram(args, transition_data_sets):
+
     plt.figure()
+
+    color_cycle = cycle("bgrcmyk")
+    
+    min_val = float("inf")
+    max_val = float("-inf")
+    for label, transition_data in transition_data_sets.iteritems():
+        min_val = min(min_val, transition_data['delay'].min())
+        max_val = max(max_val, transition_data['delay'].max())
+
+    if args.sta_cpd:
+        min_val = min(min_val, args.sta_cpd)
+        max_val = max(max_val, args.sta_cpd)
+
+    histogram_range=(min_val, max_val)
+
+    if args.sta_cpd:
+        hist, bins = np.histogram([args.sta_cpd], range=histogram_range, bins=args.plot_bins)
+
+        plt.bar(bins[:-1], hist, width=bins[1] - bins[0], label="STA", color=color_cycle.next(), alpha=0.5)
 
     for label, transition_data in transition_data_sets.iteritems():
         delay_data = transition_data['delay']
 
-        hist, bins = np.histogram(delay_data.dropna().values, bins=100)
+        hist, bins = np.histogram(delay_data.values, range=histogram_range, bins=args.plot_bins)
 
         #Normalize to 1
         hist = hist.astype(np.float32) / hist.sum()
 
-        plt.bar(bins[:-1], hist, width=bins[1] - bins[0], label=label, alpha=0.5)
+        plt.bar(bins[:-1], hist, width=bins[1] - bins[0], label=label, color=color_cycle.next(), alpha=0.5)
+
 
     plt.ylim(ymax=1.)
     plt.grid()
     plt.ylabel('Probability')
     plt.xlabel('Delay')
-    plt.legend()
-    plt.show()
+    plt.legend(loc='best')
 
+    if args.plot_file:
+        plt.savefig(args.plot_file)
+    else:
+        #Interactive
+        plt.show()
 
 if __name__ == "__main__":
     main()
