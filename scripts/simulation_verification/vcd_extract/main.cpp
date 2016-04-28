@@ -10,6 +10,7 @@
 
 #include "vcdparse.hpp"
 
+
 using namespace vcdparse;
 using std::cout;
 using std::cerr;
@@ -19,6 +20,8 @@ using std::vector;
 using std::tie;
 using std::tuple;
 using std::unordered_map;
+
+template class std::vector<TimeValue>;
 
 //#define cilk_for _Cilk_for
 #define cilk_for for
@@ -227,12 +230,12 @@ int main(int argc, char** argv) {
 
 
 template<typename T>
-size_t find_index_lt(const std::vector<T>& values, unsigned time) {
+size_t find_index_lt(const std::vector<T>& values, size_t time) {
     //Finds the index of the first element in values with which occurs strictly before
     //time
     //
     //Assumes values is sorted
-    auto cmp = [](const T& tv, unsigned time_val){
+    auto cmp = [](const T& tv, size_t time_val){
         return tv.time() < time_val;
     };
 
@@ -241,16 +244,19 @@ size_t find_index_lt(const std::vector<T>& values, unsigned time) {
     size_t idx = std::distance(values.begin(), iter-1);
 
     assert(values[idx].time() < time);
+    if(idx+1 < values.size()) {
+        assert(values[idx+1].time() >= time);
+    }
 
     return idx;
 }
 
 template<typename T>
-size_t find_index_ge(const std::vector<T>& values, unsigned time) {
+size_t find_index_ge(const std::vector<T>& values, size_t time) {
     //Finds the index of the first element in values which at or after time
     //
     //Assumes values is sorted
-    auto cmp = [](const T& tv, unsigned time_val){
+    auto cmp = [](const T& tv, size_t time_val){
         return tv.time() < time_val;
     };
 
@@ -262,6 +268,10 @@ size_t find_index_ge(const std::vector<T>& values, unsigned time) {
 
         auto val_time = values[idx].time();
         assert(val_time >= time);
+        if(idx > 0) {
+            auto val_time_past = values[idx-1].time();
+            assert(val_time_past < time);
+        }
 
         return idx;
     } else {
@@ -321,6 +331,10 @@ Transition::Type transition(LogicValue prev, LogicValue next) {
         return Transition::Type::HIGH;
     } else if (prev == LogicValue::ZERO && next == LogicValue::ZERO) {
         return Transition::Type::LOW;
+    } else if (prev == LogicValue::UNKOWN && next == LogicValue::ONE) {
+        return Transition::Type::RISE;
+    } else if (prev == LogicValue::UNKOWN && next == LogicValue::ZERO) {
+        return Transition::Type::FALL;
     }
     assert(false);
 }
@@ -329,6 +343,10 @@ vector<Transition> extract_transitions(const VcdData& vcd_data, PortType port_ty
     vector<Transition> transitions;
 
     const std::vector<TimeValue>& time_values = find_time_values(vcd_data, port);
+    auto sort_order = [](const TimeValue& lhs, const TimeValue& rhs) {
+        return lhs.time() < rhs.time();
+    };
+    assert(std::is_sorted(time_values.begin(), time_values.end(), sort_order));
 
     //Walk through each of the clock cycles
     //to identify the corresponding transitions on this input
@@ -337,6 +355,10 @@ vector<Transition> extract_transitions(const VcdData& vcd_data, PortType port_ty
         size_t capture_edge = fall_clock_edges[i+1];
 
         assert(launch_edge < capture_edge);
+
+        if(launch_edge == 4294967664) {
+            std::cout << port << "\n";
+        }
 
         //Find index to the value (strictly) before the launching edge
         size_t i_prev = find_index_lt(time_values, launch_edge);
@@ -364,12 +386,6 @@ vector<Transition> extract_transitions(const VcdData& vcd_data, PortType port_ty
 
         auto trans = transition(time_values[i_prev].value(), time_values[i_next].value());
 
-        //std::cout << "i: " << i << "\n";
-        //std::cout << "Launch: " << launch_edge << "\n";
-        //std::cout << "Capture: " << capture_edge << "\n";
-        //std::cout << "i_prev: " << i_prev << " time: " << time_values[i_prev].time() << "\n";
-        //std::cout << "i_next: " << i_next << " time: " << time_values[i_next].time() << "\n";
-        //std::cout << "\n";
 
         size_t time;
         if(port_type == PortType::INPUT) {
@@ -382,6 +398,18 @@ vector<Transition> extract_transitions(const VcdData& vcd_data, PortType port_ty
             assert(time < capture_edge);
         }
         transitions.emplace_back(trans, time);
+
+        if(launch_edge == 4294967664) {
+            std::cout << "\ti: " << i << "\n";
+            std::cout << "\tLaunch: " << launch_edge << "\n";
+            std::cout << "\tCapture: " << capture_edge << "\n";
+            std::cout << "\ti_prev: " << i_prev << " time: " << time_values[i_prev].time() << " value: " << time_values[i_prev].value()<< "\n";
+            std::cout << "\ti_next: " << i_next << " time: " << time_values[i_next].time() << " value: " << time_values[i_next].value()<< "\n";
+            std::cout << "\ttrans: " << trans << "\n";
+            std::cout << "\ttime: " << time << "\n";
+            std::cout << "\n";
+        }
+
     }
 
     return transitions;
@@ -426,12 +454,12 @@ vector<DelayScenario> extract_delay_scenarios(const vector<vector<Transition>>& 
     }
 
     //Radix-style stable sort
-    for(int i = (int) all_input_transitions.size() - 1; i >= 0; --i) {
-        auto sort_order = [&](const DelayScenario& lhs, const DelayScenario& rhs) {
-            return lhs.input_transition_type(i) < rhs.input_transition_type(i);
-        };
-        std::stable_sort(output_delay_scenarios.begin(), output_delay_scenarios.end(), sort_order);
-    }
+    //for(int i = (int) all_input_transitions.size() - 1; i >= 0; --i) {
+        //auto sort_order = [&](const DelayScenario& lhs, const DelayScenario& rhs) {
+            //return lhs.input_transition_type(i) < rhs.input_transition_type(i);
+        //};
+        //std::stable_sort(output_delay_scenarios.begin(), output_delay_scenarios.end(), sort_order);
+    //}
 
 
     return output_delay_scenarios;
