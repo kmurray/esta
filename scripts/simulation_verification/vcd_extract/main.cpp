@@ -94,6 +94,7 @@ class DelayScenario {
 
         size_t num_input_transitions() const { return input_transition_types_.size(); }
         Transition::Type input_transition_type(size_t idx) const { return input_transition_types_.at(idx); }
+        Transition::Type output_transition_type() const { return output_transition_.type(); }
 
     private:
         std::vector<Transition::Type> input_transition_types_;
@@ -101,23 +102,6 @@ class DelayScenario {
         size_t delay_;
 
 };
-bool operator<(const DelayScenario& lhs, const DelayScenario& rhs);
-bool operator<(const DelayScenario& lhs, const DelayScenario& rhs) {
-    assert(lhs.num_input_transitions() > 0);
-    assert(lhs.num_input_transitions() == rhs.num_input_transitions());
-
-
-    for(size_t i = 0; i < rhs.num_input_transitions(); ++i) {
-        if(lhs.input_transition_type(i) < rhs.input_transition_type(i)) {
-            return true;
-        }
-    }
-    return false;
-}
-
-//template class std::vector<Transition>;
-//template class std::vector<TimeValue>;
-//template class std::vector<DelayScenario>;
 
 tuple<string,string,vector<string>,vector<string>> parse_args(int argc, char** argv);
 
@@ -431,7 +415,7 @@ vector<Transition> extract_transitions(const VcdData& vcd_data, PortType port_ty
 
 vector<DelayScenario> extract_delay_scenarios(const vector<vector<Transition>>& all_input_transitions, const vector<Transition>& output_transitions, const vector<size_t>& rise_clock_edges, const vector<size_t>& fall_clock_edges) {
     
-    std::set<DelayScenario> output_delay_scenarios;
+    vector<DelayScenario> output_delay_scenarios;
 
     for(size_t i = 0; i < rise_clock_edges.size()-1; ++i) {
         std::vector<Transition::Type> input_trans_types;
@@ -469,39 +453,19 @@ vector<DelayScenario> extract_delay_scenarios(const vector<vector<Transition>>& 
 
         assert(input_trans_types.size() == all_input_transitions.size());
 
-        output_delay_scenarios.emplace(input_trans_types, output_transition, delay); 
+        DelayScenario new_delay_scenario(input_trans_types, output_transition, delay);
+        output_delay_scenarios.push_back(new_delay_scenario); 
     }
 
     //Radix-style stable sort -- very slow
-    //for(int i = (int) all_input_transitions.size() - 1; i >= 0; --i) {
-        //auto sort_order = [&](const DelayScenario& lhs, const DelayScenario& rhs) {
-            //return lhs.input_transition_type(i) < rhs.input_transition_type(i);
-        //};
-        //std::stable_sort(output_delay_scenarios.begin(), output_delay_scenarios.end(), sort_order);
-    //}
+    for(int i = (int) all_input_transitions.size() - 1; i >= 0; --i) {
+        auto sort_order = [&](const DelayScenario& lhs, const DelayScenario& rhs) {
+            return lhs.input_transition_type(i) < rhs.input_transition_type(i);
+        };
+        std::stable_sort(output_delay_scenarios.begin(), output_delay_scenarios.end(), sort_order);
+    }
 
-    //for(const DelayScenario& val : output_delay_scenarios) {
-        //assert(val.num_input_transitions() > 0);
-    //}
-    //std::sort(output_delay_scenarios.begin(), output_delay_scenarios.end());
-    
-    //Fixed sort
-    //auto sort_order = [&](const DelayScenario& lhs, const DelayScenario& rhs) {
-        //for(size_t i = 0; i < all_input_transitions.size(); ++i) {
-            //assert(lhs.num_input_transitions() > 0); 
-            //assert(rhs.num_input_transitions() > 0); 
-            //if(lhs.input_transition_type(i) < rhs.input_transition_type(i)) {
-                //return true;
-            //}
-        //}
-        //return false;
-    //};
-    //std::sort(output_delay_scenarios.begin(), output_delay_scenarios.end(), sort_order);
-
-    std::vector<DelayScenario> sorted_output_delay_scenarios;
-    std::copy(output_delay_scenarios.begin(), output_delay_scenarios.end(), std::back_inserter(sorted_output_delay_scenarios));
-
-    return sorted_output_delay_scenarios;
+    return output_delay_scenarios;
 }
 
 void write_csv(std::ostream& os, vector<string> input_names, string output_name, vector<DelayScenario> delay_scenarios) {
