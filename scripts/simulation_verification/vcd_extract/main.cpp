@@ -7,6 +7,7 @@
 #include <unordered_map>
 #include <iterator>
 #include <algorithm>
+#include <set>
 
 #include "vcdparse.hpp"
 
@@ -35,9 +36,9 @@ class Transition {
     public:
         enum class Type {
             RISE=0,
-            FALL,
-            HIGH,
-            LOW
+            FALL=1,
+            HIGH=2,
+            LOW=3
         };
         Transition(Type type_val, size_t time_val)
             : type_(type_val)
@@ -77,7 +78,9 @@ class DelayScenario {
                       size_t delay_val)
             : input_transition_types_(input_trans_types)
             , output_transition_(output_trans)
-            , delay_(delay_val) {}
+            , delay_(delay_val) {
+                assert(input_transition_types_.size() > 0); 
+            }
 
         void print_csv_row(std::ostream& os) const {
             for(auto trans_type : input_transition_types_) {
@@ -89,7 +92,8 @@ class DelayScenario {
             os << "\n";
         }
 
-        Transition::Type input_transition_type(size_t idx) const { return input_transition_types_[idx]; }
+        size_t num_input_transitions() const { return input_transition_types_.size(); }
+        Transition::Type input_transition_type(size_t idx) const { return input_transition_types_.at(idx); }
 
     private:
         std::vector<Transition::Type> input_transition_types_;
@@ -97,6 +101,19 @@ class DelayScenario {
         size_t delay_;
 
 };
+bool operator<(const DelayScenario& lhs, const DelayScenario& rhs);
+bool operator<(const DelayScenario& lhs, const DelayScenario& rhs) {
+    assert(lhs.num_input_transitions() > 0);
+    assert(lhs.num_input_transitions() == rhs.num_input_transitions());
+
+
+    for(size_t i = 0; i < rhs.num_input_transitions(); ++i) {
+        if(lhs.input_transition_type(i) < rhs.input_transition_type(i)) {
+            return true;
+        }
+    }
+    return false;
+}
 
 //template class std::vector<Transition>;
 //template class std::vector<TimeValue>;
@@ -356,10 +373,6 @@ vector<Transition> extract_transitions(const VcdData& vcd_data, PortType port_ty
 
         assert(launch_edge < capture_edge);
 
-        if(launch_edge == 4294967664) {
-            std::cout << port << "\n";
-        }
-
         //Find index to the value (strictly) before the launching edge
         size_t i_prev = find_index_lt(time_values, launch_edge);
 
@@ -399,16 +412,17 @@ vector<Transition> extract_transitions(const VcdData& vcd_data, PortType port_ty
         }
         transitions.emplace_back(trans, time);
 
-        if(launch_edge == 4294967664) {
-            std::cout << "\ti: " << i << "\n";
-            std::cout << "\tLaunch: " << launch_edge << "\n";
-            std::cout << "\tCapture: " << capture_edge << "\n";
-            std::cout << "\ti_prev: " << i_prev << " time: " << time_values[i_prev].time() << " value: " << time_values[i_prev].value()<< "\n";
-            std::cout << "\ti_next: " << i_next << " time: " << time_values[i_next].time() << " value: " << time_values[i_next].value()<< "\n";
-            std::cout << "\ttrans: " << trans << "\n";
-            std::cout << "\ttime: " << time << "\n";
-            std::cout << "\n";
-        }
+        //if(launch_edge == 4294967664) {
+            //std::cout << port << "\n";
+            //std::cout << "\ti: " << i << "\n";
+            //std::cout << "\tLaunch: " << launch_edge << "\n";
+            //std::cout << "\tCapture: " << capture_edge << "\n";
+            //std::cout << "\ti_prev: " << i_prev << " time: " << time_values[i_prev].time() << " value: " << time_values[i_prev].value()<< "\n";
+            //std::cout << "\ti_next: " << i_next << " time: " << time_values[i_next].time() << " value: " << time_values[i_next].value()<< "\n";
+            //std::cout << "\ttrans: " << trans << "\n";
+            //std::cout << "\ttime: " << time << "\n";
+            //std::cout << "\n";
+        //}
 
     }
 
@@ -417,7 +431,7 @@ vector<Transition> extract_transitions(const VcdData& vcd_data, PortType port_ty
 
 vector<DelayScenario> extract_delay_scenarios(const vector<vector<Transition>>& all_input_transitions, const vector<Transition>& output_transitions, const vector<size_t>& rise_clock_edges, const vector<size_t>& fall_clock_edges) {
     
-    vector<DelayScenario> output_delay_scenarios;
+    std::set<DelayScenario> output_delay_scenarios;
 
     for(size_t i = 0; i < rise_clock_edges.size()-1; ++i) {
         std::vector<Transition::Type> input_trans_types;
@@ -429,6 +443,7 @@ vector<DelayScenario> extract_delay_scenarios(const vector<vector<Transition>>& 
 
         for(const auto& input_transitions : all_input_transitions) {
             
+            assert(input_transitions.size() > 0);
             size_t j = find_index_ge(input_transitions, launch_edge);
 
             const auto& input_transition = input_transitions[j];
@@ -438,6 +453,8 @@ vector<DelayScenario> extract_delay_scenarios(const vector<vector<Transition>>& 
 
             input_trans_types.push_back(input_transition.type());
         }
+
+        assert(output_transitions.size() > 0);
 
         size_t j = find_index_ge(output_transitions, launch_edge);
         const auto& output_transition = output_transitions[j];
@@ -450,10 +467,12 @@ vector<DelayScenario> extract_delay_scenarios(const vector<vector<Transition>>& 
 
         assert(delay < capture_edge - launch_edge);
 
-        output_delay_scenarios.emplace_back(input_trans_types, output_transition, delay); 
+        assert(input_trans_types.size() == all_input_transitions.size());
+
+        output_delay_scenarios.emplace(input_trans_types, output_transition, delay); 
     }
 
-    //Radix-style stable sort
+    //Radix-style stable sort -- very slow
     //for(int i = (int) all_input_transitions.size() - 1; i >= 0; --i) {
         //auto sort_order = [&](const DelayScenario& lhs, const DelayScenario& rhs) {
             //return lhs.input_transition_type(i) < rhs.input_transition_type(i);
@@ -461,8 +480,28 @@ vector<DelayScenario> extract_delay_scenarios(const vector<vector<Transition>>& 
         //std::stable_sort(output_delay_scenarios.begin(), output_delay_scenarios.end(), sort_order);
     //}
 
+    //for(const DelayScenario& val : output_delay_scenarios) {
+        //assert(val.num_input_transitions() > 0);
+    //}
+    //std::sort(output_delay_scenarios.begin(), output_delay_scenarios.end());
+    
+    //Fixed sort
+    //auto sort_order = [&](const DelayScenario& lhs, const DelayScenario& rhs) {
+        //for(size_t i = 0; i < all_input_transitions.size(); ++i) {
+            //assert(lhs.num_input_transitions() > 0); 
+            //assert(rhs.num_input_transitions() > 0); 
+            //if(lhs.input_transition_type(i) < rhs.input_transition_type(i)) {
+                //return true;
+            //}
+        //}
+        //return false;
+    //};
+    //std::sort(output_delay_scenarios.begin(), output_delay_scenarios.end(), sort_order);
 
-    return output_delay_scenarios;
+    std::vector<DelayScenario> sorted_output_delay_scenarios;
+    std::copy(output_delay_scenarios.begin(), output_delay_scenarios.end(), std::back_inserter(sorted_output_delay_scenarios));
+
+    return sorted_output_delay_scenarios;
 }
 
 void write_csv(std::ostream& os, vector<string> input_names, string output_name, vector<DelayScenario> delay_scenarios) {
