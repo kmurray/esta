@@ -25,13 +25,15 @@ def main():
     print "Loading ", args.reference_csv, "..."
     reference_data = load_csv(args.reference_csv)
 
+    safely_pessimistic = False
+
     comparison_data = None
     if args.comparison_csv:
         print "Loading ", args.comparison_csv, "..."
         comparison_data = load_csv(args.comparison_csv)
 
         print "Comparing ..."
-        compare_exhaustive_csv(reference_data, comparison_data, args.show_pessimistic)
+        safely_pessimistic = compare_exhaustive_csv(reference_data, comparison_data, args.show_pessimistic)
 
     #Histograms
     print "Delay Histogram for ", args.reference_csv
@@ -43,15 +45,25 @@ def main():
         print_delay_histogram(comparison_data)
 
     if args.sta_cpd:
+        print
+        print "Delay Histogram for STA"
         print_sta_delay_histogram(args.sta_cpd)
 
     if args.plot:
-        data_sets = {'Modelsim': reference_data}
+        data_sets = OrderedDict()
+        data_sets['Modelsim'] = reference_data
 
         if args.comparison_csv:
             data_sets['ESTA'] = comparison_data
 
         plot_histogram(args, data_sets)
+
+    print 
+    if safely_pessimistic:
+        sys.exit(0)
+    else:
+        print "ERROR: ESTA results are optimistic!"
+        sys.exit(1)
 
 
 def parse_args():
@@ -115,7 +127,7 @@ def compare_exhaustive_csv(ref_data, cmp_data, show_pessimistic):
         assert False, "Mismtached input transitions"
         
     if not np.array_equal(ref_data.loc[:,ref_output_col_name].values, cmp_data.loc[:,cmp_output_col_name].values):
-        assert False, "Mismtached outputput transitions"
+        assert False, "Mismtached output transitions"
 
     print "Comparing delays"
     delay_difference = cmp_data['delay'] - ref_data['delay']
@@ -132,6 +144,12 @@ def compare_exhaustive_csv(ref_data, cmp_data, show_pessimistic):
         input_trans = ref_data.loc[idx,ref_input_col_names]
         output_trans = ref_data.loc[idx,ref_output_col_name]
         print "Delay diff: {diff:+3.2f} for scenario {input_trans} -> {output_trans}".format(diff=val, input_trans=list(input_trans), output_trans=output_trans)
+
+        if(val < 0):
+            #ESTA is optimistic!
+            return False
+
+    return True
 
 def print_delay_histogram(transition_data):
     print "delay prob  count"
