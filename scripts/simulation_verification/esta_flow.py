@@ -107,22 +107,36 @@ def parse_args():
 
 def main():
     args = parse_args()
+    try:
+        esta_flow(args)
+    except subprocess.CalledProcessError as e:
+        print "Error command failed (non-zero exit-code", e.returncode, "): ", e.cmd
+        sys.exit(1)
+    sys.exit(0)
 
-    #Run VTR to generate an SDF file
-    print
-    print "Running VTR"
-    vtr_results = run_vtr(args)
+def esta_flow(args):
+    vpr_sdf_file = "top_post_synthesis.sdf"
+    vpr_verilog_file = "top_post_synthesis.v"
+    vpr_log = "vpr.log"
+
+    if args.run_sim or args.run_esta:
+        #Run VTR to generate an SDF file
+        print
+        print "Running VTR"
+        vtr_results = run_vtr(args, vpr_log)
+
+    vpr_cpd_ps = parse_vpr_cpd(vpr_log)
 
     #Extract port and top instance information
     print
     print "Extracting verilog information"
-    design_info = extract_design_info(vtr_results['post_synth_verilog'], args.blif)
+    design_info = extract_design_info(vpr_verilog_file, args.blif)
 
     #Run ESTA
     if args.run_esta:
         print
         print "Running ESTA"
-        esta_results = run_esta(args, design_info=design_info, sdf_file=vtr_results['post_synth_sdf'])
+        esta_results = run_esta(args, design_info=design_info, sdf_file=vpr_sdf_file)
 
     #Run Modelsim to collect simulation statistics
     if args.run_sim:
@@ -131,8 +145,8 @@ def main():
         print "Running Modelsim"
         vcd_file = "sim.vcd"
         modelsim_results = run_modelsim(args, 
-                                        sdf_file=vtr_results['post_synth_sdf'],
-                                        cpd_ps=vtr_results['critical_path_delay_ps'],
+                                        sdf_file=vpr_sdf_file,
+                                        cpd_ps=vpr_cpd_ps,
                                         verilog_info=design_info,
                                         vcd_file=vcd_file
                                         )
@@ -144,9 +158,9 @@ def main():
     if args.run_compare:
         print 
         print "Comparing ESTA and Simulation Results"
-        run_comparison(args, design_info, vtr_results['critical_path_delay_ps'])
+        run_comparison(args, design_info, vpr_cpd_ps)
 
-def run_vtr(args):
+def run_vtr(args, vpr_log_filename):
 
     #Localize the blif file, since VPR likes to put its files next to it
     orig_blif_location = os.path.abspath(args.blif)
@@ -163,21 +177,33 @@ def run_vtr(args):
             "-gen_postsynthesis_netlist", "on"
           ]
 
-    output = run_command(cmd)
-
-    cpd_ns_regex = re.compile(r".*Final critical path: (?P<cpd_ns>[\d.]+) ns", re.DOTALL)
-
-    match = cpd_ns_regex.match(output)
-
-    assert match, "Could not find VPR's critical path delay"
-
-    cpd_ns = float(match.group("cpd_ns"))
+    output = run_command(cmd, log_filename=vpr_log_filename)
 
     return {
             'post_synth_verilog': 'top_post_synthesis.v',
             'post_synth_sdf': 'top_post_synthesis.sdf',
-            'critical_path_delay_ps': cpd_ns*1000,
            }
+
+def parse_vpr_cpd(vpr_log_filename):
+
+    cpd_ns_regex = re.compile(r".*Final critical path: (?P<cpd_ns>[\d.]+) ns.*", re.DOTALL)
+
+    with open(vpr_log_filename) as f:
+        match = None
+        for line in f:
+            line = line.strip()
+            match = cpd_ns_regex.match(line)
+            if match:
+                break
+
+        assert match, "Could not find VPR's critical path delay"
+
+        cpd_ns = float(match.group("cpd_ns"))
+
+    cpd_ps = cpd_ns*1000
+
+    return cpd_ps
+
 
 def run_esta(args, design_info, sdf_file):
     cmd = [
@@ -268,7 +294,7 @@ def run_comparison(args, design_info, sta_cpd):
                 "--plot_file", '.'.join([output, "histogram", "pdf"])
               ]
 
-        run_command(cmd, log_filename="comparison.log")
+        run_command(cmd, log_filename='.'.join(["comparison", output, "log"]))
 
     return {}
 
