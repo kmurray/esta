@@ -48,6 +48,11 @@ def parse_args():
                         default=False,
                         help="Run comparison between Simulation and ESTA for verification.")
 
+    parser.add_argument("--outputs",
+                        nargs="*",
+                        default=None,
+                        help="Outputs to compare")
+
     #
     # VTR related arguments
     #
@@ -206,11 +211,17 @@ def parse_vpr_cpd(vpr_log_filename):
 
 
 def run_esta(args, design_info, sdf_file):
+    if args.outputs == None:
+        dump_outputs = design_info['outputs']
+    else:
+        dump_outputs = args.outputs
+
+
     cmd = [
             args.esta_exec,
             "-b", args.blif,
             "-s", sdf_file,
-            "--dump_exhaustive_csv", ",".join(design_info['outputs'])
+            "--dump_exhaustive_csv", ",".join(dump_outputs)
           ]
     run_command(cmd)
 
@@ -255,22 +266,30 @@ def run_modelsim(args, sdf_file, cpd_ps, verilog_info, vcd_file):
            }
 
 def run_transition_extraction(args, vcd_file, top_verilog_info):
-    #Trim vpr's added 'out_'
+    if args.outputs is None:
+        outputs = top_verilog_info['outputs']
+    else:
+        outputs = args.outputs
+
     cmd = [
             args.vcd_extract_exec,
             vcd_file,
             '-c', 'clk',
           ]
     cmd += ["-i"] + top_verilog_info['inputs']
-    cmd += ["-o"] + top_verilog_info['outputs']
+    cmd += ["-o"] + outputs
 
     run_command(cmd)
 
     return {}
 
 def run_comparison(args, design_info, sta_cpd):
+    if args.outputs is None:
+        outputs = design_info['outputs']
+    else:
+        outputs = args.outputs
 
-    for output in design_info['outputs']:
+    for output in outputs:
         print "Comparing output: {port}".format(port=output)
 
         sim_csv = ".".join(["sim", output, "csv"])
@@ -283,6 +302,7 @@ def run_comparison(args, design_info, sta_cpd):
         assert len(esta_csvs) > 0
 
         #Only analyze the last one (i.e. highest node number)
+        esta_csvs = sorted(esta_csvs)
         esta_csv = esta_csvs[-1]
 
         cmd = [
@@ -387,7 +407,7 @@ def create_modelsim_do(args, vcd_file, verilog_files):
     for file in verilog_files:
         do_lines.append("vlog -sv -work work {" + file + "}")
     do_lines.append("")
-    do_lines.append("vsim -t 1ps -L rtl_work -L work -L altera_mf_ver -L altera_ver -L lpm_ver -L sgate_ver -L stratixiv_hssi_ver -L stratixiv_pcie_hip_ver -L stratixiv_ver -voptargs=\"+acc\"  tb")
+    do_lines.append("vsim -t 1ps -L rtl_work -L work -L altera_mf_ver -L altera_ver -L lpm_ver -L sgate_ver -L stratixiv_hssi_ver -L stratixiv_pcie_hip_ver -L stratixiv_ver -voptargs=\"+acc\" +sdf_verbose tb")
     do_lines.append("")
     do_lines.append("#Setup VCD logging")
     do_lines.append("vcd file {vcd_file}".format(vcd_file=vcd_file))
