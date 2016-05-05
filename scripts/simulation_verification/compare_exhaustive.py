@@ -139,17 +139,26 @@ def compare_exhaustive_csv(ref_data, cmp_data, show_pessimistic):
         #Filter out safely pessimsitic values
         delay_difference = delay_difference[delay_difference < 0]
 
+    optimistic_count = 0
     for idx, val in delay_difference.iteritems():
 
         input_trans = ref_data.loc[idx,ref_input_col_names]
         output_trans = ref_data.loc[idx,ref_output_col_name]
         print "Delay diff: {diff:+3.2f} for scenario {input_trans} -> {output_trans}".format(diff=val, input_trans=list(input_trans), output_trans=output_trans)
 
-        if(val < 0):
+        if val < 0:
             #ESTA is optimistic!
+            optimistic_count += 1
+
+        #Give up if things look bad
+        if optimistic_count > 1000:
+            print "Gave checking up after 1000 optimistic scenarios..."
             return False
 
-    return True
+    if optimistic_count > 0:
+        return False
+    else:
+        return True
 
 def print_delay_histogram(transition_data):
     print "delay prob  count"
@@ -174,7 +183,7 @@ def load_csv(filename):
 
 def plot_histogram(args, transition_data_sets):
     color_cycle = cycle("rbgcmyk")
-    alpha = 0.8
+    alpha = 0.6
 
     plt.figure()
 
