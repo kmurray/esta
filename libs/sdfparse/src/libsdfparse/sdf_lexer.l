@@ -14,8 +14,6 @@
     //of the token.
     #define YY_USER_ACTION loc_.columns(YYLeng());
 
-    #define yyterminate() sdfparse::Parser::make_EOF(loc_)
-
 %}
 
 /* Generate a C++ lexer */
@@ -74,6 +72,10 @@ ENDL (\n|\n\r)
 
 DELAYFILE                                       { /* cout << "DELAYFILE\n"; */ return sdfparse::Parser::make_DELAYFILE(loc_); }
 SDFVERSION                                      { /* cout << "SDFVERSION\n"; */ return sdfparse::Parser::make_SDFVERSION(loc_); }
+DESIGN                                          { /* cout << "DESIGN\n"; */ return sdfparse::Parser::make_DESIGN(loc_); }
+VENDOR                                          { /* cout << "VENDOR\n"; */ return sdfparse::Parser::make_VENDOR(loc_); }
+PROGRAM                                         { /* cout << "PROGRAM\n"; */ return sdfparse::Parser::make_PROGRAM(loc_); }
+VERSION                                         { /* cout << "VERSION\n"; */ return sdfparse::Parser::make_VERSION(loc_); }
 DIVIDER                                         { /* cout << "DIVIDER\n"; */ return sdfparse::Parser::make_DIVIDER(loc_); }
 TIMESCALE                                       { /* cout << "TIMESCALE\n"; */ return sdfparse::Parser::make_TIMESCALE(loc_); }
 CELL                                            { /* cout << "CELL\n"; */ return sdfparse::Parser::make_CELL(loc_); }
@@ -89,7 +91,13 @@ IOPATH                                          { /* cout << "IOPATH\n"; */ retu
                                                     ss << YYText();
                                                     double val;
                                                     ss >> val;
-                                                    assert(!ss.fail() && ss.eof());
+
+                                                    if(ss.fail() || !ss.eof()) {
+                                                        stringstream msg_ss;
+                                                        msg_ss << "Failed to parse float number '" << YYText() << "'";
+                                                        throw sdfparse::ParseError(msg_ss.str(), loc_);
+                                                    }
+
                                                     return sdfparse::Parser::make_Float(val, loc_); 
                                                 }
 \"({ALPHA}|{DIGIT}|{SYMBOL})+\"                 {   
@@ -113,7 +121,7 @@ IOPATH                                          { /* cout << "IOPATH\n"; */ retu
 
 <<EOF>>                                         { 
                                                     /*cout << "EOF\n";*/
-                                                    return yyterminate(); 
+                                                    return sdfparse::Parser::make_EOF(loc_);
                                                 }
 
 %%
