@@ -224,7 +224,9 @@ int main(int argc, char** argv) {
     if(options.is_set("sdf_file")) {
         sdfparse::Loader sdf_loader;
 
-        sdf_loader.load(options.get_as<string>("sdf_file"));
+        if(!sdf_loader.load(options.get_as<string>("sdf_file"))) {
+            return 1;
+        }
 
         sdf_data = sdf_loader.get_delayfile();
     }
