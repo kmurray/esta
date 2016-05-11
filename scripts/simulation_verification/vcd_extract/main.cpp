@@ -106,7 +106,7 @@ class DelayScenario {
 tuple<string,string,vector<string>,vector<string>> parse_args(int argc, char** argv);
 
 
-const std::vector<TimeValue>& find_time_values(const VcdData& vcd_data, std::string port_name);
+std::vector<TimeValue> find_time_values(const VcdData& vcd_data, std::string port_name);
 
 Transition::Type transition(LogicValue prev, LogicValue next);
 
@@ -170,7 +170,7 @@ int main(int argc, char** argv) {
 
     //Extract clock transitions
     cout << "Extracting clock edges" << endl;
-    auto& clock_time_values = find_time_values(vcd_data, clock_name);
+    auto clock_time_values = find_time_values(vcd_data, clock_name);
     vector<size_t> rise_clock_edges;
     vector<size_t> fall_clock_edges;
     tie(rise_clock_edges, fall_clock_edges) = extract_edges(clock_time_values);
@@ -286,15 +286,23 @@ size_t find_index_ge(const std::vector<T>& values, size_t time) {
 
 
 
-const std::vector<TimeValue>& find_time_values(const VcdData& vcd_data, std::string port_name) {
-    for(auto& sig_vals : vcd_data.signal_values()) {
-        auto& var = sig_vals.var();
-
+std::vector<TimeValue> find_time_values(const VcdData& vcd_data, std::string port_name) {
+    Var::Id id = -1;
+    for(const auto& var : vcd_data.vars()) {
         if(var.name() == port_name) {
-            return sig_vals.time_values();
+            id = var.id();
         }
     }
-    assert(false);
+    assert(id != -1);
+
+    std::vector<TimeValue> port_time_values;
+    for(const auto& tv : vcd_data.time_values()) {
+        if(tv.var_id() == id) {
+            port_time_values.push_back(tv);
+        }
+    }
+
+    return port_time_values;
 }
 
 tuple<vector<size_t>,vector<size_t>> extract_edges(const std::vector<TimeValue>& time_values) {
