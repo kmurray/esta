@@ -73,8 +73,11 @@ void SerialTimingAnalyzer<AnalysisType,DelayCalcType>::forward_traversal() {
          *int ntags = 0;
          */
 
-        std::cout << "\tLevel " << level_id << "..." << std::endl;
-        for(NodeId node_id : tg_.level(level_id)) {
+        std::cout << "\tLevel " << level_id << " ";
+        const auto& level = tg_.level(level_id);
+        for(size_t i = 0; i < level.size(); ++i) {
+            std::cout << ".";
+            NodeId node_id = level[i];
             /*std::cout << "\t\tNode " << node_id << std::endl;*/
             forward_traverse_node(node_id);
 
@@ -95,6 +98,7 @@ void SerialTimingAnalyzer<AnalysisType,DelayCalcType>::forward_traversal() {
  *            }
  */
         }
+        std::cout << std::endl;
 
         /*
          *std::cout << "\t\tmin_nnodes: " << xfunc_nnodes_min << " avg_nnodes: " << xfunc_nnodes_total / ntags << " max_nnodes: " << xfunc_nnodes_max << " nnodes_total: " << xfunc_nnodes_total << "\n";
