@@ -409,28 +409,37 @@ BDD BlifTimingGraphBuilder::create_func_from_names(const BlifNames* names, const
     BDD f = g_cudd.bddZero();
 
     for(std::vector<LogicValue>* row : names->cover_rows) {
-        //We expect only the on-set to be defined, so
-        //the last element in a row (the output truth value)
-        //must be TRUE
-        assert((*row)[row->size()-1] == LogicValue::TRUE);
-
         //We now AND together the inputs in a single row
         //to create a cube
         BDD cube = g_cudd.bddOne();
-        for(size_t i = 0; i < row->size() - 1; i++) {
-            LogicValue val = (*row)[i];
-            BDD var = input_vars[i];
 
-            if(val == LogicValue::TRUE) {
-                cube &= var;
-            } else if (val == LogicValue::FALSE) {
-                cube &= !var;
-            } else if (val == LogicValue::DC) {
-                //DC values are ignored (they don't appear in the cube)
-                continue;
-            } else {
-                assert(0);
+        //We expect only the on-set to be defined, (with all other cubes
+        //expected to be false)
+        //
+        //However sometimes synthesis tools will produce zero truth values,
+        //which we can safely ignore
+        LogicValue row_truth_val = (*row)[row->size()-1];
+        if(row_truth_val == LogicValue::TRUE) {
+
+            for(size_t i = 0; i < row->size() - 1; i++) {
+                LogicValue val = (*row)[i];
+                BDD var = input_vars[i];
+
+                if(val == LogicValue::TRUE) {
+                    cube &= var;
+                } else if (val == LogicValue::FALSE) {
+                    cube &= !var;
+                } else if (val == LogicValue::DC) {
+                    //DC values are ignored (they don't appear in the cube)
+                    continue;
+                } else {
+                    assert(0);
+                }
             }
+        } else {
+            //Ignore false values, since we assume all other cubes are
+            //false when building f
+            assert(row_truth_val == LogicValue::FALSE);
         }
 
         //Add the row to the function
@@ -577,9 +586,23 @@ void BlifTimingGraphBuilder::check_logical_output_dependancies(const TimingGraph
     }
 }
 
+std::string BlifTimingGraphBuilder::sdf_name(std::string name) {
+    std::vector<char> chars_to_replace = {'$', ':', '.'};
+    for(char val : chars_to_replace) {
+        std::replace(name.begin(), name.end(), val, '_');
+    }
+    return name;
+}
+
 void BlifTimingGraphBuilder::set_names_edge_delays_from_sdf(const TimingGraph& tg, const BlifNames* blif_names, const NodeId output_node_id, BDD opin_node_func) {
+
+    if(tg.node_type(output_node_id) == TN_Type::CONSTANT_GEN_SOURCE) {
+        //Skip constant generators since they don't show up in SDF
+        return;
+    }
+
     //Determine the sdf name for this .names 
-    std::string sdf_cell_name = "lut_" + *blif_names->ports[blif_names->ports.size()-1]->name;
+    std::string sdf_cell_name = sdf_name("lut_" + *blif_names->ports[blif_names->ports.size()-1]->name);
 
     //Find the matching SDF cell by name
     const auto& sdf_cells = sdf_data_.cells();
@@ -594,7 +617,8 @@ void BlifTimingGraphBuilder::set_names_edge_delays_from_sdf(const TimingGraph& t
     const auto& iopaths = cell_delays.iopaths();
 
     //Characterize the logic function to identify which input/output delays to map onto each edge
-    auto active_transition_arcs = identify_active_transition_arcs(opin_node_func);
+    std::cout << "Identify active transition arcs for: " << *blif_names->ports[blif_names->ports.size()-1]->name << std::endl;
+    auto active_transition_arcs = identify_active_transition_arcs(opin_node_func, tg.num_node_in_edges(output_node_id));
 
     //Verify the delays make sense
     assert(cell_delays.type() == sdfparse::Delay::Type::ABSOLUTE); //Only accept absolute delays
@@ -635,7 +659,7 @@ void BlifTimingGraphBuilder::set_net_edge_delay_from_sdf(const TimingGraph& tg, 
     BDD opin_node_func = tg.node_func(output_node_id);
 
     //Characterize the logic function to identify which input/output delays to map onto each edge
-    auto active_transition_arcs = identify_active_transition_arcs(opin_node_func);
+    auto active_transition_arcs = identify_active_transition_arcs(opin_node_func, tg.num_node_in_edges(output_node_id));
 
     assert(active_transition_arcs.size() == 1); //A net
     assert(active_transition_arcs[0].size() == 4); //A net will only have 1:1 transitions
@@ -644,15 +668,20 @@ void BlifTimingGraphBuilder::set_net_edge_delay_from_sdf(const TimingGraph& tg, 
     const BlifPort* sink_block_output_port = nullptr;
     std::string sink_port_prefix;
     if(sink_port->node_type == BlifNodeType::NAMES) {
+        sink_port_prefix = "lut_";
+
         BlifNames* sink_block = sink_port->names;
         assert(sink_block->ports.size() > 0);
         sink_block_output_port = sink_block->ports[sink_block->ports.size()-1];
     } else {
         assert(sink_port->node_type == BlifNodeType::MODEL);
         sink_block_output_port = sink_port;
-        sink_port_prefix = "out_"; //VPR prefixes primary outputs with 'out_' to avoid name-conflicts with the driving block
     }
 
+    std::string driver_port_prefix;
+    if(driver_port->node_type == BlifNodeType::NAMES) {
+        driver_port_prefix = "lut_";
+    }
 
     //Build up the regex for finding the correct CELL in the SDF
     std::stringstream regex_ss;
@@ -661,10 +690,10 @@ void BlifTimingGraphBuilder::set_net_edge_delay_from_sdf(const TimingGraph& tg, 
     std::string port_pin_regex_str = "(output|input)_([[:digit:]]+)_([[:digit:]]+)";
 
     regex_ss << "routing_segment_";
-    regex_ss << *driver_port->name << "_";
+    regex_ss << driver_port_prefix + sdf_name(*driver_port->name) << "_";
     regex_ss << port_pin_regex_str << "_";
     regex_ss << "to_";
-    regex_ss << sink_port_prefix + *sink_block_output_port->name << "_"; //VPR names blocks based on their first output port
+    regex_ss << sink_port_prefix + sdf_name(*sink_block_output_port->name) << "_";
     regex_ss << port_pin_regex_str;
 
     //std::cout << "REGEX: " << regex_ss.str() << std::endl;
@@ -678,7 +707,7 @@ void BlifTimingGraphBuilder::set_net_edge_delay_from_sdf(const TimingGraph& tg, 
     for(const auto& sdf_cell : sdf_cells) {
         std::smatch matches;
         if(std::regex_match(sdf_cell.instance(), matches, interconnect_regex)) {
-            //std::cout << "Matched: " << sdf_cell.instance() << std::endl;
+            std::cout << "Matched: " << sdf_cell.instance() << std::endl;
 
             assert(matches.size() == 7);
 
@@ -724,6 +753,8 @@ void BlifTimingGraphBuilder::set_net_edge_delay_from_sdf(const TimingGraph& tg, 
             //For now we expect rise and fall to be equal
             assert(rise_delay_val == fall_delay_val);
 
+            //std::cout << "Delay: " << rise_delay_val.max() << std::endl;
+
             //Apply the delay to each pair of valid transitions
             //on this edge
             for(auto trans_pair : active_transition_arcs[0]) {
@@ -738,7 +769,13 @@ void BlifTimingGraphBuilder::set_net_edge_delay_from_sdf(const TimingGraph& tg, 
     EdgeId edge_id = tg.node_in_edge(output_node_id, 0);
 
     assert(!delays.empty());
-    //std::cout << "Setting net edge delays on edge " << edge_id << std::endl;
+    std::cout << "Setting net edge delays on edge " << edge_id << ": ";
+    for(auto kv : delays) {
+        TransitionType in, out;
+        std::tie(in, out) = kv.first;
+        std::cout << in << "/" << out << "->" << kv.second << " ";
+    }
+    std::cout << std::endl;
 
     //Insert the delays for this edge
     auto ret = edge_delays_.insert(std::make_pair(edge_id, delays));

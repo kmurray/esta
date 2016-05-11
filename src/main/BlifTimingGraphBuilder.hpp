@@ -35,12 +35,14 @@ class BlifTimingGraphBuilder : public TimingGraphBuilder {
         virtual void identify_clock_drivers();
         virtual BDD create_func_from_names(const BlifNames* names, const std::vector<BDD>& input_vars);
 
+
         virtual void verify(const TimingGraph& tg);
         virtual void check_logical_input_dependancies(const TimingGraph& tg);
         virtual void check_logical_output_dependancies(const TimingGraph& tg);
 
         const BlifPort* find_subckt_port_from_model_port(const BlifSubckt* subckt, const BlifPort* model_input_port);
 
+        std::string sdf_name(std::string name);
         void set_names_edge_delays_from_sdf(const TimingGraph& tg, const BlifNames* names, const NodeId output_node_id, BDD opin_node_func);
         void set_net_edge_delay_from_sdf(const TimingGraph& tg, const BlifPort* driver_port, const BlifPort* sink_port, const NodeId output_node_id);
     private:

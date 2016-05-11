@@ -6,22 +6,43 @@
 std::vector<std::vector<TransitionType>> cartesian_product(const std::vector<TransitionType>& set, size_t n);
 TransitionType evaluate_output_transition(std::vector<TransitionType> input_transitions, BDD f);
 
-std::vector<std::set<std::tuple<TransitionType,TransitionType>>> identify_active_transition_arcs(BDD f) {
+std::vector<std::set<std::tuple<TransitionType,TransitionType>>> identify_active_transition_arcs(BDD f, size_t num_inputs) {
     auto support_size = f.SupportSize(); 
 
     std::vector<TransitionType> valid_transitions = {TransitionType::RISE, TransitionType::FALL, TransitionType::HIGH, TransitionType::LOW};
 
-    //Determine all possible input scenarios
-    auto all_input_scenarios = cartesian_product(valid_transitions, support_size);
+    std::vector<std::set<std::tuple<TransitionType,TransitionType>>> active_input_output_transitions;
 
-    //Evaluate all input -> output transitions scenarios,
-    // constructing the set of active transitions as we go
-    std::vector<std::set<std::tuple<TransitionType,TransitionType>>> active_input_output_transitions(support_size);
-    for(auto input_scenario : all_input_scenarios) {
-        auto output_trans = evaluate_output_transition(input_scenario, f);
+    assert(num_inputs == (size_t) support_size || f.IsOne() || f.IsZero());
 
-        for(size_t i = 0; i < input_scenario.size(); ++i) {
-            active_input_output_transitions[i].insert(std::make_tuple(input_scenario[i], output_trans));
+    if(f.IsOne() || f.IsZero()) {
+        //Special case for constant nodes
+        //TODO: Think more about this... this represents a constant generator, it shouldn't really be treated in the timing graph...
+        active_input_output_transitions = std::vector<std::set<std::tuple<TransitionType,TransitionType>>>(num_inputs);
+
+        for(size_t i = 0; i < num_inputs; ++i) {
+            for(auto trans : valid_transitions) {
+                if(f.IsZero()) {
+                    active_input_output_transitions[i].insert(std::make_tuple(trans, TransitionType::LOW));
+                } else {
+                    assert(f.IsOne());
+                    active_input_output_transitions[i].insert(std::make_tuple(trans, TransitionType::HIGH));
+                }
+            }
+        }
+    } else {
+        //Determine all possible input scenarios
+        auto all_input_scenarios = cartesian_product(valid_transitions, support_size);
+
+        //Evaluate all input -> output transitions scenarios,
+        // constructing the set of active transitions as we go
+        active_input_output_transitions = std::vector<std::set<std::tuple<TransitionType,TransitionType>>>(support_size);
+        for(auto input_scenario : all_input_scenarios) {
+            auto output_trans = evaluate_output_transition(input_scenario, f);
+
+            for(size_t i = 0; i < input_scenario.size(); ++i) {
+                active_input_output_transitions[i].insert(std::make_tuple(input_scenario[i], output_trans));
+            }
         }
     }
 
