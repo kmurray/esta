@@ -102,16 +102,17 @@ void ExtSetupAnalysisMode<BaseAnalysisMode,Tags>::forward_traverse_finalize_node
     //Chain to base class
     BaseAnalysisMode::forward_traverse_finalize_node(tg, tc, dc, node_id);
 
-    //Grab the tags from all inputs
+    //Walk through all the inputs handling clock tags and collecting data tags
     std::vector<Tags> src_data_tag_sets;
     for(int edge_idx = 0; edge_idx < tg.num_node_in_edges(node_id); edge_idx++) {
         EdgeId edge_id = tg.node_in_edge(node_id, edge_idx);
 
         NodeId src_node = tg.edge_src_node(edge_id);
 
-        //Handle data tags
+        //Collect data tags
         const Tags& src_data_tags = setup_data_tags_[src_node];
         if(src_data_tags.num_tags() != 0) {
+            //Save one set of tags for each input
             src_data_tag_sets.push_back(src_data_tags);
         }
 
@@ -150,9 +151,11 @@ void ExtSetupAnalysisMode<BaseAnalysisMode,Tags>::forward_traverse_finalize_node
             }
         }
     }
+
+    //Evaluate the input tags at this node
     if(src_data_tag_sets.size() > 0) {
 
-        //The output tag set
+        //The output tag set for this node
         Tags& sink_tags = setup_data_tags_[node_id];
 
         //Generate all tag transition permutations
@@ -162,23 +165,33 @@ void ExtSetupAnalysisMode<BaseAnalysisMode,Tags>::forward_traverse_finalize_node
         const BDD& node_func = tg.node_func(node_id);
 
 #ifdef TAG_DEBUG
-        std::cout << "Evaluating Node: " << node_id << " " << tg.node_type(node_id) << " (" << node_func << ")\n";
+        std::cout << "Evaluating Node: " << node_id << " " << tg.node_type(node_id) << " (" << node_func << ") " << src_tag_perms.size() << " tag_perms\n";
+
+        //Print out the input tags to this node
+        for(size_t i = 0; i < src_data_tag_sets.size(); ++i) {
+            std::cout << "\tInput " << i << ": ";
+                for(const auto tag : src_data_tag_sets[i]) {
+                    std::cout << tag->trans_type() << "@" << tag->arr_time() << " "; 
+                }
+            std::cout << "\n";
+        }
 #endif
 
+
+
+        size_t i_case = 0;
         for(const auto& src_tags : src_tag_perms) {
 
 #ifdef TAG_DEBUG
-            std::cout << "\tCase\n";
-            std::cout << "\t\tinput: {";
+            std::cout << "\tCase " << i_case << "\n";
+            std::cout << "\t\tinputs: ";
             for(int edge_idx = 0; edge_idx < tg.num_node_in_edges(node_id); edge_idx++) {
                 const auto& tag = src_tags[edge_idx];
                 std::cout << tag->trans_type();
-                std::cout << ": " << tag->arr_time().value();
-                if(edge_idx < tg.num_node_in_edges(node_id) - 1) {
-                    std::cout << ", ";
-                }
+                std::cout << "@" << tag->arr_time().value();
+                std::cout << " ";
             }
-            std::cout << "}\n";
+            std::cout << "\n";
 #endif
 
             //Calculate the output transition type
@@ -191,6 +204,7 @@ void ExtSetupAnalysisMode<BaseAnalysisMode,Tags>::forward_traverse_finalize_node
             Tag scenario_tag;
             scenario_tag.set_trans_type(output_transition);
             scenario_tag.set_clock_domain(0); //Currently only single-clock supported
+            scenario_tag.set_arr_time(Time(0.)); //Currently only single-clock supported
 
             assert((int) src_tags.size() <= tg.num_node_in_edges(node_id)); //May be less than if we are ignoring non-data edges like those from FF_CLOCK to FF_SINK
 
@@ -232,7 +246,10 @@ void ExtSetupAnalysisMode<BaseAnalysisMode,Tags>::forward_traverse_finalize_node
             sink_tags.max_arr(&scenario_tag); 
 
 #ifdef TAG_DEBUG
-            std::cout << "\t\toutput: " << output_transition << " at " << scenario_tag.arr_time() << "\n";
+            std::cout << "\t\toutput: " << output_transition << "@" << scenario_tag.arr_time() << "\n";
+#endif
+
+#ifdef TAG_DEBUG_2
             /*std::cout << "\t\tScenario Func: " << scenario_switch_func << " #SAT: " << scenario_switch_func.CountMinterm(2*tg.primary_inputs().size()) << "\n";*/
             auto pred = [output_transition](const Tag* tag) {
                 return tag->trans_type() == output_transition;
@@ -245,6 +262,7 @@ void ExtSetupAnalysisMode<BaseAnalysisMode,Tags>::forward_traverse_finalize_node
             std::cout << "\n";
             /*std::cout << " #SAT: " << iter->switch_func().CountMinterm(2*tg.primary_inputs().size()) << "\n";*/
 #endif
+            i_case++;
         }
     }
 }
