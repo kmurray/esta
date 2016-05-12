@@ -7,6 +7,7 @@
 #include "bdd.hpp"
 #include "Time.hpp"
 #include "TransitionType.hpp"
+#include "timing_graph_fwd.hpp"
 
 /*
  * These defines control how a tag is said to 'match' another

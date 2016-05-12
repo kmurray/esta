@@ -1,6 +1,7 @@
 #include <chrono>
 #include <sstream>
 #include "util.hpp"
+#include "TagPermutationGenerator.hpp"
 
 /*#define TAG_DEBUG*/
 
@@ -158,14 +159,11 @@ void ExtSetupAnalysisMode<BaseAnalysisMode,Tags>::forward_traverse_finalize_node
         //The output tag set for this node
         Tags& sink_tags = setup_data_tags_[node_id];
 
-        //Generate all tag transition permutations
-        //TODO: use a generator rather than pre-compute
-        std::vector<std::vector<const Tag*>> src_tag_perms = gen_tag_permutations(src_data_tag_sets);
 
         const BDD& node_func = tg.node_func(node_id);
 
 #ifdef TAG_DEBUG
-        std::cout << "Evaluating Node: " << node_id << " " << tg.node_type(node_id) << " (" << node_func << ") " << src_tag_perms.size() << " tag_perms\n";
+        std::cout << "Evaluating Node: " << node_id << " " << tg.node_type(node_id) << " (" << node_func << ")\n";
 
         //Print out the input tags to this node
         for(size_t i = 0; i < src_data_tag_sets.size(); ++i) {
@@ -180,7 +178,11 @@ void ExtSetupAnalysisMode<BaseAnalysisMode,Tags>::forward_traverse_finalize_node
 
 
         size_t i_case = 0;
-        for(const auto& src_tags : src_tag_perms) {
+
+        //Generate all tag transition permutations
+        TagPermutationGenerator tag_permutation_generator(src_data_tag_sets);
+        while(!tag_permutation_generator.done()) {
+            std::vector<const Tag*> src_tags = tag_permutation_generator.next();
 
 #ifdef TAG_DEBUG
             std::cout << "\tCase " << i_case << "\n";
