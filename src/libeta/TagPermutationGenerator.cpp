@@ -31,6 +31,7 @@ void TagPermutationGenerator::advance() {
         }
     }
     if(carry == true) {
+        //Overflow, indicating that we have finished iteration
         done_ = true;
     }
 }

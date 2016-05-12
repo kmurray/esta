@@ -19,7 +19,12 @@ class TagPermutationGenerator {
         void advance();
 
 
+        //The set of input tags
         std::vector<ExtTimingTags> input_tag_sets_;
+
+
+        //The generator state, we keep an iterator for each 'input'
+        //which we advance through piecewise (i.e. like binary increment)
         std::vector<ExtTimingTags::iterator> iterators_;
         bool done_;
 };
