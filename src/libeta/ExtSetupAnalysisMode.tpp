@@ -99,7 +99,7 @@ void ExtSetupAnalysisMode<BaseAnalysisMode,Tags>::pre_traverse_node(const Timing
 
 template<class BaseAnalysisMode, class Tags>
 template<class DelayCalcType>
-void ExtSetupAnalysisMode<BaseAnalysisMode,Tags>::forward_traverse_finalize_node(const TimingGraph& tg, const TimingConstraints& tc, const DelayCalcType& dc, const NodeId node_id) {
+void ExtSetupAnalysisMode<BaseAnalysisMode,Tags>::forward_traverse_finalize_node(const TimingGraph& tg, const TimingConstraints& tc, const DelayCalcType& dc, const NodeId node_id, double delay_bin_size) {
     //Chain to base class
     BaseAnalysisMode::forward_traverse_finalize_node(tg, tc, dc, node_id);
 
@@ -236,12 +236,14 @@ void ExtSetupAnalysisMode<BaseAnalysisMode,Tags>::forward_traverse_finalize_node
 
                 Time edge_delay = dc.max_edge_delay(tg, edge_id, src_tag->trans_type(), output_transition);
 
-                Time new_arr = src_tag->arr_time() + edge_delay;
+                Time new_arr = map_to_delay_bin(src_tag->arr_time() + edge_delay, delay_bin_size);
 
                 scenario_tag.max_arr(new_arr, src_tag);
 
                 assert(scenario_tag.trans_type() == output_transition);
             }
+
+
             scenario_tag.add_input_tags(input_tags);
             
             //Now we need to merge the scenario into the output tags
@@ -395,4 +397,32 @@ TransitionType ExtSetupAnalysisMode<BaseAnalysisMode,Tags>::evaluate_transition(
     }
 
     assert(0); //Shouldn't get here
+}
+
+template<class BaseAnalysisMode, class Tags>
+Time ExtSetupAnalysisMode<BaseAnalysisMode,Tags>::map_to_delay_bin(Time delay, const double delay_bin_size) {
+    if(delay_bin_size == 0.) {
+        //No binning
+        return delay;
+    } else {
+        //Bin the input delay by shifting it up to the edge of its current bin
+        double delay_val = delay.value();
+
+        double remainder = std::fmod(delay_val, delay_bin_size);
+
+        //We take care to only increase the delay if the remainder is non-zero
+        //
+        //This avoids increasing the delay of values which are already at the edge of
+        //a bin (and introducing unneccessarily pessimism)
+        double binned_delay_val = delay_val;
+        if(remainder != 0.) {
+            binned_delay_val = delay_val + (delay_bin_size - remainder);
+        }
+
+        /*std::cout << "Delay: " << delay_val << " Binned delay: " << binned_delay_val << std::endl;*/
+
+        assert(std::fmod(binned_delay_val, delay_bin_size) < 1e-15);
+
+        return Time(binned_delay_val);
+    }
 }

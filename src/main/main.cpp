@@ -88,6 +88,12 @@ optparse::Values parse_args(int argc, char** argv) {
           .help("The SDF file to be loaded.")
           ;
 
+    parser.add_option("-d", "--delay_bin_size")
+          .dest("delay_bin_size")
+          .metavar("DELAY_SEC")
+          .help("The delay bin size (in seconds) to apply during analysis.")
+          ;
+
     parser.add_option("--print_graph")
           .action("store_true")
           .set_default("false")
@@ -323,7 +329,7 @@ int main(int argc, char** argv) {
     }
 
     //The actual analyzer
-    auto analyzer = std::make_shared<AnalyzerType>(timing_graph, timing_constraints, delay_calc);
+    auto analyzer = std::make_shared<AnalyzerType>(timing_graph, timing_constraints, delay_calc, options.get_as<double>("delay_bin_size"));
 
     g_action_timer.push_timer("Analysis");
 
@@ -516,8 +522,16 @@ void print_node_tags(const TimingGraph& tg, std::shared_ptr<AnalyzerType> analyz
 }
 
 void print_node_histogram(const TimingGraph& tg, std::shared_ptr<AnalyzerType> analyzer, std::shared_ptr<SharpSatType> sharp_sat_eval, std::shared_ptr<TimingGraphNameResolver> name_resolver, NodeId node_id, float progress) {
+    std::string node_name;
+    if(tg.node_type(node_id) == TN_Type::OUTPAD_SINK) {
+        auto edge_id = tg.node_in_edge(node_id, 0);
+        auto ipin_node_id = tg.edge_src_node(edge_id);
+        node_name = name_resolver->get_node_name(ipin_node_id);
+    } else {
+        node_name = name_resolver->get_node_name(node_id);
+    }
 
-    cout << "Node: " << node_id << " (" << name_resolver->get_node_name(node_id) << ") " << tg.node_type(node_id) << " (" << progress*100 << "%)\n";
+    cout << "Node: " << node_id << " (" << node_name << ") " << tg.node_type(node_id) << " (" << progress*100 << "%)\n";
 
     auto& raw_data_tags = analyzer->setup_data_tags(node_id);
 

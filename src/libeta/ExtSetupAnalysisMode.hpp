@@ -34,7 +34,7 @@ class ExtSetupAnalysisMode : public BaseAnalysisMode {
          */
 
         template<class DelayCalc>
-        void forward_traverse_finalize_node(const TimingGraph& tg, const TimingConstraints& tc, const DelayCalc& dc, const NodeId node_id);
+        void forward_traverse_finalize_node(const TimingGraph& tg, const TimingConstraints& tc, const DelayCalc& dc, const NodeId node_id, const double delay_bin_size);
 
         /*
          *template<class DelayCalc>
@@ -48,6 +48,10 @@ class ExtSetupAnalysisMode : public BaseAnalysisMode {
         std::vector<std::vector<const Tag*>> gen_tag_permutations(const std::vector<Tags>& input_tags);
         void gen_tag_permutations_recurr(const std::vector<Tags>& input_tags, size_t var_idx, const std::vector<const Tag*>& partial_perm, std::vector<std::vector<const Tag*>>& permutations);
         TransitionType evaluate_transition(const std::vector<const Tag*>& input_tags_scenario, const BDD& node_func);
+
+        Time map_to_delay_bin(Time delay, const double delay_bin_size);
+
+    protected:
 
         //Setup tag data storage
         std::vector<Tags> setup_data_tags_; //Data tags for each node [0..timing_graph.num_nodes()-1]
