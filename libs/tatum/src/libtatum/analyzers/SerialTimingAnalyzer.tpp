@@ -77,6 +77,7 @@ void SerialTimingAnalyzer<AnalysisType,DelayCalcType>::forward_traversal() {
         const auto& level = tg_.level(level_id);
         for(size_t i = 0; i < level.size(); ++i) {
             std::cout << ".";
+            std::cout.flush();
             NodeId node_id = level[i];
             /*std::cout << "\t\tNode " << node_id << std::endl;*/
             forward_traverse_node(node_id);
