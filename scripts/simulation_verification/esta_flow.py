@@ -301,9 +301,17 @@ def run_comparison(args, design_info, sta_cpd):
 
         assert len(esta_csvs) > 0
 
+        highest_node_num = -1
+        for file in esta_csvs:
+            esta, output, node, ext = file.split('.')
+
+            node_id = int(node[1:])
+
+            highest_node_num = max(highest_node_num, node_id)
+        assert highest_node_num >= 0
+
         #Only analyze the last one (i.e. highest node number)
-        esta_csvs = sorted(esta_csvs)
-        esta_csv = esta_csvs[-1]
+        esta_csv = "esta." + output + ".n" + str(highest_node_num) + ".csv"
 
         cmd = [
                 args.comparison_exec,
