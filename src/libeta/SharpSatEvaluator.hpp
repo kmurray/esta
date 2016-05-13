@@ -8,7 +8,7 @@
 template<class Analyzer>
 class SharpSatEvaluator {
     public:
-        SharpSatEvaluator(const TimingGraph& tg, std::shared_ptr<Analyzer> analyzer, int nvars)
+        SharpSatEvaluator(const TimingGraph& tg, std::shared_ptr<Analyzer> analyzer, size_t nvars)
             : tg_(tg)
             , analyzer_(analyzer)
             , nvars_(nvars) {}
@@ -47,5 +47,5 @@ class SharpSatEvaluator {
     protected:
         const TimingGraph& tg_;
         std::shared_ptr<Analyzer> analyzer_;
-        int nvars_;
+        size_t nvars_;
 };

@@ -33,6 +33,8 @@ class SharpSatBddEvaluator : public SharpSatEvaluator<Analyzer> {
                     g_cudd.pushVariableName("n" + std::to_string(node_id) + "'");
                 }
             }
+
+            assert(pi_curr_bdd_vars_.size() + pi_curr_bdd_vars_.size() == (size_t) nvars);
         }
 
         double count_sat_fraction(const ExtTimingTag* tag, NodeId node_id) override {

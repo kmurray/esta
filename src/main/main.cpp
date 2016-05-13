@@ -58,14 +58,13 @@ ActionTimer g_action_timer;
 EtaStats g_eta_stats;
 
 optparse::Values parse_args(int argc, char** argv);
-//void print_node_tags(const TimingGraph& tg, std::shared_ptr<AnalyzerType> analyzer, std::shared_ptr<SharpSatType> sharp_sat_eval, NodeId node_id, double nvars, double nassigns, float progress, bool print_sat_cnt, bool print_switch);
-void print_node_tags(const TimingGraph& tg, std::shared_ptr<AnalyzerType> analyzer, std::shared_ptr<SharpSatType> sharp_sat_eval, NodeId node_id, int nvars, real_t nassigns, float progress, bool print_sat_cnt);
+void print_node_tags(const TimingGraph& tg, std::shared_ptr<AnalyzerType> analyzer, std::shared_ptr<SharpSatType> sharp_sat_eval, NodeId node_id, size_t nvars, real_t nassigns, float progress, bool print_sat_cnt);
 void print_node_histogram(const TimingGraph& tg, std::shared_ptr<AnalyzerType> analyzer, std::shared_ptr<SharpSatType> sharp_sat_eval, std::shared_ptr<TimingGraphNameResolver> name_resolver, NodeId node_id, float progress);
-void dump_exhaustive_csv(std::ostream& os, const TimingGraph& tg, std::shared_ptr<AnalyzerType> analyzer, std::shared_ptr<SharpSatType> sharp_sat_eval, std::shared_ptr<TimingGraphNameResolver> name_resolver, NodeId node_id, int nvars);
-std::vector<std::vector<int>> get_cubes(BDD f, int trans_var_start_idx);
-std::vector<std::vector<int>> get_minterms(BDD f, int nvars);
+void dump_exhaustive_csv(std::ostream& os, const TimingGraph& tg, std::shared_ptr<AnalyzerType> analyzer, std::shared_ptr<SharpSatType> sharp_sat_eval, std::shared_ptr<TimingGraphNameResolver> name_resolver, NodeId node_id, size_t nvars);
+std::vector<std::vector<int>> get_cubes(BDD f, size_t nvars);
+std::vector<std::vector<int>> get_minterms(BDD f, size_t nvars);
 std::vector<std::vector<int>> cube_to_minterms(std::vector<int> cube);
-std::vector<std::vector<TransitionType>> get_transitions(BDD f, int nvars);
+std::vector<std::vector<TransitionType>> get_transitions(BDD f, size_t nvars);
 
 PreCalcTransDelayCalculator get_pre_calc_trans_delay_calculator(std::map<EdgeId,std::map<std::tuple<TransitionType,TransitionType>,Time>>& set_edge_delays, const TimingGraph& tg);
 
@@ -273,18 +272,6 @@ int main(int argc, char** argv) {
 
     std::shared_ptr<TimingGraphNameResolver> name_resolver = tg_builder.get_name_resolver();
 
-#if 0
-    std::cout << "SET_EDGE_DELAYS: " << std::endl;
-    for(auto edge_delay : set_edge_delays) {
-        std::cout << "Edge: " << edge_delay.first << "\n";
-        for(auto delay_scenario : edge_delay.second) {
-            std::cout << "\t" << std::get<0>(delay_scenario.first) << " -> " << std::get<1>(delay_scenario.first) << ": " << delay_scenario.second << "\n";
-        }
-    }
-#endif
-
-    //const auto& lo_dep_stats = tg_builder.get_logical_output_dependancy_stats();
-
     g_action_timer.pop_timer("Building Timing Graph");
     cout << "\n";
 
@@ -342,7 +329,12 @@ int main(int argc, char** argv) {
     g_action_timer.push_timer("Output Results");
 
 
-    int nvars = 2*timing_graph.logical_inputs().size();
+    size_t nvars = 0;
+    for(NodeId node_id = 0; node_id <timing_graph.num_nodes(); node_id++) {
+        if(timing_graph.node_type(node_id) == TN_Type::INPAD_SOURCE || timing_graph.node_type(node_id) == TN_Type::FF_SOURCE) {
+            nvars += 2; //2 vars per input to encode 4 states
+        }
+    }
     real_t nassigns = pow(2,(real_t) nvars);
     cout << "Num Logical Inputs: " << timing_graph.logical_inputs().size() << " Num BDD Vars: " << nvars << " Num Possible Assignments: " << nassigns << endl;
     cout << endl;
@@ -442,6 +434,11 @@ int main(int argc, char** argv) {
 
 
 
+
+
+
+    g_action_timer.pop_timer("Output Results");
+
     cout << "\n";
     cout << "BDD Stats after analysis:\n";
     cout << "\tnvars: " << g_cudd.ReadSize() << "\n";
@@ -453,25 +450,10 @@ int main(int argc, char** argv) {
     cout << "\treorder time (s): " << reorder_time_sec << " (" << reorder_time_sec / g_action_timer.elapsed("ETA Application") << " total)\n";
     cout << "\n";
 
-#if 0
-    cout << "Switch Func Approx Stats:\n";
-    cout << "\tApprox Attempts  : " << g_eta_stats.approx_attempts << "\n";
-    cout << "\tApprox Accepted  : " << g_eta_stats.approx_accepted << " (" << (float) g_eta_stats.approx_accepted / g_eta_stats.approx_attempts << ")\n";
-    cout << "\tApprox Time      : " << g_eta_stats.approx_time << " (" << g_eta_stats.approx_time / g_action_timer.elapsed("ETA Application") << " total)\n";
-    cout << "\tApprox Eval Time : " << g_eta_stats.approx_eval_time << " (" << g_eta_stats.approx_eval_time / g_action_timer.elapsed("ETA Application") << " total)\n";
-    cout << "\n";
-#endif
-
-
     if(options.get_as<bool>("show_bdd_stats")) {
         cout << endl;
         g_cudd.info();
     }
-
-
-
-    g_action_timer.pop_timer("Output Results");
-
     cout << endl;
 
     /*
@@ -485,7 +467,7 @@ int main(int argc, char** argv) {
 }
 
 
-void print_node_tags(const TimingGraph& tg, std::shared_ptr<AnalyzerType> analyzer, std::shared_ptr<SharpSatType> sharp_sat_eval, NodeId node_id, int nvars, real_t nassigns, float progress, bool print_sat_cnt) {
+void print_node_tags(const TimingGraph& tg, std::shared_ptr<AnalyzerType> analyzer, std::shared_ptr<SharpSatType> sharp_sat_eval, NodeId node_id, size_t nvars, real_t nassigns, float progress, bool print_sat_cnt) {
 
     cout << "Node: " << node_id << " " << tg.node_type(node_id) << " (" << progress*100 << "%)\n";
     cout << "   Clk Tags:\n";
@@ -562,7 +544,7 @@ void print_node_histogram(const TimingGraph& tg, std::shared_ptr<AnalyzerType> a
     }
 }
 
-void dump_exhaustive_csv(std::ostream& os, const TimingGraph& tg, std::shared_ptr<AnalyzerType> analyzer, std::shared_ptr<SharpSatType> sharp_sat_eval, std::shared_ptr<TimingGraphNameResolver> name_resolver, NodeId node_id, int nvars) {
+void dump_exhaustive_csv(std::ostream& os, const TimingGraph& tg, std::shared_ptr<AnalyzerType> analyzer, std::shared_ptr<SharpSatType> sharp_sat_eval, std::shared_ptr<TimingGraphNameResolver> name_resolver, NodeId node_id, size_t nvars) {
     auto& data_tags = analyzer->setup_data_tags(node_id);
 
     using TupleVal = std::tuple<std::vector<TransitionType>,TransitionType,double>;
@@ -578,7 +560,7 @@ void dump_exhaustive_csv(std::ostream& os, const TimingGraph& tg, std::shared_pt
         assert(input_transitions.size() == sat_cnt);
 
         for(auto input_case : input_transitions) {
-            assert(input_case.size() == (size_t) nvars / 2);
+            assert(input_case.size() == nvars / 2);
             auto tuple = std::make_tuple(input_case, tag->trans_type(), tag->arr_time().value());
             exhaustive_values.push_back(tuple);
         }
@@ -627,7 +609,7 @@ void dump_exhaustive_csv(std::ostream& os, const TimingGraph& tg, std::shared_pt
     }
 }
 
-std::vector<std::vector<TransitionType>> get_transitions(BDD f, int nvars) {
+std::vector<std::vector<TransitionType>> get_transitions(BDD f, size_t nvars) {
     std::vector<std::vector<TransitionType>> transitions;
     auto minterms = get_minterms(f, nvars);
 
@@ -636,7 +618,7 @@ std::vector<std::vector<TransitionType>> get_transitions(BDD f, int nvars) {
 
         //Expect pairs of variables
         assert(minterm.size() % 2 == 0);
-        assert(minterm.size() == (size_t) nvars);
+        assert(minterm.size() == nvars);
 
         for(size_t i = 0; i < minterm.size() - 1; i += 2) {
             auto prev = minterm[i];
@@ -659,7 +641,7 @@ std::vector<std::vector<TransitionType>> get_transitions(BDD f, int nvars) {
     return transitions;
 }
 
-std::vector<std::vector<int>> get_minterms(BDD f, int nvars) {
+std::vector<std::vector<int>> get_minterms(BDD f, size_t nvars) {
     //Determine the starting index of the transition vars
     //(rather than those used to store logic functions)
 
@@ -711,7 +693,7 @@ std::vector<std::vector<int>> cube_to_minterms(std::vector<int> cube) {
     return minterms;
 }
 
-std::vector<std::vector<int>> get_cubes(BDD f, int nvars) {
+std::vector<std::vector<int>> get_cubes(BDD f, size_t nvars) {
     std::vector<std::vector<int>> cubes;
 
     int* cube_data;
