@@ -17,8 +17,8 @@ class ExtTimingTags {
         ///Finds a TimingTag in the current set that has clock domain id matching domain_id
         ///\param base_tag The tag to match meta-data against
         ///\returns An iterator to the tag if found, or end() if not found
-        iterator find_matching_tag(const Tag* base_tag);
-        const_iterator find_matching_tag(const Tag* base_Tag) const;
+        iterator find_matching_tag(const Tag* base_tag, double delay_bin_size);
+        const_iterator find_matching_tag(const Tag* base_Tag, double delay_bin_size) const;
 
         ///\returns An iterator to the first tag in the current set
         iterator begin() { return tags_.begin(); }
@@ -42,7 +42,7 @@ class ExtTimingTags {
         ///\param new_time The new arrival time to compare against
         ///\param base_tag The associated metat-data for new_time
         ///\remark Finds (or creates) the tag with the same clock domain as base_tag and update the arrival time if new_time is larger
-        void max_arr(const Tag* base_tag);
+        void max_arr(const Tag* base_tag, double delay_bin_size);
 
         ///Updates the required time of this set of tags to be the minimum.
         ///\param new_time The new arrival time to compare against
@@ -77,8 +77,8 @@ inline ExtTimingTags::iterator ExtTimingTags::add_tag(Tag* tag) {
     return tags_.end() - 1;
 }
 
-inline void ExtTimingTags::max_arr(const Tag* tag) {
-    auto iter = find_matching_tag(tag);
+inline void ExtTimingTags::max_arr(const Tag* tag, double delay_bin_size) {
+    auto iter = find_matching_tag(tag, delay_bin_size);
 
     if(iter == end()) {
         //First time we've seen this tag
@@ -106,16 +106,16 @@ inline void ExtTimingTags::clear() {
     tags_.clear();
 }
 
-inline ExtTimingTags::iterator ExtTimingTags::find_matching_tag(const Tag* base_tag) {
+inline ExtTimingTags::iterator ExtTimingTags::find_matching_tag(const Tag* base_tag, double delay_bin_size) {
     auto pred = [&](const Tag* tag) {
-        return tag->matches(base_tag);
+        return tag->matches(base_tag, delay_bin_size);
     };
     return std::find_if(begin(), end(), pred);
 }
 
-inline ExtTimingTags::const_iterator ExtTimingTags::find_matching_tag(const Tag* base_tag) const {
-    auto pred = [base_tag](const Tag* tag) {
-        return tag->matches(base_tag);
+inline ExtTimingTags::const_iterator ExtTimingTags::find_matching_tag(const Tag* base_tag, double delay_bin_size) const {
+    auto pred = [&](const Tag* tag) {
+        return tag->matches(base_tag, delay_bin_size);
     };
     return std::find_if(begin(), end(), pred);
 }

@@ -134,7 +134,7 @@ void ExtSetupAnalysisMode<BaseAnalysisMode,Tags>::forward_traverse_finalize_node
                 Time new_arr = clk_tag->arr_time() + edge_delay;
                 for(auto trans : {TransitionType::RISE, TransitionType::FALL, TransitionType::HIGH, TransitionType::LOW}) {
                     Tag launch_data_tag = Tag(new_arr, Time(NAN), clk_tag->clock_domain(), node_id, trans);
-                    sink_data_tags.max_arr(&launch_data_tag);
+                    sink_data_tags.max_arr(&launch_data_tag, delay_bin_size=0.); //Don't bin clock tags since there are few of them
                 }
             }
         } else if(tg.node_type(node_id) == TN_Type::FF_SINK) {
@@ -148,7 +148,7 @@ void ExtSetupAnalysisMode<BaseAnalysisMode,Tags>::forward_traverse_finalize_node
                 //Determine the new data tag based on the arriving clock tag
                 Time new_arr = clk_tag->arr_time() + edge_delay;
                 Tag new_clk_tag = Tag(new_arr, Time(NAN), *clk_tag);
-                sink_clock_tags.max_arr(&new_clk_tag);
+                sink_clock_tags.max_arr(&new_clk_tag, delay_bin_size);
             }
         }
     }
@@ -236,7 +236,7 @@ void ExtSetupAnalysisMode<BaseAnalysisMode,Tags>::forward_traverse_finalize_node
 
                 Time edge_delay = dc.max_edge_delay(tg, edge_id, src_tag->trans_type(), output_transition);
 
-                Time new_arr = map_to_delay_bin(src_tag->arr_time() + edge_delay, delay_bin_size);
+                Time new_arr = src_tag->arr_time() + edge_delay;
 
                 scenario_tag.max_arr(new_arr, src_tag);
 
@@ -247,7 +247,7 @@ void ExtSetupAnalysisMode<BaseAnalysisMode,Tags>::forward_traverse_finalize_node
             scenario_tag.add_input_tags(input_tags);
             
             //Now we need to merge the scenario into the output tags
-            sink_tags.max_arr(&scenario_tag); 
+            sink_tags.max_arr(&scenario_tag, delay_bin_size); 
 
 #ifdef TAG_DEBUG
             std::cout << "\t\toutput: " << output_transition << "@" << scenario_tag.arr_time() << "\n";
