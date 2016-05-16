@@ -18,17 +18,21 @@ def parse_args():
     # General arguments
     #
     parser.add_argument("arch",
-                        #required=True,
                         help="VTR FPGA Architecture description")
 
     parser.add_argument("blif",
-                        #required=True,
                         help="Circuit BLIF file")
 
-    parser.add_argument("--verify",
-                        choices=["exhaustive", "sample"],
-                        default="exhaustive",
-                        help="Verification mode. Default: %(default)s")
+    #parser.add_argument("--verify",
+                        #choices=["exhaustive", "sample"],
+                        #default="exhaustive",
+                        #help="Verification mode. Default: %(default)s")
+
+    parser.add_argument("--vtr",
+                        action="store_true",
+                        dest="run_vtr",
+                        default=False,
+                        help="Run VTR to produce SDF back-annotation")
 
     parser.add_argument("--esta",
                         action="store_true",
@@ -52,6 +56,10 @@ def parse_args():
                         nargs="*",
                         default=None,
                         help="Outputs to compare")
+
+    parser.add_argument("-d", "--delay_bin_size",
+                        default=100,
+                        help="Delay bin size for ESTA. Smaller values increase accuracy at the cost of longer run-time. Default: %(default)s")
 
     #
     # VTR related arguments
@@ -124,13 +132,12 @@ def esta_flow(args):
     vpr_verilog_file = "top_post_synthesis.v"
     vpr_log = "vpr.log"
 
-    if args.run_sim or args.run_esta:
+    if args.run_vtr:
         #Run VTR to generate an SDF file
         print
         print "Running VTR"
         vtr_results = run_vtr(args, vpr_log)
 
-    vpr_cpd_ps = parse_vpr_cpd(vpr_log)
 
     #Extract port and top instance information
     print
@@ -142,6 +149,8 @@ def esta_flow(args):
         print
         print "Running ESTA"
         esta_results = run_esta(args, design_info=design_info, sdf_file=vpr_sdf_file)
+
+    vpr_cpd_ps = parse_vpr_cpd(vpr_log)
 
     #Run Modelsim to collect simulation statistics
     if args.run_sim:
@@ -221,6 +230,7 @@ def run_esta(args, design_info, sdf_file):
             args.esta_exec,
             "-b", args.blif,
             "-s", sdf_file,
+            "-d", args.delay_bin_size,
             "--dump_exhaustive_csv", ",".join(dump_outputs)
           ]
     run_command(cmd)
@@ -295,23 +305,19 @@ def run_comparison(args, design_info, sta_cpd):
         sim_csv = ".".join(["sim", output, "csv"])
 
         esta_csvs = []
+        esta_csv_regex = re.compile(r"esta\." + output + "\.(?P<node_text>n\d+).*\.csv")
         for filename in os.listdir(os.getcwd()):
-            if fnmatch.fnmatch(filename, "esta." + output + "*.csv"):
-                esta_csvs.append(filename)
+            match = esta_csv_regex.match(filename)
+            if match:
+                esta_csvs.append((filename, int(match.group("node_text")[1:])))
 
         assert len(esta_csvs) > 0
 
-        highest_node_num = -1
-        for file in esta_csvs:
-            esta, output, node, ext = file.split('.')
+        #In descending order
+        esta_csvs = sorted(esta_csvs, key=lambda x: x[1], reverse=True)
 
-            node_id = int(node[1:])
-
-            highest_node_num = max(highest_node_num, node_id)
-        assert highest_node_num >= 0
-
-        #Only analyze the last one (i.e. highest node number)
-        esta_csv = "esta." + output + ".n" + str(highest_node_num) + ".csv"
+        #Only analyze the csv with the highest node number
+        esta_csv = esta_csvs[0][0]
 
         cmd = [
                 args.comparison_exec,
