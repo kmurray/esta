@@ -121,7 +121,7 @@ class ExtTimingTag {
          */
         ///\param other The tag to compare against
         ///\returns true if the meta-data of the current and other tag match
-        bool matches(const ExtTimingTag* other) const;
+        bool matches(const ExtTimingTag* other, double delay_bin_size) const;
 
     private:
         void update_arr(const Time new_arr, const ExtTimingTag* base_tag);
@@ -181,7 +181,7 @@ inline void ExtTimingTag::max_arr(const Time new_arr, const ExtTimingTag* base_t
     }
 }
 
-inline bool ExtTimingTag::matches(const ExtTimingTag* other) const {
+inline bool ExtTimingTag::matches(const ExtTimingTag* other, double delay_bin_size) const {
     //If a tag 'matches' it is typically collapsed into the matching tag.
 
     bool match = (clock_domain() == other->clock_domain());
@@ -191,7 +191,19 @@ inline bool ExtTimingTag::matches(const ExtTimingTag* other) const {
 #endif
 
 #ifdef TAG_MATCH_DELAY
-    match &= (arr_time() == other->arr_time());
+    //match &= (arr_time() == other->arr_time());
+
+    //We say that a delay 'matches' if it falls within the same delay bin
+    double this_bin = arr_time().value();
+    double other_bin = other->arr_time().value();
+    
+    if(delay_bin_size != 0.) {
+        //Map to the appropriate bin, we treat a bin size of zero as no binning
+        this_bin = std::floor(this_bin / delay_bin_size);
+        other_bin = std::floor(other_bin / delay_bin_size);
+    }
+
+    match &= (this_bin == other_bin);
 #endif
 
 #ifdef TAG_MATCH_SWITCH_FUNC
