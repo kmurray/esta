@@ -185,7 +185,7 @@ def plot_histogram(args, transition_data_sets):
     color_cycle = cycle("rbgcmyk")
     alpha = 0.6
 
-    plt.figure()
+    fig = plt.figure()
 
     
     min_val = float("inf")
@@ -200,23 +200,47 @@ def plot_histogram(args, transition_data_sets):
 
     histogram_range=(min_val, max_val)
 
+    vtext_margin = 4*0.008
+
+    vline_text_y = 1. + vtext_margin
+
+
     if args.sta_cpd:
         hist, bins = np.histogram([args.sta_cpd], range=histogram_range, bins=args.plot_bins)
 
         #Normalize to 1
         hist = hist.astype(np.float32) / hist.sum()
 
-        plt.bar(bins[:-1], hist, width=bins[1] - bins[0], label="STA", color=color_cycle.next(), alpha=alpha)
+        color = color_cycle.next()
+
+        label = "STA"
+
+        #Veritical line marking the maximum delay point
+        draw_vline(args.sta_cpd, label, color, vline_text_y)
+        vline_text_y += vtext_margin
+
+        #Histogram
+        plt.bar(bins[:-1], hist, width=bins[1] - bins[0], label=label, color=color, alpha=alpha)
 
     for label, transition_data in transition_data_sets.iteritems():
         delay_data = transition_data['delay']
+
 
         hist, bins = np.histogram(delay_data.values, range=histogram_range, bins=args.plot_bins)
 
         #Normalize to 1
         hist = hist.astype(np.float32) / hist.sum()
 
-        plt.bar(bins[:-1], hist, width=bins[1] - bins[0], label=label, color=color_cycle.next(), alpha=alpha)
+        color = color_cycle.next()
+
+        max_delay = delay_data.values.max()
+
+        #Veritical line marking the maximum delay point
+        draw_vline(max_delay, label, color, vline_text_y)
+        vline_text_y += vtext_margin
+
+        #Histogram of delays
+        plt.bar(bins[:-1], hist, width=bins[1] - bins[0], label=label, color=color, alpha=alpha)
 
 
     plt.ylim(ymax=1.)
@@ -230,6 +254,15 @@ def plot_histogram(args, transition_data_sets):
     else:
         #Interactive
         plt.show()
+
+def draw_vline(xval, label, color, vline_text_y):
+    #Veritical line marking the maximum delay point
+    # We draw this first, so it is covered by the histogram
+    plt.axvline(xval, color=color, linestyle='dashed')
+
+    #Label it manually
+    plt.text(xval, vline_text_y, label, size=9, rotation='horizontal', color=color, horizontalalignment='center', verticalalignment='top')
+
 
 if __name__ == "__main__":
     main()
