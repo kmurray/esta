@@ -642,7 +642,17 @@ void BlifTimingGraphBuilder::set_names_edge_delays_from_sdf(const TimingGraph& t
         //on this edge
         std::map<std::tuple<TransitionType,TransitionType>,Time> delays; //Delays for this specific edge
         for(auto trans_pair : active_transition_arcs[i]) {
-            auto ret = delays.insert(std::make_pair(trans_pair, Time(rise_delay_val.max())));
+            double delay = NAN;
+            if(std::get<1>(trans_pair) == TransitionType::HIGH || std::get<1>(trans_pair) == TransitionType::LOW) {
+                delay = 0.;
+            } else if(std::get<1>(trans_pair) == TransitionType::RISE) {
+                delay = rise_delay_val.max();
+            } else {
+                assert(std::get<1>(trans_pair) == TransitionType::FALL);
+                delay = fall_delay_val.max();
+            }
+
+            auto ret = delays.insert(std::make_pair(trans_pair, Time(delay)));
             assert(ret.second); //Was inserted
         }
 
@@ -758,7 +768,17 @@ void BlifTimingGraphBuilder::set_net_edge_delay_from_sdf(const TimingGraph& tg, 
             //Apply the delay to each pair of valid transitions
             //on this edge
             for(auto trans_pair : active_transition_arcs[0]) {
-                auto ret = delays.insert(std::make_pair(trans_pair, Time(rise_delay_val.max())));
+                double delay = NAN;
+                if(std::get<1>(trans_pair) == TransitionType::HIGH || std::get<1>(trans_pair) == TransitionType::LOW) {
+                    delay = 0.;
+                } else if(std::get<1>(trans_pair) == TransitionType::RISE) {
+                    delay = rise_delay_val.max();
+                } else {
+                    assert(std::get<1>(trans_pair) == TransitionType::FALL);
+                    delay = fall_delay_val.max();
+                }
+
+                auto ret = delays.insert(std::make_pair(trans_pair, Time(delay)));
                 assert(ret.second); //Was inserted
             }
         }
