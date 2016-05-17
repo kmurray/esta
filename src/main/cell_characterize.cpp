@@ -50,15 +50,15 @@ std::vector<std::set<std::tuple<TransitionType,TransitionType>>> identify_active
             }
 
             for(auto output_trans : possible_output_transitions) {
-                std::cout << "{";
+                //std::cout << "{";
                 for(size_t i = 0; i < input_scenario.size(); ++i) {
-                    std::cout << input_scenario[i];
-                    if(i != input_scenario.size() -1) { 
-                        std::cout << ",";
-                    }
+                    //std::cout << input_scenario[i];
+                    //if(i != input_scenario.size() -1) { 
+                        //std::cout << ",";
+                    //}
                     active_input_output_transitions[i].insert(std::make_tuple(input_scenario[i], output_trans));
                 }
-                std::cout << "} -> " << output_trans << std::endl;
+                //std::cout << "} -> " << output_trans << std::endl;
             }
         }
     }

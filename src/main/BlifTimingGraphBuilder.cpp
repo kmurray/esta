@@ -717,7 +717,7 @@ void BlifTimingGraphBuilder::set_net_edge_delay_from_sdf(const TimingGraph& tg, 
     for(const auto& sdf_cell : sdf_cells) {
         std::smatch matches;
         if(std::regex_match(sdf_cell.instance(), matches, interconnect_regex)) {
-            std::cout << "Matched: " << sdf_cell.instance() << std::endl;
+            //std::cout << "Matched: " << sdf_cell.instance() << std::endl;
 
             assert(matches.size() == 7);
 
@@ -778,13 +778,13 @@ void BlifTimingGraphBuilder::set_net_edge_delay_from_sdf(const TimingGraph& tg, 
     EdgeId edge_id = tg.node_in_edge(output_node_id, 0);
 
     assert(!delays.empty());
-    std::cout << "Setting net edge delays on edge " << edge_id << ": ";
+    //std::cout << "Setting net edge delays on edge " << edge_id << ": ";
     for(auto kv : delays) {
         TransitionType in, out;
         std::tie(in, out) = kv.first;
-        std::cout << in << "/" << out << "->" << kv.second << " ";
+        //std::cout << in << "/" << out << "->" << kv.second << " ";
     }
-    std::cout << std::endl;
+    //std::cout << std::endl;
 
     //Insert the delays for this edge
     auto ret = edge_delays_.insert(std::make_pair(edge_id, delays));
