@@ -125,9 +125,23 @@ def compare_exhaustive_csv(ref_data, cmp_data, show_pessimistic):
 
     if not np.array_equal(ref_data.loc[:,ref_input_col_names].values, cmp_data.loc[:,cmp_input_col_names].values):
         assert False, "Mismtached input transitions"
-        
-    if not np.array_equal(ref_data.loc[:,ref_output_col_name].values, cmp_data.loc[:,cmp_output_col_name].values):
-        assert False, "Mismtached output transitions"
+
+    #We check that the output transitions agree on the final stable logic value
+    # Note that we do not check for precise correspondance (e.g. L <-> L) since
+    # the ESTA tool may (pessimistically) report a F (with some delay) where the
+    # simulator might produce a L (with zero delay). So long as they agree on the
+    # final value everything is still correct, so that is what we check here
+    for row_idx in xrange(ref_data.shape[0]):
+        ref_output_trans = ref_data.loc[row_idx,ref_output_col_name]
+        cmp_output_trans = cmp_data.loc[row_idx,cmp_output_col_name]
+
+        if ref_output_trans in ["R", "H"] and cmp_output_trans in ["R", "H"]:
+            pass #Agree on final output high
+        elif ref_output_trans in ["F", "L"] and cmp_output_trans in ["F", "L"]:
+            pass #Agree on final output low
+        else:
+            #Error!
+            assert False, "Mismatched stable output value! At row " + str(row_idx)
 
     print "Comparing delays"
     delay_difference = cmp_data['delay'] - ref_data['delay']
