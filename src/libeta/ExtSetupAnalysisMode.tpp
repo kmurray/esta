@@ -208,7 +208,7 @@ void ExtSetupAnalysisMode<BaseAnalysisMode,Tags>::forward_traverse_finalize_node
             //Initialize the tag representing the behaviour for the current set of input transitions
             Tag scenario_tag;
             scenario_tag.set_clock_domain(0); //Currently only single-clock supported
-            /*scenario_tag.set_arr_time(Time(0.)); //Currently only single-clock supported*/
+            scenario_tag.set_arr_time(Time(0.)); //Set a default arrival to avoid nan
 
             //Keep a collection of the input tags (note that this may be different from the src tags
             //due to skipping clock tags and filtering inputs
@@ -226,7 +226,6 @@ void ExtSetupAnalysisMode<BaseAnalysisMode,Tags>::forward_traverse_finalize_node
 
                 const Tag* src_tag = src_tags[edge_idx];
 
-                //TODO: think about if we need to track this tag provided it gets filtered....
                 input_tags.push_back(src_tag); //We still need to track this input for #SAT calculation purposes
 
                 edge_idx_id_tag_tuples.emplace_back(edge_idx, edge_id, src_tag);
@@ -245,10 +244,18 @@ void ExtSetupAnalysisMode<BaseAnalysisMode,Tags>::forward_traverse_finalize_node
             bool only_static_inputs_applied = true;
             std::vector<std::tuple<EdgeId, const Tag*>> unfiltered_inputs;
             for(auto& edge_idx_id_tag_tuple : edge_idx_id_tag_tuples) {
+                //Check if the function has already been determined.
+                //If it has we don't need to look at any more inputs
+                if(f.IsOne() || f.IsZero()) {
+                    break;
+                }
+
+
                 int edge_idx; //Used to the the correct BDD var to restrict
                 EdgeId edge_id; //Used to get the edge delay
                 const Tag* src_tag; //To retreive the transition and arrival time
                 std::tie(edge_idx, edge_id, src_tag) = edge_idx_id_tag_tuple;
+
 
                 //We now apply this inputs transition to restrict the logic function
                 assert(edge_idx < node_func.SupportSize()); //Range check
@@ -316,6 +323,7 @@ void ExtSetupAnalysisMode<BaseAnalysisMode,Tags>::forward_traverse_finalize_node
                 Time edge_delay = dc.max_edge_delay(tg, edge_id, src_tag->trans_type(), output_transition);
 
                 Time new_arr = src_tag->arr_time() + edge_delay;
+                assert(!isnan(new_arr.value()));
 
                 scenario_tag.max_arr(new_arr, src_tag);
             }
@@ -330,6 +338,7 @@ void ExtSetupAnalysisMode<BaseAnalysisMode,Tags>::forward_traverse_finalize_node
             if(only_static_inputs_applied) std::cout << " (staticly determined)";
             std::cout << "\n";
 #endif
+            assert(!isnan(scenario_tag.arr_time().value()));
             i_case++;
         }
 
