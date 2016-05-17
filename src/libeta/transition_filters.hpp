@@ -69,7 +69,7 @@ class NextStateTransitionFilter {
             //In otherwords:
             //   Let f1 and f0 be the positive and negative the cofactors of f for a variable i
             //
-            //      Then i is dominated if f0 == f1
+            //      Then i is dominated iff f0 == f1
 
             assert(input_transitions[input_idx] == TransitionType::UNKOWN); //Don't yet know this variable
 

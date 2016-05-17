@@ -1,7 +1,9 @@
 #include <chrono>
 #include <sstream>
+#include "transition_eval.hpp"
 #include "util.hpp"
 #include "TagPermutationGenerator.hpp"
+#include "transition_eval.hpp"
 
 /*#define TAG_DEBUG*/
 
@@ -89,8 +91,12 @@ void ExtSetupAnalysisMode<BaseAnalysisMode,Tags>::pre_traverse_node(const Timing
         } else {
             //Initialize a data tag with zero arrival, invalid required time
             for(auto trans : {TransitionType::RISE, TransitionType::FALL, TransitionType::HIGH, TransitionType::LOW}) {
+                Time arr_time = Time(0.);
+                /*if(trans == TransitionType::HIGH || trans == TransitionType::LOW) {*/
+                    /*arr_time = Time(-std::numeric_limits<Time::scalar_type>::infinity());*/
+                /*}*/
 
-                Tag* input_tag = new Tag(Time(0.), Time(NAN), tg.node_clock_domain(node_id), node_id, trans);
+                Tag* input_tag = new Tag(arr_time, Time(NAN), tg.node_clock_domain(node_id), node_id, trans);
                 setup_data_tags_[node_id].add_tag(input_tag);
             }
         }
@@ -195,28 +201,24 @@ void ExtSetupAnalysisMode<BaseAnalysisMode,Tags>::forward_traverse_finalize_node
             }
             std::cout << "\n";
 #endif
-
-            //Calculate the output transition type
-            TransitionType output_transition = evaluate_transition(src_tags, node_func);
-
-            //We get the associated output transition when all the transitions in each tag
-            //of this input set occur -- that is when all the input switch functions evaluate
-            //true
+            //Sanity checks on incomming tags
             assert(src_tags.size() > 0);
-            Tag scenario_tag;
-            scenario_tag.set_trans_type(output_transition);
-            scenario_tag.set_clock_domain(0); //Currently only single-clock supported
-            scenario_tag.set_arr_time(Time(0.)); //Currently only single-clock supported
-
             assert((int) src_tags.size() <= tg.num_node_in_edges(node_id)); //May be less than if we are ignoring non-data edges like those from FF_CLOCK to FF_SINK
 
+            //Initialize the tag representing the behaviour for the current set of input transitions
+            Tag scenario_tag;
+            scenario_tag.set_clock_domain(0); //Currently only single-clock supported
+            /*scenario_tag.set_arr_time(Time(0.)); //Currently only single-clock supported*/
+
+            //Keep a collection of the input tags (note that this may be different from the src tags
+            //due to skipping clock tags and filtering inputs
             std::vector<const ExtTimingTag*> input_tags;
 
-            const auto filtered_tags = transition_filter_.identify_filtered_tags(src_tags, node_func);
-
-            //Take the worst-case arrival and delay
+            //Collect up the edge indicies and associated tags
+            std::vector<std::tuple<int,EdgeId, const Tag*>> edge_idx_id_tag_tuples;
             for(int edge_idx = 0; edge_idx < tg.num_node_in_edges(node_id); edge_idx++) {
                 EdgeId edge_id = tg.node_in_edge(node_id, edge_idx);
+
                 NodeId src_node_id = tg.edge_src_node(edge_id);
                 if(tg.node_type(src_node_id) == TN_Type::FF_CLOCK) {
                     continue; //We skip edges from FF_CLOCK since they never carry data arrivals
@@ -224,51 +226,140 @@ void ExtSetupAnalysisMode<BaseAnalysisMode,Tags>::forward_traverse_finalize_node
 
                 const Tag* src_tag = src_tags[edge_idx];
 
-
+                //TODO: think about if we need to track this tag provided it gets filtered....
                 input_tags.push_back(src_tag); //We still need to track this input for #SAT calculation purposes
 
-                if(filtered_tags.count(src_tag)) {
+                edge_idx_id_tag_tuples.emplace_back(edge_idx, edge_id, src_tag);
+            }
+
+            //Sort the edges/tags by the associated input tag arrival times (asscending)
+            auto order = [&src_tags] (std::tuple<int, EdgeId, const Tag*>& lhs_edge_id_tag_pair,
+                                      std::tuple<int, EdgeId, const Tag*>& rhs_edge_id_tag_pair) {
+                return std::get<2>(lhs_edge_id_tag_pair)->arr_time() < std::get<2>(rhs_edge_id_tag_pair)->arr_time();
+            };
+            std::sort(edge_idx_id_tag_tuples.begin(), edge_idx_id_tag_tuples.end(), order);
+
+            //Evaluate all the inputs and determine if are filtered
+            // Note that the previous sorting means this occurs in order of increase arrival time (so causality is preserved)
+            BDD f = node_func;
+            bool only_static_inputs_applied = true;
+            std::vector<std::tuple<EdgeId, const Tag*>> unfiltered_inputs;
+            for(auto& edge_idx_id_tag_tuple : edge_idx_id_tag_tuples) {
+                int edge_idx; //Used to the the correct BDD var to restrict
+                EdgeId edge_id; //Used to get the edge delay
+                const Tag* src_tag; //To retreive the transition and arrival time
+                std::tie(edge_idx, edge_id, src_tag) = edge_idx_id_tag_tuple;
+
+                //We now apply this inputs transition to restrict the logic function
+                assert(edge_idx < node_func.SupportSize()); //Range check
+                BDD f_new = apply_restriction(edge_idx, src_tag->trans_type(), f);
+
+                //If the variable had no effect on the logic output we do not need to consider its
+                //delay impact
+                if(f_new == f) {
 #ifdef TAG_DEBUG
                     std::cout << "\t\tFiltered: input " << edge_idx << std::endl;
 #endif
                     continue; //No effect on output delay
                 }
 
+                assert(f_new != f);
+
+                //The logic function changed when the current input was applied.
+                //
+                //We update the 'current' logic function at this node with the newly restricted one
+                f = f_new;
+
+                //And note this input so it will be used in delay calculation
+                unfiltered_inputs.emplace_back(edge_id, src_tag);
+
+                //Also Record whether any non-filtered inputs were dynamic transitions (i.e. Rise/Fall)
+                //this impacts what the output transition is
+                if(src_tag->trans_type() == TransitionType::RISE || src_tag->trans_type() == TransitionType::FALL) {
+                    only_static_inputs_applied = false;
+                }
+            }
+
+            //At this stage the logic function must have been fully determined
+            assert(f.IsOne() || f.IsZero());
+
+            //We now infer from the restricted logic function what the output transition from this node is
+            //
+            //If only static (i.e. High/Low) inputs were applied we generate a static High/Low output
+            //otherwise we produced a dynamic transition (i.e. Rise/Fall)
+            TransitionType output_transition = TransitionType::UNKOWN;
+            if(f.IsOne()) {
+                if(only_static_inputs_applied) {
+                    output_transition = TransitionType::HIGH; 
+                } else {
+                    output_transition = TransitionType::RISE; 
+                }
+            } else {
+                assert(f.IsZero());
+                
+                if(only_static_inputs_applied) {
+                    output_transition = TransitionType::LOW; 
+                } else {
+                    output_transition = TransitionType::FALL; 
+                }
+            }
+            scenario_tag.set_trans_type(output_transition); //Note the actual transition
+
+            //Now that we know what inputs are/are-not filtered compute the arrival time at this node
+            // This is done by taking the worst-case arrival + edge_delay from all unfiltered inputs
+            for(auto& unfiltered_input : unfiltered_inputs) {
+                EdgeId edge_id;
+                const Tag* src_tag;
+                std::tie(edge_id, src_tag) = unfiltered_input;
+
+                //And update the arrival time to reflect this change
                 Time edge_delay = dc.max_edge_delay(tg, edge_id, src_tag->trans_type(), output_transition);
 
                 Time new_arr = src_tag->arr_time() + edge_delay;
 
                 scenario_tag.max_arr(new_arr, src_tag);
-
-                assert(scenario_tag.trans_type() == output_transition);
             }
 
-
-            scenario_tag.add_input_tags(input_tags);
+            scenario_tag.add_input_tags(input_tags); //Save the input tags used to produce this tag
             
-            //Now we need to merge the scenario into the output tags
+            //Now we need to merge the scenario into the set of output tags
             sink_tags.max_arr(&scenario_tag, delay_bin_size); 
 
 #ifdef TAG_DEBUG
-            std::cout << "\t\toutput: " << output_transition << "@" << scenario_tag.arr_time() << "\n";
-#endif
-
-#ifdef TAG_DEBUG_2
-            /*std::cout << "\t\tScenario Func: " << scenario_switch_func << " #SAT: " << scenario_switch_func.CountMinterm(2*tg.primary_inputs().size()) << "\n";*/
-            auto pred = [output_transition](const Tag* tag) {
-                return tag->trans_type() == output_transition;
-            };
-            auto iter = std::find_if(sink_tags.begin(), sink_tags.end(), pred);
-            assert(iter != sink_tags.end());
-            /*std::cout << "\t\tSink " << iter->trans_type();*/
-            std::cout << "\t\t" << **iter;
-            /*std::cout << " Func: " << iter->switch_func();*/
+            std::cout << "\t\toutput: " << output_transition << "@" << scenario_tag.arr_time();
+            if(only_static_inputs_applied) std::cout << " (staticly determined)";
             std::cout << "\n";
-            /*std::cout << " #SAT: " << iter->switch_func().CountMinterm(2*tg.primary_inputs().size()) << "\n";*/
 #endif
             i_case++;
         }
+
+#ifdef TAG_DEBUG
+        //The output tags from this node
+        std::cout << "\tOutput Tags:\n";
+        int i_out_tag = 0;
+        for(auto sink_tag : sink_tags) {
+            std::cout << "\t\t" << sink_tag->trans_type() << "@" << sink_tag->arr_time().value() << " cases: " << sink_tag->input_tags().size() << std::endl;
+            i_out_tag++;
+        }
+#endif
     }
+}
+
+template<class BaseAnalysisMode, class Tags>
+BDD ExtSetupAnalysisMode<BaseAnalysisMode,Tags>::apply_restriction(int var_idx, TransitionType input_trans, BDD f) {
+    //We store the node functions using variables 0..num_inputs-1
+    //Get the resulting BDD variable
+    BDD var = g_cudd.bddVar(var_idx);
+
+    //FALL/LOW transitions result in logically false values, so we need to invert
+    //the raw variable (which is non-inverted)
+    if(input_trans == TransitionType::LOW || input_trans == TransitionType::FALL) {
+        //Invert
+        var = !var;
+    }
+
+    //Refine f with this variable restriction
+    return f.Restrict(var);
 }
 
 template<class BaseAnalysisMode, class Tags>
@@ -301,102 +392,6 @@ void ExtSetupAnalysisMode<BaseAnalysisMode,Tags>::gen_tag_permutations_recurr(co
             tag_permutations.push_back(new_perm);
         }
     }
-}
-
-template<class BaseAnalysisMode, class Tags>
-TransitionType ExtSetupAnalysisMode<BaseAnalysisMode,Tags>::evaluate_transition(const std::vector<const Tag*>& input_tags_scenario, const BDD& node_func) {
-    //CUDD assumes we provide the inputs defined up to the maximum variable index in the bdd
-    //so we need to allocate a vector atleast as large as the highest index.
-    //To do this we query the support indicies and take the max + 1 of these as the size.
-    //The vectors and then initialized (all values false) to this size.
-    //Note that cudd will only read the indicies associated with the variables in the bdd, 
-    //so the values of variablse not in the bdd don't matter
-    /*std::cout << "Eval Transition Func: " << node_func << "\n";*/
-
-    if(node_func.IsOne()) {
-        return TransitionType::LOW;
-    } else if (node_func.IsZero()) {
-        return TransitionType::HIGH;
-    } else {
-        auto support_indicies = node_func.SupportIndices();
-        assert(support_indicies.size() > 0);
-        size_t max_var_index = *std::max_element(support_indicies.begin(), support_indicies.end());
-        std::vector<int> initial_inputs(max_var_index+1, 0);
-        std::vector<int> final_inputs(max_var_index+1, 0);
-
-        for(size_t i = 0; i < support_indicies.size(); i++) {
-            //It is entirely possible that the support of a function may be
-            //less than the number of inputs (e.g. a useless input to a
-            //logic function).
-            //As a result we only fill in the variables which are explicitly
-            //listed in the support
-            size_t var_idx = support_indicies[i];
-
-            //We do expect the node inputs to be a superset of
-            //the support
-            assert(var_idx < input_tags_scenario.size());
-            const Tag* tag = input_tags_scenario[var_idx];
-            switch(tag->trans_type()) {
-                case TransitionType::RISE:
-                    initial_inputs[var_idx] = 0;
-                    final_inputs[var_idx] = 1;
-                    break;
-                case TransitionType::FALL:
-                    initial_inputs[var_idx] = 1;
-                    final_inputs[var_idx] = 0;
-                    break;
-                case TransitionType::HIGH:
-                    initial_inputs[var_idx] = 1;
-                    final_inputs[var_idx] = 1;
-                    break;
-                case TransitionType::LOW:
-                    initial_inputs[var_idx] = 0;
-                    final_inputs[var_idx] = 0;
-                    break;
-
-                default:
-                    assert(0);
-            }
-        }
-#if 0
-        std::cout << "Init input: ";
-        for(auto val : initial_inputs) {
-            std::cout << val;
-        }
-        std::cout << "\n";
-        std::cout << "Init output: ";
-        for(auto val : final_inputs) {
-            std::cout << val;
-        }
-        std::cout << "\n";
-#endif
-
-        BDD init_output = node_func.Eval(initial_inputs.data());
-        BDD final_output = node_func.Eval(final_inputs.data());
-
-#if 0
-        std::cout << "output: " << init_output << " -> " << final_output << "\n";
-#endif
-
-        if(init_output.IsOne()) {
-            if(final_output.IsOne()) {
-                return TransitionType::HIGH;
-            } else {
-                assert(final_output.IsZero());
-                return TransitionType::FALL;
-            }
-        } else {
-            assert(init_output.IsZero());
-            if(final_output.IsOne()) {
-                return TransitionType::RISE;
-            } else {
-                assert(final_output.IsZero());
-                return TransitionType::LOW;
-            }
-        }
-    }
-
-    assert(0); //Shouldn't get here
 }
 
 template<class BaseAnalysisMode, class Tags>

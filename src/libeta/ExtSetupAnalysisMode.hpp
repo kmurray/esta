@@ -45,10 +45,10 @@ class ExtSetupAnalysisMode : public BaseAnalysisMode {
 
         std::vector<std::vector<const Tag*>> gen_tag_permutations(const std::vector<Tags>& input_tags);
         void gen_tag_permutations_recurr(const std::vector<Tags>& input_tags, size_t var_idx, const std::vector<const Tag*>& partial_perm, std::vector<std::vector<const Tag*>>& permutations);
-        TransitionType evaluate_transition(const std::vector<const Tag*>& input_tags_scenario, const BDD& node_func);
 
         Time map_to_delay_bin(Time delay, const double delay_bin_size);
 
+        BDD apply_restriction(int var_idx, TransitionType input_trans, BDD f);
     protected:
 
         //Setup tag data storage

@@ -1,5 +1,6 @@
 #pragma once
 #include <vector>
+#include <iosfwd>
 
 enum class TransitionType {
     RISE,

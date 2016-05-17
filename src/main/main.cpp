@@ -339,8 +339,7 @@ int main(int argc, char** argv) {
     cout << "Num Logical Inputs: " << timing_graph.logical_inputs().size() << " Num BDD Vars: " << nvars << " Num Possible Assignments: " << nassigns << endl;
     cout << endl;
 
-    auto sharp_sat_eval = std::make_shared<SharpSatType>(timing_graph, analyzer, nvars, options.get_as<int>("approx_threshold"), options.get_as<float>("approx_ratio"), options.get_as<float>("approx_quality"));
-
+    auto sharp_sat_eval = std::make_shared<SharpSatType>(timing_graph, analyzer, nvars);
 
     if(options.get_as<string>("print_tags") != "none") {
         g_action_timer.push_timer("Output tags");
@@ -356,7 +355,7 @@ int main(int argc, char** argv) {
         } else if(options.get_as<string>("print_tags") == "all") {
             for(LevelId level_id = 0; level_id < timing_graph.num_levels(); level_id++) {
                 for(auto node_id : timing_graph.level(level_id)) {
-                print_node_tags(timing_graph, analyzer, sharp_sat_eval, node_id, nvars, nassigns, 0, true);
+                    print_node_tags(timing_graph, analyzer, sharp_sat_eval, node_id, nvars, nassigns, 0, true);
                 }
             }
         } else {
@@ -364,6 +363,8 @@ int main(int argc, char** argv) {
         }
         g_action_timer.pop_timer("Output tags"); 
     }
+
+    //sharp_sat_eval = std::make_shared<SharpSatType>(timing_graph, analyzer, nvars);
 
     if(options.get_as<string>("print_histogram") != "none") {
         g_action_timer.push_timer("Output tag histograms");
@@ -533,6 +534,8 @@ void print_node_histogram(const TimingGraph& tg, std::shared_ptr<AnalyzerType> a
         delay_prob_histo[delay] += switch_prob;
     }
 
+    double total_prob = 0.;
+
     cout << "\tDelay Prob\n";
     cout << "\t----- ----\n";
     for(auto kv : delay_prob_histo) {
@@ -541,7 +544,13 @@ void print_node_histogram(const TimingGraph& tg, std::shared_ptr<AnalyzerType> a
         auto switch_prob = kv.second;
 
         std::cout << "\t" << std::setw(5) << delay << " " << switch_prob << "\n";
+
+        total_prob += switch_prob;
     }
+
+    //Sanity check, total probability should be equal to 1.0 (accounting for FP round-off)
+    double epsilon = 1e-9;
+    assert(total_prob >= 1. - epsilon && total_prob <= 1. + epsilon);
 }
 
 void dump_exhaustive_csv(std::ostream& os, const TimingGraph& tg, std::shared_ptr<AnalyzerType> analyzer, std::shared_ptr<SharpSatType> sharp_sat_eval, std::shared_ptr<TimingGraphNameResolver> name_resolver, NodeId node_id, size_t nvars) {
@@ -621,6 +630,7 @@ std::vector<std::vector<TransitionType>> get_transitions(BDD f, size_t nvars) {
         assert(minterm.size() == nvars);
 
         for(size_t i = 0; i < minterm.size() - 1; i += 2) {
+            //Walk through pairs of variables
             auto prev = minterm[i];
             auto next = minterm[i+1];
 
@@ -674,7 +684,7 @@ std::vector<std::vector<int>> get_minterms(BDD f, size_t nvars) {
 std::vector<std::vector<int>> cube_to_minterms(std::vector<int> cube) {
     std::vector<std::vector<int>> minterms;
 
-    auto iter = std::find(cube.begin(), cube.end(), 2);
+    auto iter = std::find(cube.begin(), cube.end(), 2); //CUDD returns DC's as integer value 2
     if(iter == cube.end()) {
         minterms.push_back(cube);
         return minterms;

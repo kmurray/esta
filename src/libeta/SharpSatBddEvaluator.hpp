@@ -3,19 +3,20 @@
 #include "SharpSatEvaluator.hpp"
 #include "CuddSharpSatFraction.h"
 
+//#define USE_BDD_CACHE
+
 //#define BDD_CALC_DEBUG
 //#define DEBUG_PRINT_MINTERMS
 
 template<class Analyzer>
 class SharpSatBddEvaluator : public SharpSatEvaluator<Analyzer> {
+    private:
+        typedef ObjectCacheMap<const ExtTimingTag*,BDD> BddCache;
     public:
         typedef typename SharpSatBddEvaluator<Analyzer>::count_support count_support;
 
-        SharpSatBddEvaluator(const TimingGraph& tg, std::shared_ptr<Analyzer> analyzer, int nvars, int approx_threshold, float node_ratio, float quality)
-            : SharpSatEvaluator<Analyzer>(tg, analyzer, nvars)
-            , bdd_approx_threshold_(approx_threshold) 
-            , bdd_approx_node_ratio_(node_ratio)
-            , bdd_approx_quality_(quality) {
+        SharpSatBddEvaluator(const TimingGraph& tg, std::shared_ptr<Analyzer> analyzer, size_t nvars)
+            : SharpSatEvaluator<Analyzer>(tg, analyzer, nvars) {
             //We have a unique logic variable for each Primary Input
             //
             //To represent transitions we have both a 'curr' and 'next' variable
@@ -34,7 +35,7 @@ class SharpSatBddEvaluator : public SharpSatEvaluator<Analyzer> {
                 }
             }
 
-            assert(pi_curr_bdd_vars_.size() + pi_curr_bdd_vars_.size() == (size_t) nvars);
+            assert(pi_curr_bdd_vars_.size() + pi_curr_bdd_vars_.size() == nvars);
         }
 
         double count_sat_fraction(const ExtTimingTag* tag, NodeId node_id) override {
@@ -71,9 +72,7 @@ class SharpSatBddEvaluator : public SharpSatEvaluator<Analyzer> {
                 std::cout << "\treorder_time: " << (float) cudd.ReadReorderingTime() / 1000 << "\n";
                 i++;
             }
-            bdd_cache_.print_stats(); 
-            bdd_cache_.clear(); 
-            bdd_cache_.reset_stats(); 
+            bdd_cache_ = BddCache();
 
             //Reset the default re-order size
             //Re-ordering really big BDDs is slow (re-order time appears to be quadratic in size)
@@ -92,6 +91,49 @@ class SharpSatBddEvaluator : public SharpSatEvaluator<Analyzer> {
 
             //Indent based on recursion level 
             std::string tab(level, ' ');
+
+#ifndef USE_BDD_CACHE
+            BDD f;
+            auto node_type = this->tg_.node_type(node_id);
+            if(node_type == TN_Type::INPAD_SOURCE || node_type == TN_Type::FF_SOURCE) {
+                f = generate_pi_switch_func(node_id, tag->trans_type());
+                //std::cout << tab << "Node " << node_id << " " << tag->trans_type() << " Base xfunc: " << f << "\n";
+            } else if(node_type == TN_Type::CONSTANT_GEN_SOURCE) {
+                //Constant generator always satisifes any input combination
+                f = g_cudd.bddOne(); 
+            } else {
+                //Recursive case
+                f = g_cudd.bddZero();
+                int scenario_cnt = 0;
+
+                //Consider every input which generates this tag
+                for(const auto& transition_scenario : tag->input_tags()) {
+                    BDD f_scenario = g_cudd.bddOne();
+
+                    for(int edge_idx = 0; edge_idx < this->tg_.num_node_in_edges(node_id); edge_idx++) {
+                        EdgeId edge_id = this->tg_.node_in_edge(node_id, edge_idx);
+                        NodeId src_node_id = this->tg_.edge_src_node(edge_id);
+
+                        if(this->tg_.node_type(src_node_id) == TN_Type::FF_CLOCK) {
+                            continue;
+                        }
+
+                        const ExtTimingTag* src_tag = transition_scenario[edge_idx];
+                        f_scenario &= this->build_bdd_xfunc(src_tag, src_node_id, level+1);
+                    }
+
+                    f |= f_scenario;
+                    //std::cout << tab;
+                    //std::cout << "Node " << node_id << " Scenario: " << scenario_cnt << " f_scenario: " << f_scenario;
+                    //std::cout << " xfunc: " << f << " #SAT(f_scenario): " << bdd_sharpsat(f_scenario) << " #SAT(f): " << bdd_sharpsat(f) << "\n";
+
+                    scenario_cnt++;
+                }
+            }
+            return f;
+
+#else //USE_BDD_CACHE
+
 
 #ifdef BDD_CALC_DEBUG
             std::cout << tab << "Requested BDD for " << node_id << " " << tag << " " << this->tg_.node_type(node_id) << "\n";
@@ -152,6 +194,7 @@ class SharpSatBddEvaluator : public SharpSatEvaluator<Analyzer> {
                 //Found it
                 return f;
             }
+#endif //USE_BDD_CACHE
             assert(0);
         }
 
@@ -219,10 +262,6 @@ class SharpSatBddEvaluator : public SharpSatEvaluator<Analyzer> {
         std::unordered_map<NodeId,BDD> pi_curr_bdd_vars_;
         std::unordered_map<NodeId,BDD> pi_next_bdd_vars_;
 
-        int bdd_approx_threshold_;
-        float bdd_approx_node_ratio_;
-        float bdd_approx_quality_;
-
-        ObjectCacheMap<const ExtTimingTag*,BDD> bdd_cache_;
+        BddCache bdd_cache_;
 };
 

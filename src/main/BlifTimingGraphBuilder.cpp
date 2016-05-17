@@ -737,17 +737,6 @@ void BlifTimingGraphBuilder::set_net_edge_delay_from_sdf(const TimingGraph& tg, 
             assert(sink_port_dir == "input");
             assert(sink_port_idx == "0");
 
-#if 0
-            //Determine the sink input pin
-            std::stringstream ss;
-            ss << matches[6];
-            int edge_idx = -1;
-            ss >> edge_idx;
-            assert(ss.eof() && !ss.bad()); //Converted successfully
-
-            assert(edge_idx >= 0);
-#endif
-
             //Set the delays on this net
             assert(delays.empty()); //Should only be a single match in SDF to this net connection        
 
