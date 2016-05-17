@@ -3,7 +3,7 @@
 #include "SharpSatEvaluator.hpp"
 #include "CuddSharpSatFraction.h"
 
-//#define USE_BDD_CACHE
+#define USE_BDD_CACHE
 
 //#define BDD_CALC_DEBUG
 //#define DEBUG_PRINT_MINTERMS
