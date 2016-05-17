@@ -31,11 +31,6 @@ std::vector<std::set<std::tuple<TransitionType,TransitionType>>> identify_active
                 }
             }
         }
-    } else if (support_size == 1) {
-        active_input_output_transitions = std::vector<std::set<std::tuple<TransitionType,TransitionType>>>(support_size);
-        for(auto trans : valid_transitions) {
-            active_input_output_transitions[0].insert(std::make_tuple(trans, trans));
-        }
     } else {
         //Determine all possible input scenarios
         auto all_input_scenarios = cartesian_product(valid_transitions, support_size);
@@ -44,8 +39,17 @@ std::vector<std::set<std::tuple<TransitionType,TransitionType>>> identify_active
         // constructing the set of active transitions as we go
         active_input_output_transitions = std::vector<std::set<std::tuple<TransitionType,TransitionType>>>(support_size);
         for(auto input_scenario : all_input_scenarios) {
-            for(auto output_trans : valid_transitions) {
+            TransitionType computed_output_trans = evaluate_output_transition(input_scenario, f);
 
+            std::vector<TransitionType> possible_output_transitions;
+            if(computed_output_trans == TransitionType::RISE || computed_output_trans == TransitionType::HIGH) {
+                possible_output_transitions = {TransitionType::RISE, TransitionType::HIGH};
+            } else {
+                assert(computed_output_trans == TransitionType::FALL || computed_output_trans == TransitionType::LOW);
+                possible_output_transitions = {TransitionType::FALL, TransitionType::LOW};
+            }
+
+            for(auto output_trans : possible_output_transitions) {
                 std::cout << "{";
                 for(size_t i = 0; i < input_scenario.size(); ++i) {
                     std::cout << input_scenario[i];

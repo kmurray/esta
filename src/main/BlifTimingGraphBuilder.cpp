@@ -672,7 +672,7 @@ void BlifTimingGraphBuilder::set_net_edge_delay_from_sdf(const TimingGraph& tg, 
     auto active_transition_arcs = identify_active_transition_arcs(opin_node_func, tg.num_node_in_edges(output_node_id));
 
     assert(active_transition_arcs.size() == 1); //A net
-    assert(active_transition_arcs[0].size() == 4); //A net will only have 1:1 transitions
+    assert(active_transition_arcs[0].size() == 8); //A net will only have 1:1 transitions (where we might treat H/R and F/L equivalently)
 
     //We need to get the output port of the sink block
     const BlifPort* sink_block_output_port = nullptr;
