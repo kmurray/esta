@@ -131,6 +131,7 @@ def compare_exhaustive_csv(ref_data, cmp_data, show_pessimistic):
     # the ESTA tool may (pessimistically) report a F (with some delay) where the
     # simulator might produce a L (with zero delay). So long as they agree on the
     # final value everything is still correct, so that is what we check here
+    mismatch_output_trans_count = 0
     for row_idx in xrange(ref_data.shape[0]):
         ref_output_trans = ref_data.loc[row_idx,ref_output_col_name]
         cmp_output_trans = cmp_data.loc[row_idx,cmp_output_col_name]
@@ -141,7 +142,14 @@ def compare_exhaustive_csv(ref_data, cmp_data, show_pessimistic):
             pass #Agree on final output low
         else:
             #Error!
-            assert False, "Mismatched stable output value! At row " + str(row_idx)
+            mismatch_output_trans_count += 1
+            print "Mismatched stable output value! ", ref_data.loc[row_idx,ref_input_col_names].values, "->", ref_data.loc[row_idx,ref_output_col_name], "(expected", cmp_data.loc[row_idx,cmp_output_col_name], ")"
+
+            if mismatch_output_trans_count > 1000:
+                print "Giving up after 1000 mismatchs"
+                break
+    if mismatch_output_trans_count > 0:
+        sys.exit(1)
 
     print "Comparing delays"
     delay_difference = cmp_data['delay'] - ref_data['delay']
