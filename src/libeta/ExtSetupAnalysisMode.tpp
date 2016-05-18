@@ -301,6 +301,10 @@ void ExtSetupAnalysisMode<BaseAnalysisMode,Tags>::forward_traverse_finalize_node
                 } else {
                     output_transition = TransitionType::RISE; 
                 }
+
+                //Sanity check that we get and equivalent transition if we evaluate the node function up front
+                auto ref_output_transition = evaluate_output_transition(src_tags, node_func);
+                assert(ref_output_transition == TransitionType::RISE || ref_output_transition == TransitionType::HIGH);
             } else {
                 assert(f.IsZero());
                 
@@ -309,6 +313,10 @@ void ExtSetupAnalysisMode<BaseAnalysisMode,Tags>::forward_traverse_finalize_node
                 } else {
                     output_transition = TransitionType::FALL; 
                 }
+
+                //Sanity check that we get and equivalent transition if we evaluate the node function up front
+                auto ref_output_transition = evaluate_output_transition(src_tags, node_func);
+                assert(ref_output_transition == TransitionType::FALL || ref_output_transition == TransitionType::LOW);
             }
             scenario_tag.set_trans_type(output_transition); //Note the actual transition
 
