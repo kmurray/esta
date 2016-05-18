@@ -404,9 +404,29 @@ BDD BlifTimingGraphBuilder::create_func_from_names(const BlifNames* names, const
     //Each expression in parenthesies corresponds to a row in the single
     //output cover
 
-    //We initially make the function false, since we are adding the
+    //We initially make the function false, since we assume we are adding the
     //ON set from the .names
     BDD f = g_cudd.bddZero();
+
+    //Check if we are actually doing the OFF set instead
+    if(names->cover_rows.size() > 0) {
+        //There is at-least one row
+        //
+        //Check the output value of the row to determine if this .names
+        //is encoded with the ON set ('1') or OFF set ('0')
+        //
+        //This should be consistent through out the .names (i.e. all output values '1' or '0')
+        std::vector<LogicValue>* row = names->cover_rows[0];
+
+        LogicValue output_value = (*row)[row->size()-1];
+
+        if(output_value == LogicValue::FALSE) {
+            //This .names encodes the OFF set, so we set the 'background'
+            //value to true
+            f = g_cudd.bddOne();
+        }
+    }
+
 
     for(std::vector<LogicValue>* row : names->cover_rows) {
         //We now AND together the inputs in a single row
@@ -418,32 +438,37 @@ BDD BlifTimingGraphBuilder::create_func_from_names(const BlifNames* names, const
         //
         //However sometimes synthesis tools will produce zero truth values,
         //which we can safely ignore
-        LogicValue row_truth_val = (*row)[row->size()-1];
-        if(row_truth_val == LogicValue::TRUE) {
+        LogicValue row_output_val = (*row)[row->size()-1];
 
-            for(size_t i = 0; i < row->size() - 1; i++) {
-                LogicValue val = (*row)[i];
-                BDD var = input_vars[i];
+        //Build up the cube from the row inputs
+        for(size_t i = 0; i < row->size() - 1; i++) {
+            LogicValue val = (*row)[i];
+            BDD var = input_vars[i];
 
-                if(val == LogicValue::TRUE) {
-                    cube &= var;
-                } else if (val == LogicValue::FALSE) {
-                    cube &= !var;
-                } else if (val == LogicValue::DC) {
-                    //DC values are ignored (they don't appear in the cube)
-                    continue;
-                } else {
-                    assert(0);
-                }
+            if(val == LogicValue::TRUE) {
+                cube &= var;
+            } else if (val == LogicValue::FALSE) {
+                cube &= !var;
+            } else if (val == LogicValue::DC) {
+                //DC values are ignored (they don't appear in the cube)
+                continue;
+            } else {
+                assert(0);
             }
-        } else {
-            //Ignore false values, since we assume all other cubes are
-            //false when building f
-            assert(row_truth_val == LogicValue::FALSE);
         }
 
-        //Add the row to the function
-        f |= cube;
+        //Add the cube to the function
+        if(row_output_val == LogicValue::TRUE) {
+            //This cube specifies part of the on-set, so we OR together the cubes
+            //This causes f's on set to be the union of all the cubes
+            f |= cube;
+        } else {
+            assert(row_output_val == LogicValue::FALSE);
+            //This cube specifies part of the off-set, so *invert* and AND together the cubes
+            //This clears the minterms covered by this cube (since we default f to all minterms
+            //true when handling the off-set)
+            f &= !cube;
+        }
     }
 
     return f;
