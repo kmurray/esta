@@ -76,9 +76,11 @@ def main():
     plot_histogram(data_sets, num_bins=args.plot_bins, plot_file=args.plot_file)
 
 def load_histogram_csv(filename):
+    print "Loading " + filename + "..."
     return pd.read_csv(filename)
 
 def load_exhaustive_csv(filename):
+    print "Loading " + filename + "..."
     raw_data = pd.read_csv(filename)
 
     #Counts of how often all delay values occur
@@ -98,12 +100,13 @@ def map_to_bins(delay_prob_data, num_bins, histogram_range):
     while bins[-1] < histogram_range[1]:
         bins.append(bins[-1] + bin_width)
     
-    assert np.isclose(bins[-1], histogram_range[1])
+    assert bins[-1] >= histogram_range[1]
 
     heights = [0]*len(bins)
 
     for i, delay, prob in delay_prob_data.itertuples():
-        bin_index = int(math.floor(delay/bin_width))
+        bin_loc = (delay - histogram_range[0])/bin_width
+        bin_index = int(math.floor(bin_loc))
         if bin_index == len(bins) - 1:
             bin_index -= 1
             print "Delay: {delay}, Bin: {i} [{min}, {max}]".format(delay=delay, i=bin_index, min=bins[bin_index], max=bins[bin_index+1])
@@ -111,6 +114,7 @@ def map_to_bins(delay_prob_data, num_bins, histogram_range):
             print "Delay: {delay}, Bin: {i} [{min}, {max})".format(delay=delay, i=bin_index, min=bins[bin_index], max=bins[bin_index+1])
         heights[bin_index] += prob
 
+    assert np.isclose(sum(heights), 1.)
 
     return (bins, heights)
 
