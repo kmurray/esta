@@ -536,6 +536,7 @@ void print_node_histogram(const TimingGraph& tg, std::shared_ptr<AnalyzerType> a
 
     double total_prob = 0.;
 
+    //Print to stdou
     cout << "\tDelay Prob\n";
     cout << "\t----- ----\n";
     for(auto kv : delay_prob_histo) {
@@ -551,6 +552,25 @@ void print_node_histogram(const TimingGraph& tg, std::shared_ptr<AnalyzerType> a
     //Sanity check, total probability should be equal to 1.0 (accounting for FP round-off)
     double epsilon = 1e-9;
     assert(total_prob >= 1. - epsilon && total_prob <= 1. + epsilon);
+
+    //Print to a csv
+    std::string filename = "esta.histogram." + node_name + ".n" + std::to_string(node_id) + ".csv";
+    std::ofstream os(filename);
+
+    //Header
+    os << "delay,probability\n"; 
+    //Rows
+    for(auto kv : delay_prob_histo) {
+
+        auto delay = kv.first;
+        auto switch_prob = kv.second;
+
+        os << delay << "," << switch_prob << "\n"; 
+
+        total_prob += switch_prob;
+    }
+
+
 }
 
 void dump_exhaustive_csv(std::ostream& os, const TimingGraph& tg, std::shared_ptr<AnalyzerType> analyzer, std::shared_ptr<SharpSatType> sharp_sat_eval, std::shared_ptr<TimingGraphNameResolver> name_resolver, NodeId node_id, size_t nvars) {
