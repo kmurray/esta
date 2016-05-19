@@ -92,17 +92,11 @@ def load_exhaustive_csv(filename):
 
     return pd.DataFrame({"delay": normed_counts.index, "probability": normed_counts.values})
 
-def map_to_bins(delay_prob_data, num_bins, histogram_range):
-
-    bin_width = float(histogram_range[1] - histogram_range[0]) / num_bins
-
-    bins = [histogram_range[0]]
-    while bins[-1] < histogram_range[1]:
-        bins.append(bins[-1] + bin_width)
-    
-    assert bins[-1] >= histogram_range[1]
+def map_to_bins(delay_prob_data, bins, histogram_range):
 
     heights = [0]*len(bins)
+
+    bin_width = bins[1] - bins[0]
 
     for i, delay, prob in delay_prob_data.itertuples():
         bin_loc = (delay - histogram_range[0])/bin_width
@@ -116,7 +110,7 @@ def map_to_bins(delay_prob_data, num_bins, histogram_range):
 
     assert np.isclose(sum(heights), 1.)
 
-    return (bins, heights)
+    return heights
 
 def plot_histogram(data_sets, num_bins=50, plot_file=None):
     color_cycle = cycle("rbgcmyk")
@@ -132,6 +126,18 @@ def plot_histogram(data_sets, num_bins=50, plot_file=None):
         max_val = max(max_val, delay_prob_data['delay'].max())
 
     histogram_range=(min_val, max_val)
+
+    #Generate the bins
+    bin_width = float(histogram_range[1] - histogram_range[0]) / num_bins
+    bins = [histogram_range[0]] #Initialize at low end of range
+    for i in xrange(num_bins-1):
+        bins.append(bins[-1] + bin_width)
+    bins.append(histogram_range[1]) #End at high end of range, we do this explicitly to avoid FP round-off issues
+
+    print histogram_range
+    print bins
+
+    assert bins[-1] >= histogram_range[1]
 
     vtext_margin = 4*0.008
 
@@ -150,9 +156,9 @@ def plot_histogram(data_sets, num_bins=50, plot_file=None):
         draw_vline(max_delay, label, color, vline_text_y)
         vline_text_y += vtext_margin #Advance the position for the next vertical line text marking
 
-        bins, heights = map_to_bins(delay_prob_data, num_bins, histogram_range)
+        heights = map_to_bins(delay_prob_data, bins, histogram_range)
 
-        plt.bar(bins, heights, width=bins[1] - bins[0], label=label, color=color, alpha=alpha)
+        plt.bar(bins, heights, width=bin_width, label=label, color=color, alpha=alpha)
 
     plt.ylim(ymin=0., ymax=1.)
     plt.grid()
@@ -161,7 +167,7 @@ def plot_histogram(data_sets, num_bins=50, plot_file=None):
     plt.legend(loc='best')
 
     if plot_file:
-        plt.savefig(args.plot_file)
+        plt.savefig(plot_file)
     else:
         #Interactive
         plt.show()
