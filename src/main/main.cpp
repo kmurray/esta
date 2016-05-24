@@ -66,7 +66,7 @@ std::vector<std::vector<int>> get_minterms(BDD f, size_t nvars);
 std::vector<std::vector<int>> cube_to_minterms(std::vector<int> cube);
 std::vector<std::vector<TransitionType>> get_transitions(BDD f, size_t nvars);
 
-PreCalcTransDelayCalculator get_pre_calc_trans_delay_calculator(std::map<EdgeId,std::map<std::tuple<TransitionType,TransitionType>,Time>>& set_edge_delays, const TimingGraph& tg);
+PreCalcTransDelayCalculator get_pre_calc_trans_delay_calculator(std::map<EdgeId,std::map<TransitionType,Time>>& set_edge_delays, const TimingGraph& tg);
 
 std::vector<std::string> split(const std::string& str, char delim);
 
@@ -740,14 +740,12 @@ std::vector<std::vector<int>> get_cubes(BDD f, size_t nvars) {
     return cubes;
 }
 
-PreCalcTransDelayCalculator get_pre_calc_trans_delay_calculator(std::map<EdgeId,std::map<std::tuple<TransitionType,TransitionType>,Time>>& set_edge_delays, const TimingGraph& tg) {
+PreCalcTransDelayCalculator get_pre_calc_trans_delay_calculator(std::map<EdgeId,std::map<TransitionType,Time>>& set_edge_delays, const TimingGraph& tg) {
     PreCalcTransDelayCalculator::EdgeDelayModel edge_delay_model(tg.num_edges());
 
-    std::map<std::tuple<TransitionType,TransitionType>,Time> edge_zero_delays;
-    for(auto in_trans : {TransitionType::RISE, TransitionType::FALL, TransitionType::HIGH, TransitionType::LOW}) {
-        for(auto out_trans : {TransitionType::RISE, TransitionType::FALL, TransitionType::HIGH, TransitionType::LOW}) {
-            edge_zero_delays[std::make_tuple(in_trans,out_trans)] = Time(0.);
-        }
+    std::map<TransitionType,Time> edge_zero_delays;
+    for(auto out_trans : {TransitionType::RISE, TransitionType::FALL, TransitionType::HIGH, TransitionType::LOW}) {
+        edge_zero_delays[out_trans] = Time(0.);
     }
 
     for(EdgeId i = 0; i < tg.num_edges(); ++i) {

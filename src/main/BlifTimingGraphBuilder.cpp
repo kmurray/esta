@@ -318,7 +318,7 @@ void BlifTimingGraphBuilder::create_net_edges(TimingGraph& tg) {
     const BlifModel* top_model = blif_data_->get_top_model();
 
     for(const BlifNet* net : top_model->nets) {
-        cout << "Net: " << *net->name << "\n";
+        cout << "Net: " << *net->name << " (" << net->sinks.size() << " sinks)\n";
         assert(net->drivers.size() == 1);
         const BlifPort* driver_port = net->drivers[0]->port;
         
@@ -338,7 +338,7 @@ void BlifTimingGraphBuilder::create_net_edges(TimingGraph& tg) {
             //Identity logic function
             tg.set_node_func(sink_node, g_cudd.bddVar(0));
 
-            std::cout << "Adding edge " << driver_node << " -> " << sink_node << std::endl;
+            //std::cout << "Adding edge " << driver_node << " -> " << sink_node << std::endl;
             tg.add_edge(driver_node, sink_node);
 
             set_net_edge_delay_from_sdf(tg, driver_port, sink_port, sink_node);
@@ -642,14 +642,14 @@ void BlifTimingGraphBuilder::set_names_edge_delays_from_sdf(const TimingGraph& t
     const auto& iopaths = cell_delays.iopaths();
 
     //Characterize the logic function to identify which input/output delays to map onto each edge
-    std::cout << "Identify active transition arcs for: " << *blif_names->ports[blif_names->ports.size()-1]->name << std::endl;
-    auto active_transition_arcs = identify_active_transition_arcs(opin_node_func, tg.num_node_in_edges(output_node_id));
+    //std::cout << "Identify active transition arcs for: " << *blif_names->ports[blif_names->ports.size()-1]->name << std::endl;
+    //auto active_transition_arcs = identify_active_transition_arcs(opin_node_func, tg.num_node_in_edges(output_node_id));
 
     //Verify the delays make sense
     assert(cell_delays.type() == sdfparse::Delay::Type::ABSOLUTE); //Only accept absolute delays
     assert(blif_names->ports.size()-1 == iopaths.size()); //Same number of inputs
     assert(iopaths.size() == (size_t) tg.num_node_in_edges(output_node_id)); //Same number of inputs
-    assert(iopaths.size() == active_transition_arcs.size()); //Same number of inputs
+    //assert(iopaths.size() == active_transition_arcs.size()); //Same number of inputs
 
 
     //Iterate through the edges applying the delays
@@ -665,19 +665,19 @@ void BlifTimingGraphBuilder::set_names_edge_delays_from_sdf(const TimingGraph& t
 
         //Apply the delay to each pair of valid transitions
         //on this edge
-        std::map<std::tuple<TransitionType,TransitionType>,Time> delays; //Delays for this specific edge
-        for(auto trans_pair : active_transition_arcs[i]) {
-            double delay = NAN;
-            if(std::get<1>(trans_pair) == TransitionType::HIGH || std::get<1>(trans_pair) == TransitionType::LOW) {
+        std::map<TransitionType,Time> delays; //Delays for this specific edge
+        for(auto output_trans : {TransitionType::RISE, TransitionType::FALL, TransitionType::HIGH, TransitionType::LOW}) {
+            double delay = std::numeric_limits<double>::quiet_NaN();
+            if(output_trans == TransitionType::HIGH || output_trans == TransitionType::LOW) {
                 delay = 0.;
-            } else if(std::get<1>(trans_pair) == TransitionType::RISE) {
+            } else if(output_trans == TransitionType::RISE) {
                 delay = rise_delay_val.max();
             } else {
-                assert(std::get<1>(trans_pair) == TransitionType::FALL);
+                assert(output_trans == TransitionType::FALL);
                 delay = fall_delay_val.max();
             }
 
-            auto ret = delays.insert(std::make_pair(trans_pair, Time(delay)));
+            auto ret = delays.insert(std::make_pair(output_trans, Time(delay)));
             assert(ret.second); //Was inserted
         }
 
@@ -694,10 +694,10 @@ void BlifTimingGraphBuilder::set_net_edge_delay_from_sdf(const TimingGraph& tg, 
     BDD opin_node_func = tg.node_func(output_node_id);
 
     //Characterize the logic function to identify which input/output delays to map onto each edge
-    auto active_transition_arcs = identify_active_transition_arcs(opin_node_func, tg.num_node_in_edges(output_node_id));
+    //auto active_transition_arcs = identify_active_transition_arcs(opin_node_func, tg.num_node_in_edges(output_node_id));
 
-    assert(active_transition_arcs.size() == 1); //A net
-    assert(active_transition_arcs[0].size() == 8); //A net will only have 1:1 transitions (where we might treat H/R and F/L equivalently)
+    //assert(active_transition_arcs.size() == 1); //A net
+    //assert(active_transition_arcs[0].size() == 8); //A net will only have 1:1 transitions (where we might treat H/R and F/L equivalently)
 
     //We need to get the output port of the sink block
     const BlifPort* sink_block_output_port = nullptr;
@@ -738,7 +738,7 @@ void BlifTimingGraphBuilder::set_net_edge_delay_from_sdf(const TimingGraph& tg, 
     const auto& sdf_cells = sdf_data_.cells();
 
     //Find the matching SDF cell by name
-    std::map<std::tuple<TransitionType,TransitionType>,Time> delays; //Delays for this specific edge
+    std::map<TransitionType,Time> delays; //Delays for this specific edge
     for(const auto& sdf_cell : sdf_cells) {
         std::smatch matches;
         if(std::regex_match(sdf_cell.instance(), matches, interconnect_regex)) {
@@ -781,18 +781,18 @@ void BlifTimingGraphBuilder::set_net_edge_delay_from_sdf(const TimingGraph& tg, 
 
             //Apply the delay to each pair of valid transitions
             //on this edge
-            for(auto trans_pair : active_transition_arcs[0]) {
+            for(auto output_trans : {TransitionType::RISE, TransitionType::FALL, TransitionType::HIGH, TransitionType::LOW}) {
                 double delay = NAN;
-                if(std::get<1>(trans_pair) == TransitionType::HIGH || std::get<1>(trans_pair) == TransitionType::LOW) {
+                if(output_trans == TransitionType::HIGH || output_trans == TransitionType::LOW) {
                     delay = 0.;
-                } else if(std::get<1>(trans_pair) == TransitionType::RISE) {
+                } else if(output_trans == TransitionType::RISE) {
                     delay = rise_delay_val.max();
                 } else {
-                    assert(std::get<1>(trans_pair) == TransitionType::FALL);
+                    assert(output_trans == TransitionType::FALL);
                     delay = fall_delay_val.max();
                 }
 
-                auto ret = delays.insert(std::make_pair(trans_pair, Time(delay)));
+                auto ret = delays.insert(std::make_pair(output_trans, Time(delay)));
                 assert(ret.second); //Was inserted
             }
         }
@@ -804,11 +804,11 @@ void BlifTimingGraphBuilder::set_net_edge_delay_from_sdf(const TimingGraph& tg, 
 
     assert(!delays.empty());
     //std::cout << "Setting net edge delays on edge " << edge_id << ": ";
-    for(auto kv : delays) {
-        TransitionType in, out;
-        std::tie(in, out) = kv.first;
+    //for(auto kv : delays) {
+        //TransitionType in, out;
+        //std::tie(in, out) = kv.first;
         //std::cout << in << "/" << out << "->" << kv.second << " ";
-    }
+    //}
     //std::cout << std::endl;
 
     //Insert the delays for this edge

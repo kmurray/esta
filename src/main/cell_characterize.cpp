@@ -14,7 +14,7 @@ std::vector<std::set<std::tuple<TransitionType,TransitionType>>> identify_active
 
     std::vector<std::set<std::tuple<TransitionType,TransitionType>>> active_input_output_transitions;
 
-    assert(num_inputs == (size_t) support_size || f.IsOne() || f.IsZero());
+    //assert(num_inputs == (size_t) support_size || f.IsOne() || f.IsZero());
 
     if(f.IsOne() || f.IsZero()) {
         //Special case for constant nodes
@@ -33,7 +33,7 @@ std::vector<std::set<std::tuple<TransitionType,TransitionType>>> identify_active
         }
     } else {
         //Determine all possible input scenarios
-        auto all_input_scenarios = cartesian_product(valid_transitions, support_size);
+        auto all_input_scenarios = cartesian_product(valid_transitions, num_inputs);
 
         //Evaluate all input -> output transitions scenarios,
         // constructing the set of active transitions as we go
