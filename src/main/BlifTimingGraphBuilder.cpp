@@ -13,6 +13,34 @@ using std::cout;
 
 #include "bdd.hpp"
 
+BlifTimingGraphBuilder::BlifTimingGraphBuilder(BlifData* data, const sdfparse::DelayFile& sdf_data)
+    : blif_data_(data) 
+    , sdf_data_(sdf_data) {
+    
+    std::regex interconnect_regex("routing_segment_(.*)_output_([[:digit:]]+)_([[:digit:]]+)_to_(.*)_input_([[:digit:]]+)_([[:digit:]]+)", std::regex::egrep);
+
+    for(const auto& cell : sdf_data_.cells()) {
+        std::string inst_name = cell.instance();
+        sdf_cells_by_inst_name_[inst_name] = cell;
+
+        if(cell.celltype() == "fpga_interconnect") {
+            //Extract the driver and sink port names
+            
+            std::smatch matches;
+            bool matched = std::regex_match(inst_name, matches, interconnect_regex);
+
+            assert(matched);
+
+            std::string driver_port_name = matches[1];
+
+            std::string sink_port_name = matches[4];
+
+            auto ret = sdf_interconnect_cells_.insert(std::make_pair(std::make_tuple(driver_port_name, sink_port_name), cell));
+            assert(ret.second);
+        }
+    }
+}
+
 void BlifTimingGraphBuilder::build(TimingGraph& tg) {
     /*
      * Note: a single primitive in the BLIF netlist
@@ -327,8 +355,8 @@ void BlifTimingGraphBuilder::create_net_edges(TimingGraph& tg) {
 
         NodeId driver_node = iter_driver->second;
 
-        for(const BlifPortConn* sink_conn : net->sinks) {
-            const BlifPort* sink_port = sink_conn->port;
+        for(size_t i = 0; i < net->sinks.size(); i++) {
+            const BlifPort* sink_port = net->sinks[i]->port;
 
             auto iter_sink = port_to_node_lookup_.find(sink_port);
             assert(iter_sink != port_to_node_lookup_.end());
@@ -341,7 +369,7 @@ void BlifTimingGraphBuilder::create_net_edges(TimingGraph& tg) {
             //std::cout << "Adding edge " << driver_node << " -> " << sink_node << std::endl;
             tg.add_edge(driver_node, sink_node);
 
-            set_net_edge_delay_from_sdf(tg, driver_port, sink_port, sink_node);
+            set_net_edge_delay_from_sdf(tg, driver_port, sink_port, i, sink_node);
         }
     }
 
@@ -630,15 +658,9 @@ void BlifTimingGraphBuilder::set_names_edge_delays_from_sdf(const TimingGraph& t
     std::string sdf_cell_name = sdf_name("lut_" + *blif_names->ports[blif_names->ports.size()-1]->name);
 
     //Find the matching SDF cell by name
-    const auto& sdf_cells = sdf_data_.cells();
+    const auto& cell = find_sdf_cell_inst(sdf_cell_name);
 
-    auto name_match = [&](const sdfparse::Cell& cell) {
-        return cell.instance() == sdf_cell_name;
-    };
-    auto cell_iter = std::find_if(sdf_cells.begin(), sdf_cells.end(), name_match);
-    assert(cell_iter != sdf_cells.end());
-
-    const auto& cell_delays = cell_iter->delay();
+    const auto& cell_delays = cell.delay();
     const auto& iopaths = cell_delays.iopaths();
 
     //Characterize the logic function to identify which input/output delays to map onto each edge
@@ -689,7 +711,7 @@ void BlifTimingGraphBuilder::set_names_edge_delays_from_sdf(const TimingGraph& t
 }
 
 void BlifTimingGraphBuilder::set_net_edge_delay_from_sdf(const TimingGraph& tg, const BlifPort* driver_port, const BlifPort* sink_port,
-                                                         const NodeId output_node_id) {
+                                                         size_t sink_pin_idx, const NodeId output_node_id) {
 
     BDD opin_node_func = tg.node_func(output_node_id);
 
@@ -718,86 +740,44 @@ void BlifTimingGraphBuilder::set_net_edge_delay_from_sdf(const TimingGraph& tg, 
         driver_port_prefix = "lut_";
     }
 
-    //Build up the regex for finding the correct CELL in the SDF
-    std::stringstream regex_ss;
+    std::string driver_port_name = driver_port_prefix + sdf_name(*driver_port->name);
+    std::string sink_port_name = sink_port_prefix + sdf_name(*sink_block_output_port->name);
 
-    //Repeated pattern for matching port and pin indicies
-    std::string port_pin_regex_str = "(output|input)_([[:digit:]]+)_([[:digit:]]+)";
+    const auto& sdf_cell = find_sdf_interconnect(driver_port_name, sink_port_name);
 
-    regex_ss << "routing_segment_";
-    regex_ss << driver_port_prefix + sdf_name(*driver_port->name) << "_";
-    regex_ss << port_pin_regex_str << "_";
-    regex_ss << "to_";
-    regex_ss << sink_port_prefix + sdf_name(*sink_block_output_port->name) << "_";
-    regex_ss << port_pin_regex_str;
-
-    //std::cout << "REGEX: " << regex_ss.str() << std::endl;
-    //Create the regex
-    std::regex interconnect_regex(regex_ss.str(), std::regex::egrep);
-
-    const auto& sdf_cells = sdf_data_.cells();
-
-    //Find the matching SDF cell by name
+    //Set the delays on this net
     std::map<TransitionType,Time> delays; //Delays for this specific edge
-    for(const auto& sdf_cell : sdf_cells) {
-        std::smatch matches;
-        if(std::regex_match(sdf_cell.instance(), matches, interconnect_regex)) {
-            //std::cout << "Matched: " << sdf_cell.instance() << std::endl;
 
-            assert(matches.size() == 7);
+    const auto& sdf_delay = sdf_cell.delay();
+    assert(sdf_delay.type() == sdfparse::Delay::Type::ABSOLUTE);
 
-            std::string driver_port_dir = matches[1];
-            std::string driver_port_idx = matches[2];
-            std::string driver_pin_idx = matches[3];
-            std::string sink_port_dir = matches[4];
-            std::string sink_port_idx = matches[5];
+    const auto& sdf_iopaths = sdf_delay.iopaths();
+    assert(sdf_iopaths.size() == 1); //A net edge should be a single-input single-output cell
 
-            //We currently only support .names in the netlist, so we expect
-            //only a single output per block -- which must be port 0, bit 0
-            assert(driver_port_dir == "output");
-            assert(driver_port_idx == "0");
-            assert(driver_pin_idx == "0");
+    const auto& rise_delay_val = sdf_iopaths[0].rise();
+    const auto& fall_delay_val = sdf_iopaths[0].fall();
 
-            //Similarily we expect there to only be a single sink port
-            assert(sink_port_dir == "input");
-            assert(sink_port_idx == "0");
+    //For now we expect rise and fall to be equal
+    assert(rise_delay_val == fall_delay_val);
 
-            //Set the delays on this net
-            assert(delays.empty()); //Should only be a single match in SDF to this net connection        
+    //std::cout << "Delay: " << rise_delay_val.max() << std::endl;
 
-            const auto& sdf_delay = sdf_cell.delay();
-            assert(sdf_delay.type() == sdfparse::Delay::Type::ABSOLUTE);
-
-            const auto& sdf_iopaths = sdf_delay.iopaths();
-            assert(sdf_iopaths.size() == 1); //A net edge should be a single-input single-output cell
-
-            const auto& rise_delay_val = sdf_iopaths[0].rise();
-            const auto& fall_delay_val = sdf_iopaths[0].fall();
-
-            //For now we expect rise and fall to be equal
-            assert(rise_delay_val == fall_delay_val);
-
-            //std::cout << "Delay: " << rise_delay_val.max() << std::endl;
-
-            //Apply the delay to each pair of valid transitions
-            //on this edge
-            for(auto output_trans : {TransitionType::RISE, TransitionType::FALL, TransitionType::HIGH, TransitionType::LOW}) {
-                double delay = NAN;
-                if(output_trans == TransitionType::HIGH || output_trans == TransitionType::LOW) {
-                    delay = 0.;
-                } else if(output_trans == TransitionType::RISE) {
-                    delay = rise_delay_val.max();
-                } else {
-                    assert(output_trans == TransitionType::FALL);
-                    delay = fall_delay_val.max();
-                }
-
-                auto ret = delays.insert(std::make_pair(output_trans, Time(delay)));
-                assert(ret.second); //Was inserted
-            }
+    //Apply the delay to each pair of valid transitions
+    //on this edge
+    for(auto output_trans : {TransitionType::RISE, TransitionType::FALL, TransitionType::HIGH, TransitionType::LOW}) {
+        double delay = NAN;
+        if(output_trans == TransitionType::HIGH || output_trans == TransitionType::LOW) {
+            delay = 0.;
+        } else if(output_trans == TransitionType::RISE) {
+            delay = rise_delay_val.max();
+        } else {
+            assert(output_trans == TransitionType::FALL);
+            delay = fall_delay_val.max();
         }
-    }
 
+        auto ret = delays.insert(std::make_pair(output_trans, Time(delay)));
+        assert(ret.second); //Was inserted
+    }
 
     assert(tg.num_node_in_edges(output_node_id) == 1); //Logical wire connection
     EdgeId edge_id = tg.node_in_edge(output_node_id, 0);
@@ -829,4 +809,18 @@ std::shared_ptr<TimingGraphNameResolver> BlifTimingGraphBuilder::get_name_resolv
     }
 
     return name_resolver_;
+}
+
+sdfparse::Cell BlifTimingGraphBuilder::find_sdf_interconnect(std::string driver_port_name, std::string sink_port_name) {
+    auto iter = sdf_interconnect_cells_.find(std::make_tuple(driver_port_name, sink_port_name));
+    assert(iter != sdf_interconnect_cells_.end());
+
+    return iter->second;
+}
+
+sdfparse::Cell BlifTimingGraphBuilder::find_sdf_cell_inst(std::string inst_name) {
+    auto iter = sdf_cells_by_inst_name_.find(inst_name);
+    assert(iter != sdf_cells_by_inst_name_.end());
+
+    return iter->second;
 }
