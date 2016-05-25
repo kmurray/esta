@@ -37,7 +37,7 @@ TransitionType evaluate_output_transition(const std::vector<TransitionType>& inp
             //We do expect the node inputs to be a superset of
             //the support
             assert(var_idx < input_transitions.size());
-            switch(input_transitions[i]) {
+            switch(input_transitions[var_idx]) {
                 case TransitionType::RISE:
                     initial_inputs[var_idx] = 0;
                     final_inputs[var_idx] = 1;

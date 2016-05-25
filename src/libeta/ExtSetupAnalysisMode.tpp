@@ -181,8 +181,6 @@ void ExtSetupAnalysisMode<BaseAnalysisMode,Tags>::forward_traverse_finalize_node
         }
 #endif
 
-
-
         size_t i_case = 0;
 
         //Generate all tag transition permutations
@@ -258,7 +256,6 @@ void ExtSetupAnalysisMode<BaseAnalysisMode,Tags>::forward_traverse_finalize_node
 
 
                 //We now apply this inputs transition to restrict the logic function
-                assert(edge_idx < node_func.SupportSize()); //Range check
                 BDD f_new = apply_restriction(edge_idx, src_tag->trans_type(), f);
 
                 //If the variable had no effect on the logic output we do not need to consider its
