@@ -369,18 +369,22 @@ int main(int argc, char** argv) {
     if(options.get_as<string>("print_histogram") != "none") {
         g_action_timer.push_timer("Output tag histograms");
 
+        float node_count = 0;
         if(options.get_as<string>("print_histograms") == "pi") {
             for(auto node_id : timing_graph.primary_inputs()) {
-                print_node_histogram(timing_graph, analyzer, sharp_sat_eval, name_resolver, node_id, 0);
+                print_node_histogram(timing_graph, analyzer, sharp_sat_eval, name_resolver, node_id, node_count / timing_graph.primary_inputs().size());
+                node_count += 1;
             }
         } else if(options.get_as<string>("print_histograms") == "po") {
             for(auto node_id : timing_graph.primary_outputs()) {
-                print_node_histogram(timing_graph, analyzer, sharp_sat_eval, name_resolver, node_id, 0);
+                print_node_histogram(timing_graph, analyzer, sharp_sat_eval, name_resolver, node_id, node_count / timing_graph.primary_outputs().size());
+                node_count += 1;
             }
         } else if(options.get_as<string>("print_histograms") == "all") {
             for(LevelId level_id = 0; level_id < timing_graph.num_levels(); level_id++) {
                 for(auto node_id : timing_graph.level(level_id)) {
-                    print_node_histogram(timing_graph, analyzer, sharp_sat_eval, name_resolver, node_id, 0);
+                    print_node_histogram(timing_graph, analyzer, sharp_sat_eval, name_resolver, node_id, node_count / timing_graph.num_nodes());
+                    node_count += 1;
                 }
             }
         } else {
