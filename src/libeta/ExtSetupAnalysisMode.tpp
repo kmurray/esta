@@ -12,6 +12,8 @@
 //the transition calculated from scratch
 /*#define VERIFY_TRANSITION*/
 
+const double PERMUTATION_WARNING_THRESHOLD = 10e6;
+
 extern EtaStats g_eta_stats;
 
 template<class BaseAnalysisMode, class Tags>
@@ -190,6 +192,9 @@ void ExtSetupAnalysisMode<BaseAnalysisMode,Tags>::forward_traverse_finalize_node
 
         //Generate all tag transition permutations
         TagPermutationGenerator tag_permutation_generator(src_data_tag_sets);
+        if(tag_permutation_generator.num_permutations() > PERMUTATION_WARNING_THRESHOLD) {
+            std::cout << "Warning: Node " << node_id << " will evaluate " << tag_permutation_generator.num_permutations() / 1e6 << "M tag permutations" << std::endl;
+        }
         while(!tag_permutation_generator.done()) {
             std::vector<const Tag*> src_tags = tag_permutation_generator.next();
 

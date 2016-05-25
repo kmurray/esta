@@ -52,3 +52,10 @@ bool TagPermutationGenerator::done() {
     return done_;
 }
 
+size_t TagPermutationGenerator::num_permutations() {
+    size_t count = 1;
+    for(size_t i = 0 ; i < input_tag_sets_.size(); i++) {
+        count *= input_tag_sets_[i].num_tags();    
+    }
+    return count;
+}

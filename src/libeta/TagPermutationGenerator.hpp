@@ -11,6 +11,8 @@ class TagPermutationGenerator {
         //Is the generator finished
         bool done();
 
+        size_t num_permutations();
+
         //Gets the next permutation
         std::vector<const ExtTimingTag*> next();
 
