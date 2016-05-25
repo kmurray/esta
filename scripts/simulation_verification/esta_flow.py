@@ -325,6 +325,7 @@ def run_comparison(args, design_info, sta_cpd):
                 esta_csv,
                 "--sta_cpd", sta_cpd,
                 "--plot",
+                "--plot_title", '"{}: {}"'.format(os.path.splitext(args.blif)[0], output),
                 "--plot_file", '.'.join([output, "histogram", "pdf"])
               ]
 

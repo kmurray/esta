@@ -91,6 +91,10 @@ def parse_args():
                         action="store_true",
                         help="Plot the delay histograms")
 
+    parser.add_argument("--plot_title",
+                        default=None,
+                        help="Title of the plot (default: none)")
+
     parser.add_argument("--plot_file",
                         help="File to print plot to")
 
@@ -270,6 +274,9 @@ def plot_histogram(args, transition_data_sets):
     plt.ylabel('Probability')
     plt.xlabel('Delay')
     plt.legend(loc='best')
+
+    if args.plot_title:
+        plt.title(args.plot_title, loc="left")
 
     if args.plot_file:
         plt.savefig(args.plot_file)
