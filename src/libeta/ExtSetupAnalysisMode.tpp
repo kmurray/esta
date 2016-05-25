@@ -5,7 +5,12 @@
 #include "TagPermutationGenerator.hpp"
 #include "transition_eval.hpp"
 
+//Print out detailed information about tags during analysis
 /*#define TAG_DEBUG*/
+
+//Verify that the transition calculated incrementally during analysis matches
+//the transition calculated from scratch
+/*#define VERIFY_TRANSITION*/
 
 extern EtaStats g_eta_stats;
 
@@ -299,9 +304,11 @@ void ExtSetupAnalysisMode<BaseAnalysisMode,Tags>::forward_traverse_finalize_node
                     output_transition = TransitionType::RISE; 
                 }
 
+#ifdef VERIFY_TRANSITION
                 //Sanity check that we get and equivalent transition if we evaluate the node function up front
                 auto ref_output_transition = evaluate_output_transition(src_tags, node_func);
                 assert(ref_output_transition == TransitionType::RISE || ref_output_transition == TransitionType::HIGH);
+#endif
             } else {
                 assert(f.IsZero());
                 
@@ -311,9 +318,11 @@ void ExtSetupAnalysisMode<BaseAnalysisMode,Tags>::forward_traverse_finalize_node
                     output_transition = TransitionType::FALL; 
                 }
 
+#ifdef VERIFY_TRANSITION
                 //Sanity check that we get and equivalent transition if we evaluate the node function up front
                 auto ref_output_transition = evaluate_output_transition(src_tags, node_func);
                 assert(ref_output_transition == TransitionType::FALL || ref_output_transition == TransitionType::LOW);
+#endif
             }
             scenario_tag.set_trans_type(output_transition); //Note the actual transition
 
