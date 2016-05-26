@@ -36,6 +36,11 @@ def parse_args():
                         type=float,
                         help="STA critical path delay to place on plot")
 
+    parser.add_argument("--plot",
+                        choices=["hist", "cdf", "stem", "stem_cdf"],
+                        default="histogram",
+                        help="Type of plot. Default: %(default)s")
+
     parser.add_argument("--plot_file",
                         help="File to print plot to; interactive if unspecified.")
 
@@ -53,7 +58,7 @@ def main():
     data_sets = OrderedDict()
 
     if args.sta_cpd:
-        data_sets['STA'] = pd.DataFrame({'delay': [args.sta_cpd], 'probability': [1.]})
+        data_sets['STA'] = pd.DataFrame({'delay': [0., args.sta_cpd], 'probability': [0., 1.]})
 
     for i in xrange(len(args.histogram_csvs)):
         label = args.histogram_csvs[i] #Default the file name
@@ -72,12 +77,11 @@ def main():
         data_sets[label] = load_exhaustive_csv(args.exhaustive_csvs[i])
 
 
-
-    plot_histogram(data_sets, num_bins=args.plot_bins, plot_file=args.plot_file)
+    plot(data_sets, plot_style=args.plot, num_bins=args.plot_bins, plot_file=args.plot_file)
 
 def load_histogram_csv(filename):
     print "Loading " + filename + "..."
-    return pd.read_csv(filename)
+    return pd.read_csv(filename).sort_values(by="delay")
 
 def load_exhaustive_csv(filename):
     print "Loading " + filename + "..."
@@ -90,7 +94,7 @@ def load_exhaustive_csv(filename):
     #to get probability
     normed_counts = raw_counts / raw_data.shape[0]
 
-    return pd.DataFrame({"delay": normed_counts.index, "probability": normed_counts.values})
+    return pd.DataFrame({"delay": normed_counts.index, "probability": normed_counts.values}).sort_values(by="delay")
 
 def map_to_bins(delay_prob_data, bins, histogram_range):
 
@@ -112,7 +116,8 @@ def map_to_bins(delay_prob_data, bins, histogram_range):
 
     return heights
 
-def plot_histogram(data_sets, num_bins=50, plot_file=None):
+
+def plot(data_sets, plot_style="hist", num_bins=50, plot_file=None):
     color_cycle = cycle("rbgcmyk")
     alpha = 0.6
 
@@ -152,19 +157,31 @@ def plot_histogram(data_sets, num_bins=50, plot_file=None):
 
         max_delay = delay_prob_data['delay'].values.max()
 
-        #Veritical line marking the maximum delay point
-        draw_vline(max_delay, label, color, vline_text_y)
-        vline_text_y += vtext_margin #Advance the position for the next vertical line text marking
 
-        heights = map_to_bins(delay_prob_data, bins, histogram_range)
+        if plot_style == "hist":
+            #Veritical line marking the maximum delay point
+            vline_text_y = draw_vline(max_delay, label, color, vline_text_y, vtext_margin)
+            heights = map_to_bins(delay_prob_data, bins, histogram_range)
 
-        plt.bar(bins, heights, width=bin_width, label=label, color=color, alpha=alpha)
+            plt.bar(bins, heights, width=bin_width, label=label, color=color, alpha=alpha)
+
+        if "stem" in plot_style:
+
+            plt.stem(delay_prob_data['delay'], delay_prob_data['probability'], label=label + " (pdf)", linefmt=color+'-', markerfmt=color+"o", basefmt=color+'-', alpha=alpha)
+
+        if "cdf" in plot_style:
+            #Calculate the CDF
+            delay_prob_data['cumulative_probability'] = delay_prob_data['probability'].cumsum()
+
+            plt.step(x=delay_prob_data['delay'], y=delay_prob_data['cumulative_probability'], where='post', label=label + " (cdf)", color=color)
 
     plt.ylim(ymin=0., ymax=1.)
     plt.grid()
+
     plt.ylabel('Probability')
+
     plt.xlabel('Delay')
-    plt.legend(loc='best')
+    plt.legend(loc='best', prop={'size': 12})
 
     if plot_file:
         plt.savefig(plot_file)
@@ -172,7 +189,7 @@ def plot_histogram(data_sets, num_bins=50, plot_file=None):
         #Interactive
         plt.show()
 
-def draw_vline(xval, label, color, vline_text_y):
+def draw_vline(xval, label, color, vline_text_y, vtext_margin):
     #Veritical line marking the maximum delay point
     # We draw this first, so it is covered by the histogram
     plt.axvline(xval, color=color, linestyle='dashed')
@@ -180,6 +197,7 @@ def draw_vline(xval, label, color, vline_text_y):
     #Label it manually
     plt.text(xval, vline_text_y, label, size=9, rotation='horizontal', color=color, horizontalalignment='center', verticalalignment='top')
 
+    return vline_text_y + vtext_margin
 
 if __name__ == "__main__":
     main()
