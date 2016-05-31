@@ -49,20 +49,11 @@ def main():
         print "Delay Histogram for STA"
         print_sta_delay_histogram(args.sta_cpd)
 
-    if args.plot:
-        data_sets = OrderedDict()
-        data_sets['Modelsim'] = reference_data
-
-        if args.comparison_csv:
-            data_sets['ESTA'] = comparison_data
-
-        plot_histogram(args, data_sets)
-
     print 
     if safely_pessimistic:
         sys.exit(0)
     else:
-        print "ERROR: ESTA results are optimistic!"
+        print "ERROR: ESTA results are optimistic or incorrect!"
         sys.exit(1)
 
 
@@ -85,24 +76,6 @@ def parse_args():
                         default=False,
                         action="store_true",
                         help="Print info about pessimisitic differences")
-
-    parser.add_argument("--plot",
-                        default=False,
-                        action="store_true",
-                        help="Plot the delay histograms")
-
-    parser.add_argument("--plot_title",
-                        default=None,
-                        help="Title of the plot (default: none)")
-
-    parser.add_argument("--plot_file",
-                        help="File to print plot to")
-
-    parser.add_argument("--plot_bins",
-                        default=50,
-                        metavar="NUM_BINS",
-                        help="How many histogram bins to use")
-
 
     args = parser.parse_args()
 
@@ -205,92 +178,6 @@ def print_sta_delay_histogram(sta_cpd):
 
 def load_csv(filename):
     return pd.read_csv(filename)
-
-
-def plot_histogram(args, transition_data_sets):
-    color_cycle = cycle("rbgcmyk")
-    alpha = 0.6
-
-    fig = plt.figure()
-
-    
-    min_val = float("inf")
-    max_val = float("-inf")
-    for label, transition_data in transition_data_sets.iteritems():
-        min_val = min(min_val, transition_data['delay'].min())
-        max_val = max(max_val, transition_data['delay'].max())
-
-    if args.sta_cpd:
-        min_val = min(min_val, args.sta_cpd)
-        max_val = max(max_val, args.sta_cpd)
-
-    histogram_range=(min_val, max_val)
-
-    vtext_margin = 4*0.008
-
-    vline_text_y = 1. + vtext_margin
-
-
-    if args.sta_cpd:
-        hist, bins = np.histogram([args.sta_cpd], range=histogram_range, bins=args.plot_bins)
-
-        #Normalize to 1
-        hist = hist.astype(np.float32) / hist.sum()
-
-        color = color_cycle.next()
-
-        label = "STA"
-
-        #Veritical line marking the maximum delay point
-        draw_vline(args.sta_cpd, label, color, vline_text_y)
-        vline_text_y += vtext_margin
-
-        #Histogram
-        plt.bar(bins[:-1], hist, width=bins[1] - bins[0], label=label, color=color, alpha=alpha)
-
-    for label, transition_data in transition_data_sets.iteritems():
-        delay_data = transition_data['delay']
-
-
-        hist, bins = np.histogram(delay_data.values, range=histogram_range, bins=args.plot_bins)
-
-        #Normalize to 1
-        hist = hist.astype(np.float32) / hist.sum()
-
-        color = color_cycle.next()
-
-        max_delay = delay_data.values.max()
-
-        #Veritical line marking the maximum delay point
-        draw_vline(max_delay, label, color, vline_text_y)
-        vline_text_y += vtext_margin
-
-        #Histogram of delays
-        plt.bar(bins[:-1], hist, width=bins[1] - bins[0], label=label, color=color, alpha=alpha)
-
-
-    plt.ylim(ymax=1.)
-    plt.grid()
-    plt.ylabel('Probability')
-    plt.xlabel('Delay')
-    plt.legend(loc='best')
-
-    if args.plot_title:
-        plt.title(args.plot_title, loc="left")
-
-    if args.plot_file:
-        plt.savefig(args.plot_file)
-    else:
-        #Interactive
-        plt.show()
-
-def draw_vline(xval, label, color, vline_text_y):
-    #Veritical line marking the maximum delay point
-    # We draw this first, so it is covered by the histogram
-    plt.axvline(xval, color=color, linestyle='dashed')
-
-    #Label it manually
-    plt.text(xval, vline_text_y, label, size=9, rotation='horizontal', color=color, horizontalalignment='center', verticalalignment='top')
 
 
 if __name__ == "__main__":

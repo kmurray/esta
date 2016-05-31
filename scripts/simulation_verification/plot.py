@@ -38,8 +38,12 @@ def parse_args():
 
     parser.add_argument("--plot",
                         choices=["hist", "cdf", "stem", "stem_cdf"],
-                        default="histogram",
+                        default="cdf",
                         help="Type of plot. Default: %(default)s")
+
+    parser.add_argument("--plot_title",
+                        default=None,
+                        help="Plot title")
 
     parser.add_argument("--plot_file",
                         help="File to print plot to; interactive if unspecified.")
@@ -77,7 +81,7 @@ def main():
         data_sets[label] = load_exhaustive_csv(args.exhaustive_csvs[i])
 
 
-    plot(data_sets, plot_style=args.plot, num_bins=args.plot_bins, plot_file=args.plot_file)
+    plot(data_sets, plot_style=args.plot, num_bins=args.plot_bins, plot_file=args.plot_file, plot_title=args.plot_title)
 
 def load_histogram_csv(filename):
     print "Loading " + filename + "..."
@@ -117,7 +121,7 @@ def map_to_bins(delay_prob_data, bins, histogram_range):
     return heights
 
 
-def plot(data_sets, plot_style="hist", num_bins=50, plot_file=None):
+def plot(data_sets, plot_style="cdf", plot_title=None, plot_file=None, num_bins=50):
     color_cycle = cycle("rbgcmyk")
     alpha = 0.6
 
@@ -182,6 +186,9 @@ def plot(data_sets, plot_style="hist", num_bins=50, plot_file=None):
 
     plt.xlabel('Delay')
     plt.legend(loc='best', prop={'size': 12})
+
+    if plot_title:
+        plt.title(plot_title, loc="left")
 
     if plot_file:
         plt.savefig(plot_file)

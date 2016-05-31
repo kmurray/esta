@@ -52,6 +52,12 @@ def parse_args():
                         default=False,
                         help="Run comparison between Simulation and ESTA for verification.")
 
+    parser.add_argument("--plot",
+                        action="store_true",
+                        dest="run_plot",
+                        default=False,
+                        help="Plot the comparison between Simulation and ESTA")
+
     parser.add_argument("--outputs",
                         nargs="*",
                         default=None,
@@ -109,10 +115,17 @@ def parse_args():
     #
     # Comparison/verification related arguments
     #
-    transition_extraction_arguments = parser.add_argument_group("Comparision and Verification", "Options for comparing the ESTA and Simulation results")
-    transition_extraction_arguments.add_argument("--comparison_exec",
-                                                 default="compare_exhaustive.py",
-                                                 help="Tool used compare ESTA and simulation results. Default: %(default)s")
+    comparison_arguments = parser.add_argument_group("Comparision and Verification", "Options for comparing the ESTA and Simulation results")
+    comparison_arguments.add_argument("--comparison_exec",
+                                      default="compare_exhaustive.py",
+                                      help="Tool used compare ESTA and simulation results. Default: %(default)s")
+    #
+    # Plotting related arguments
+    #
+    plot_arguments = parser.add_argument_group("Plotting", "Options for plotting the ESTA and Simulation results")
+    plot_arguments.add_argument("--plot_exec",
+                                default="plot.py",
+                                help="Tool used compare ESTA and simulation results. Default: %(default)s")
 
     args = parser.parse_args()
 
@@ -173,6 +186,11 @@ def esta_flow(args):
         print 
         print "Comparing ESTA and Simulation Results"
         run_comparison(args, design_info, vpr_cpd_ps)
+
+    if args.run_plot:
+        print 
+        print "Plotting ESTA and Simulation Results"
+        run_plot(args, design_info, vpr_cpd_ps)
 
 def run_vtr(args, vpr_log_filename):
 
@@ -323,15 +341,51 @@ def run_comparison(args, design_info, sta_cpd):
                 args.comparison_exec,
                 sim_csv,
                 esta_csv,
-                "--sta_cpd", sta_cpd,
-                "--plot",
-                "--plot_title", '"{}: {}"'.format(os.path.splitext(args.blif)[0], output),
-                "--plot_file", '.'.join([output, "histogram", "pdf"])
               ]
 
         run_command(cmd, log_filename='.'.join(["comparison", output, "log"]))
 
     return {}
+
+def run_plot(args, design_info, sta_cpd):
+    if args.outputs is None:
+        outputs = design_info['outputs']
+    else:
+        outputs = args.outputs
+
+    for output in outputs:
+        print "Plotting output: {port}".format(port=output)
+
+        sim_csv = ".".join(["sim", output, "csv"])
+
+        esta_csvs = []
+        esta_csv_regex = re.compile(r"esta\." + output + "\.(?P<node_text>n\d+).*\.csv")
+        for filename in os.listdir(os.getcwd()):
+            match = esta_csv_regex.match(filename)
+            if match:
+                esta_csvs.append((filename, int(match.group("node_text")[1:])))
+
+        assert len(esta_csvs) > 0
+
+        #In descending order
+        esta_csvs = sorted(esta_csvs, key=lambda x: x[1], reverse=True)
+
+        #Only analyze the csv with the highest node number
+        esta_csv = esta_csvs[0][0]
+
+        cmd = [
+                args.plot_exec,
+                "--exhaustive_csvs", sim_csv, esta_csv,
+                "--exhaustive_csv_labels", "Simulation", "ESTA",
+                "--sta_cpd", sta_cpd,
+                "--plot_title", '"{}: {}"'.format(os.path.splitext(os.path.basename(args.blif))[0], output),
+                "--plot_file", '.'.join([output, "pdf"])
+              ]
+
+        run_command(cmd, log_filename='.'.join(["comparison", output, "log"]))
+
+    return {}
+
 
 def fix_modelsim_altera_sdf_annotation(top_verilog):
     base, ext = os.path.splitext(top_verilog)
@@ -422,7 +476,7 @@ def create_modelsim_do(args, vcd_file, verilog_files):
     for file in verilog_files:
         do_lines.append("vlog -sv -work work {" + file + "}")
     do_lines.append("")
-    do_lines.append("vsim -t 1ps -L rtl_work -L work -L altera_mf_ver -L altera_ver -L lpm_ver -L sgate_ver -L stratixiv_hssi_ver -L stratixiv_pcie_hip_ver -L stratixiv_ver -voptargs=\"+acc\" +sdf_verbose tb")
+    do_lines.append("vsim -t 1ps -L rtl_work -L work -L altera_mf_ver -L altera_ver -L lpm_ver -L sgate_ver -L stratixiv_hssi_ver -L stratixiv_pcie_hip_ver -L stratixiv_ver -voptargs=\"+acc\" +transport_int_delays +transport_path_delays +sdf_verbose tb")
     do_lines.append("")
     do_lines.append("#Setup VCD logging")
     do_lines.append("vcd file {vcd_file}".format(vcd_file=vcd_file))
