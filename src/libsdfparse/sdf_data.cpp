@@ -1,5 +1,6 @@
 #include "sdf_data.hpp"
 #include <iostream>
+#include <cmath>
 
 namespace /*anonymous*/ {
     std::string ident(int depth);
@@ -42,6 +43,7 @@ namespace sdfparse {
         os << ident(depth+1) << "(CELLTYPE \"" << celltype() << "\")\n";
         os << ident(depth+1) << "(INSTANCE " << instance() << ")\n";
         delay().print(os, depth+1);
+        timing_check().print(os, depth+1);
         os << ident(depth) << ")\n";
     }
 
@@ -53,6 +55,26 @@ namespace sdfparse {
                 iopath.print(os, depth+2);
             }
             os << ident(depth+1) << ")\n";
+            os << ident(depth) << ")\n";
+        }
+    }
+
+    void Setup::print(std::ostream& os, int depth) const {
+        os << ident(depth) << "(SETUP " << port() << " " << clock() << " " << tsu() << ")\n";
+    }
+    void Hold::print(std::ostream& os, int depth) const {
+        os << ident(depth) << "(HOLD " << port() << " " << clock() << " " << thld() << ")\n";
+    }
+
+    void TimingCheck::print(std::ostream& os, int depth) const {
+        if(!setup().empty() || !hold().empty()) {
+            os << ident(depth) << "(TIMINGCHECK\n";
+            for(auto& setup_check : setup()) {
+                setup_check.print(os, depth+1);
+            }
+            for(auto& hold_check : hold()) {
+                hold_check.print(os, depth+1);
+            }
             os << ident(depth) << ")\n";
         }
     }
@@ -71,11 +93,34 @@ namespace sdfparse {
     }
 
     std::ostream& operator<<(std::ostream& os, const RealTriple& val) {
-        os << "(" << val.min() << ":" << val.typ() << ":" << val.max() << ")";
+        if(std::isnan(val.min()) && std::isnan(val.typ()) && std::isnan(val.max())) {
+            os << "()";
+        } else {
+            os << "(" << val.min() << ":" << val.typ() << ":" << val.max() << ")";
+        }
         return os;
     }
     bool operator==(const RealTriple& lhs, const RealTriple& rhs) {
         return lhs.min() == rhs.min() && lhs.typ() == rhs.typ() && lhs.max() == rhs.max();
+    }
+
+    std::ostream& operator<<(std::ostream& os, const PortSpec& port_spec) {
+        if(port_spec.condition() != PortCondition::NONE) {
+            os << "(" << port_spec.condition() << " ";
+        }
+        os << port_spec.port();
+        if(port_spec.condition() != PortCondition::NONE) {
+            os << ")";
+        }
+        return os;
+    }
+
+    std::ostream& operator<<(std::ostream& os, const PortCondition& val) {
+        if(val == PortCondition::POSEDGE) os << "posedge";
+        else if (val == PortCondition::NEGEDGE) os << "negedge";
+        else if (val == PortCondition::NONE) os << "none";
+        else assert(false);
+        return os;
     }
 
 } //sdfparse
