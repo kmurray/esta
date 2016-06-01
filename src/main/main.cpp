@@ -89,8 +89,8 @@ optparse::Values parse_args(int argc, char** argv) {
 
     parser.add_option("-d", "--delay_bin_size")
           .dest("delay_bin_size")
-          .metavar("DELAY_SEC")
-          .help("The delay bin size (in seconds) to apply during analysis.")
+          .metavar("DELAY_BIN_SIZE")
+          .help("The delay bin size to apply during analysis.")
           ;
 
     parser.add_option("--print_graph")
@@ -112,47 +112,6 @@ optparse::Values parse_args(int argc, char** argv) {
           .set_default("CUDD_REORDER_SIFT")
           .help("The method to use for dynamic BDD variable re-ordering. Default: %default")
           ;
-    //parser.add_option("--sift_nswaps")
-          //.set_default("2000000")
-          //.help("Max number of variable swaps per reordering. Default %default")
-          //;
-    //parser.add_option("--sift_nvars")
-          //.set_default("1000")
-          //.help("Max number of variables to be sifted per reordering. Default %default")
-          //;
-    //parser.add_option("--sift_max_growth")
-          //.set_default("1.2")
-          //.help("Max growth in (intermediate) number of BDD nodes during sifting. Default %default")
-          //;
-    //parser.add_option("--cudd_cache_ratio")
-          //.set_default("1.0")
-          //.help("Factor adjusting cache size relative to CUDD default. Default %default")
-          //;
-    //parser.add_option("--xfunc_cache_nelem")
-          //.set_default("0")
-          //.help("Number of BDDs to cache while building switch functions. "
-                //"Note a value of 0 causes all xfuncs to be memoized (unbounded cache). "
-                //"A larger value prevents switch functions from being re-calculated, but "
-                //"also increases (perhaps exponentially) the size of the composite BDD CUDD must manage. "
-                //"This can causing a large amount of time to be spent re-ordering the BDD. "
-                //"Default %default")
-          //;
-
-    //parser.add_option("--approx_threshold")
-          //.set_default("-1")
-          //.help("The number of BDD nodes beyond which BDDs are approximated. "
-                //"Negative thresholds ensure no approximation occurs. "
-                //"Default %default")
-          //;
-    //parser.add_option("--approx_ratio")
-          //.set_default("0.5")
-          //.help("The desired reduction in number BDD nodes when BDDs are approximated. Default %default")
-          //;
-    //parser.add_option("--approx_quality")
-          //.set_default("1.5")
-          //.help("The worst degredation in #SAT quality (0.5 would accept up to a 50% under approximation, "
-                //"1.0 only an exact approximation, and 1.5 a 50% over approximation). Default %default")
-          //;
 
     //Sets of possible node choices
     std::vector<std::string> node_choices = {"po", "pi", "all", "none"};
@@ -182,7 +141,7 @@ optparse::Values parse_args(int argc, char** argv) {
           .dest("csv_base")
           .set_default("esta")
           .metavar("CSV_OUTPUT_FILE_BASE")
-          .help("The base name for output csv files")
+          .help("The base name for output csv files. Default: %default")
           ;
 
     parser.add_option("--bdd_stats")
