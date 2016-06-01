@@ -17,7 +17,7 @@ BlifTimingGraphBuilder::BlifTimingGraphBuilder(BlifData* data, const sdfparse::D
     : blif_data_(data) 
     , sdf_data_(sdf_data) {
     
-    std::regex interconnect_regex("routing_segment_(.*)_output_([[:digit:]]+)_([[:digit:]]+)_to_(.*)_input_([[:digit:]]+)_([[:digit:]]+)", std::regex::egrep);
+    std::regex interconnect_regex("routing_segment_(.*)_output_([[:digit:]]+)_([[:digit:]]+)_to_(.*)_(input|clock)_([[:digit:]]+)_([[:digit:]]+)", std::regex::egrep);
 
     for(const auto& cell : sdf_data_.cells()) {
         std::string inst_name = cell.instance();
@@ -715,13 +715,7 @@ void BlifTimingGraphBuilder::set_net_edge_delay_from_sdf(const TimingGraph& tg, 
 
     BDD opin_node_func = tg.node_func(output_node_id);
 
-    //Characterize the logic function to identify which input/output delays to map onto each edge
-    //auto active_transition_arcs = identify_active_transition_arcs(opin_node_func, tg.num_node_in_edges(output_node_id));
-
-    //assert(active_transition_arcs.size() == 1); //A net
-    //assert(active_transition_arcs[0].size() == 8); //A net will only have 1:1 transitions (where we might treat H/R and F/L equivalently)
-
-    //We need to get the output port of the sink block
+    //We need to get the output port of the sink block (which names the sink block)
     const BlifPort* sink_block_output_port = nullptr;
     std::string sink_port_prefix;
     if(sink_port->node_type == BlifNodeType::NAMES) {
@@ -730,6 +724,11 @@ void BlifTimingGraphBuilder::set_net_edge_delay_from_sdf(const TimingGraph& tg, 
         BlifNames* sink_block = sink_port->names;
         assert(sink_block->ports.size() > 0);
         sink_block_output_port = sink_block->ports[sink_block->ports.size()-1];
+    } else if (sink_port->node_type == BlifNodeType::LATCH) {
+        sink_port_prefix = "latch_";
+
+        BlifLatch* sink_block = sink_port->latch;
+        sink_block_output_port = sink_block->output;
     } else {
         assert(sink_port->node_type == BlifNodeType::MODEL);
         sink_block_output_port = sink_port;
@@ -738,6 +737,8 @@ void BlifTimingGraphBuilder::set_net_edge_delay_from_sdf(const TimingGraph& tg, 
     std::string driver_port_prefix;
     if(driver_port->node_type == BlifNodeType::NAMES) {
         driver_port_prefix = "lut_";
+    } else if(driver_port->node_type == BlifNodeType::LATCH) {
+        driver_port_prefix = "latch_";
     }
 
     std::string driver_port_name = driver_port_prefix + sdf_name(*driver_port->name);
