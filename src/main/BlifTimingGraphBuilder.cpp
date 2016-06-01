@@ -180,8 +180,8 @@ void BlifTimingGraphBuilder::create_latch(TimingGraph& tg, const BlifLatch* latc
     NodeId clock = tg.add_node(TN_Type::FF_CLOCK, INVALID_CLOCK_DOMAIN, false); 
 
     //The edges
-    tg.add_edge(ipin, sink);
-    tg.add_edge(src, opin);
+    EdgeId d_to_sink_edge_id = tg.add_edge(ipin, sink);
+    EdgeId src_to_q_edge_id = tg.add_edge(src, opin);
     tg.add_edge(clock, sink);
     tg.add_edge(clock, src);
 
@@ -198,6 +198,8 @@ void BlifTimingGraphBuilder::create_latch(TimingGraph& tg, const BlifLatch* latc
     port_to_node_lookup_[latch->input] = ipin;
     port_to_node_lookup_[latch->output] = opin;
     port_to_node_lookup_[latch->control] = clock;
+
+    set_latch_edge_delays_from_sdf(tg, latch, d_to_sink_edge_id, src_to_q_edge_id);
 }
 
 void BlifTimingGraphBuilder::create_names(TimingGraph& tg, const BlifNames* names) {
@@ -797,6 +799,62 @@ void BlifTimingGraphBuilder::set_net_edge_delay_from_sdf(const TimingGraph& tg, 
     assert(ret.second); //Was inserted
 }
 
+void BlifTimingGraphBuilder::set_latch_edge_delays_from_sdf(const TimingGraph& tg, const BlifLatch* latch, EdgeId d_to_sink_edge_id, EdgeId src_to_q_edge_id) {
+    auto inst_name = sdf_name("latch_" + *latch->output->name);
+    const auto& sdf_cell = find_sdf_cell_inst(inst_name);
+
+    //Setup delays
+    std::map<TransitionType,Time> d_to_sink_delays;
+
+    for(const auto& setup_check : sdf_cell.timing_check().setup()) {
+        for(auto output_trans : {TransitionType::RISE, TransitionType::FALL, TransitionType::HIGH, TransitionType::LOW}) {
+            double delay = NAN;
+            if(output_trans == TransitionType::HIGH || output_trans == TransitionType::LOW) {
+                delay = 0.;
+            } else if(output_trans == TransitionType::RISE) {
+                delay = setup_check.tsu().max();
+            } else {
+                assert(output_trans == TransitionType::FALL);
+                delay = setup_check.tsu().max();
+            }
+            auto ret1 = d_to_sink_delays.insert(std::make_pair(output_trans, Time(delay)));
+            assert(ret1.second); //Was inserted
+        }
+    }
+    auto ret2 = edge_delays_.insert(std::make_pair(d_to_sink_edge_id, d_to_sink_delays));
+    assert(ret2.second); //Was inserted
+    
+    std::map<TransitionType,Time> src_to_q_delays;
+
+    const auto& sdf_delay = sdf_cell.delay();
+    assert(sdf_delay.type() == sdfparse::Delay::Type::ABSOLUTE);
+
+    const auto& iopaths = sdf_cell.delay().iopaths();
+    assert(iopaths.size() == 1);
+
+    const auto& iopath = iopaths[0];
+
+    assert(iopath.input().condition() == sdfparse::PortCondition::POSEDGE);
+    assert(iopath.input().port() == "clock");
+    assert(iopath.output().condition() == sdfparse::PortCondition::NONE);
+    assert(iopath.output().port() == "Q");
+
+    for(auto output_trans : {TransitionType::RISE, TransitionType::FALL, TransitionType::HIGH, TransitionType::LOW}) {
+        double delay = NAN;
+        if(output_trans == TransitionType::HIGH || output_trans == TransitionType::LOW) {
+            delay = 0.;
+        } else if(output_trans == TransitionType::RISE) {
+            delay = iopath.rise().max();
+        } else {
+            assert(output_trans == TransitionType::FALL);
+            delay = iopath.fall().max();
+        }
+        auto ret3 = src_to_q_delays.insert(std::make_pair(output_trans, Time(delay)));
+        assert(ret3.second); //Was inserted
+    }
+    auto ret4 = edge_delays_.insert(std::make_pair(src_to_q_edge_id, src_to_q_delays));
+    assert(ret4.second); //Was inserted
+}
 
 std::shared_ptr<TimingGraphNameResolver> BlifTimingGraphBuilder::get_name_resolver() {
     if(!name_resolver_) {

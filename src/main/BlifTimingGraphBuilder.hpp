@@ -42,6 +42,7 @@ class BlifTimingGraphBuilder : public TimingGraphBuilder {
         std::string sdf_name(std::string name);
         void set_names_edge_delays_from_sdf(const TimingGraph& tg, const BlifNames* names, const NodeId output_node_id, BDD opin_node_func);
         void set_net_edge_delay_from_sdf(const TimingGraph& tg, const BlifPort* driver_port, const BlifPort* sink_port, const size_t sink_pin_idx, const NodeId output_node_id);
+        void set_latch_edge_delays_from_sdf(const TimingGraph& tg, const BlifLatch* latch, EdgeId d_to_sink_edge_id, EdgeId src_to_q_edge_id);
 
         sdfparse::Cell find_sdf_interconnect(std::string driver_port_name, std::string sink_port_name);
         sdfparse::Cell find_sdf_cell_inst(std::string inst_name);
