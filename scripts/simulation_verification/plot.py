@@ -128,29 +128,6 @@ def plot(data_sets, plot_style="cdf", plot_title=None, plot_file=None, num_bins=
     fig = plt.figure()
 
     
-    min_val = float("inf")
-    max_val = float("-inf")
-    for label, delay_prob_data in data_sets.iteritems():
-        min_val = min(min_val, delay_prob_data['delay'].min())
-        max_val = max(max_val, delay_prob_data['delay'].max())
-
-    histogram_range=(min_val, max_val)
-
-    #Generate the bins
-    bin_width = float(histogram_range[1] - histogram_range[0]) / num_bins
-    bins = [histogram_range[0]] #Initialize at low end of range
-    for i in xrange(num_bins-1):
-        bins.append(bins[-1] + bin_width)
-    bins.append(histogram_range[1]) #End at high end of range, we do this explicitly to avoid FP round-off issues
-
-    print histogram_range
-    print bins
-
-    assert bins[-1] >= histogram_range[1]
-
-    vtext_margin = 4*0.008
-
-    vline_text_y = 1. + vtext_margin
 
     for label, delay_prob_data in data_sets.iteritems():
         print label
@@ -163,6 +140,30 @@ def plot(data_sets, plot_style="cdf", plot_title=None, plot_file=None, num_bins=
 
 
         if plot_style == "hist":
+            min_val = float("inf")
+            max_val = float("-inf")
+            for label, delay_prob_data in data_sets.iteritems():
+                min_val = min(min_val, delay_prob_data['delay'].min())
+                max_val = max(max_val, delay_prob_data['delay'].max())
+
+            histogram_range=(min_val, max_val)
+
+            #Generate the bins
+            bin_width = float(histogram_range[1] - histogram_range[0]) / num_bins
+            bins = [histogram_range[0]] #Initialize at low end of range
+            for i in xrange(num_bins-1):
+                bins.append(bins[-1] + bin_width)
+            bins.append(histogram_range[1]) #End at high end of range, we do this explicitly to avoid FP round-off issues
+
+            print histogram_range
+            print bins
+
+            assert bins[-1] >= histogram_range[1]
+
+            vtext_margin = 4*0.008
+
+            vline_text_y = 1. + vtext_margin
+
             #Veritical line marking the maximum delay point
             vline_text_y = draw_vline(max_delay, label, color, vline_text_y, vtext_margin)
             heights = map_to_bins(delay_prob_data, bins, histogram_range)
