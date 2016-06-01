@@ -70,6 +70,8 @@ PreCalcTransDelayCalculator get_pre_calc_trans_delay_calculator(std::map<EdgeId,
 
 std::vector<std::string> split(const std::string& str, char delim);
 
+void write_timing_graph_and_delays_dot(std::ostream& os, const TimingGraph& tg, const PreCalcTransDelayCalculator& delay_calc);
+
 optparse::Values parse_args(int argc, char** argv) {
     auto parser = optparse::OptionParser()
         .description("Performs Extended Timing Analysis on a blif netlist.")
@@ -250,11 +252,6 @@ int main(int argc, char** argv) {
         print_levelization(timing_graph);
     }
 
-    if(options.get_as<bool>("write_graph_dot")) {
-        std::ofstream outfile("timing_graph.dot");
-        write_timing_graph_dot(outfile, timing_graph);
-    }
-
     cout << "Timing Graph Nodes: " << timing_graph.num_nodes() << "\n";
     cout << "Timing Graph Edges: " << timing_graph.num_edges() << "\n";
     cout << "Timing Graph Num Logical Inputs: " << timing_graph.logical_inputs().size() << "\n";
@@ -267,6 +264,11 @@ int main(int argc, char** argv) {
     auto delay_calc = get_pre_calc_trans_delay_calculator(set_edge_delays, timing_graph);
 
     g_action_timer.pop_timer("Building Delay Calculator");
+
+    if(options.get_as<bool>("write_graph_dot")) {
+        std::ofstream outfile("timing_graph.dot");
+        write_timing_graph_and_delays_dot(outfile, timing_graph, delay_calc);
+    }
 
     //Initialize PIs with zero input delay
     TimingConstraints timing_constraints;
@@ -732,4 +734,75 @@ std::vector<std::string> split(const std::string& str, char delim) {
         elements.push_back(item);
     }
     return elements;
+}
+
+void write_timing_graph_and_delays_dot(std::ostream& os, const TimingGraph& tg, const PreCalcTransDelayCalculator& delay_calc) {
+    //Write out a dot file of the timing graph
+    os << "digraph G {" <<std::endl;
+    //os << "\tnode[shape=record]" << std::endl;
+
+    for(int inode = 0; inode < tg.num_nodes(); inode++) {
+        os << "\tnode" << inode;
+        os << "[label=\"";
+        os << "n" << inode;
+        os << "\\n" << tg.node_type(inode);
+        os << "\"";
+
+        os << " fixedsize=false margin=0";
+
+        switch(tg.node_type(inode)) {
+            case TN_Type::INPAD_SOURCE: //Fallthrough
+            case TN_Type::FF_SOURCE:
+                os << " " << "shape=invhouse";
+                break;
+            case TN_Type::FF_SINK: //Fallthrough
+            case TN_Type::OUTPAD_SINK:
+                os << " " << "shape=house";
+                break;
+            case TN_Type::PRIMITIVE_OPIN:
+                os << " " << "shape=invtrapezium";
+                break;
+            default:
+                //Pass
+                break;
+        }
+
+        os << "]";
+        os <<std::endl;
+    }
+
+    //Force drawing to be levelized
+    for(int ilevel = 0; ilevel < tg.num_levels(); ilevel++) {
+        os << "\t{rank = same;";
+
+        for(NodeId node_id : tg.level(ilevel)) {
+            os << " node" << node_id <<";";
+        }
+        os << "}" <<std::endl;
+    }
+
+    for(int ilevel = 0; ilevel < tg.num_levels(); ilevel++) {
+        for(NodeId node_id : tg.level(ilevel)) {
+            for(int edge_idx = 0; edge_idx < tg.num_node_out_edges(node_id); edge_idx++) {
+                EdgeId edge_id = tg.node_out_edge(node_id, edge_idx);
+
+                NodeId sink_node_id = tg.edge_sink_node(edge_id);
+
+                os << "\tnode" << node_id << " -> node" << sink_node_id;
+                os << "[label=\"";
+                for(auto in_trans : {TransitionType::HIGH}) {
+                    for(auto out_trans : {TransitionType::RISE, TransitionType::FALL, TransitionType::HIGH, TransitionType::LOW}) {
+                        Time edge_delay = delay_calc.max_edge_delay(tg, edge_id, in_trans, out_trans);
+                        if(edge_delay.value() != 0.) {
+                            os << out_trans << "@" << edge_delay << " ";
+                        }
+                    }
+                }
+                os << "\"]";
+                os << ";" <<std::endl;
+            }
+        }
+    }
+
+    os << "}" <<std::endl;
 }
