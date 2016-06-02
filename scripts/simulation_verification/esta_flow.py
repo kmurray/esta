@@ -6,10 +6,13 @@ import subprocess
 import shutil
 import re
 import fnmatch
+import json
 
 import pyverilog.vparser.parser as verilog_parser
 import pyverilog.vparser.ast as vast
 from pyverilog.ast_code_generator.codegen import ASTCodeGenerator
+
+SIM_CLOCK="sim_clk"
 
 def parse_args():
     parser = argparse.ArgumentParser()
@@ -151,6 +154,11 @@ def esta_flow(args):
         print "Running VTR"
         vtr_results = run_vtr(args, vpr_log)
 
+    print
+    print "Extracting STA endpoint timing"
+    vpr_cpd_ps = parse_vpr_cpd(vpr_log)
+    endpoint_timing = load_endpoint_timing()
+    assert vpr_cpd_ps == max(endpoint_timing.values())
 
     #Extract port and top instance information
     print
@@ -163,7 +171,6 @@ def esta_flow(args):
         print "Running ESTA"
         esta_results = run_esta(args, design_info=design_info, sdf_file=vpr_sdf_file)
 
-    vpr_cpd_ps = parse_vpr_cpd(vpr_log)
 
     #Run Modelsim to collect simulation statistics
     if args.run_sim:
@@ -185,12 +192,12 @@ def esta_flow(args):
     if args.run_compare:
         print 
         print "Comparing ESTA and Simulation Results"
-        run_comparison(args, design_info, vpr_cpd_ps)
+        run_comparison(args, design_info)
 
     if args.run_plot:
         print 
         print "Plotting ESTA and Simulation Results"
-        run_plot(args, design_info, vpr_cpd_ps)
+        run_plot(args, design_info, endpoint_timing)
 
 def run_vtr(args, vpr_log_filename):
 
@@ -206,6 +213,7 @@ def run_vtr(args, vpr_log_filename):
             args.vpr_exec,
             args.arch,
             args.blif,
+            "-echo_file", "on",
             "-gen_postsynthesis_netlist", "on"
           ]
 
@@ -271,7 +279,8 @@ def run_modelsim(args, sdf_file, cpd_ps, verilog_info, vcd_file):
                                      critical_path_delay_ps=cpd_ps, 
                                      top_module=verilog_info['module'], 
                                      dut_inputs=verilog_info['inputs'], 
-                                     dut_outputs=verilog_info['outputs']):
+                                     dut_outputs=verilog_info['outputs'],
+                                     dut_clocks=verilog_info['clocks']):
             print >>f, line
 
     #Write out the modelsim .do file
@@ -302,16 +311,16 @@ def run_transition_extraction(args, vcd_file, top_verilog_info):
     cmd = [
             args.vcd_extract_exec,
             vcd_file,
-            '-c', 'clk',
+            '-c', SIM_CLOCK,
           ]
-    cmd += ["-i"] + top_verilog_info['inputs']
-    cmd += ["-o"] + outputs
+    cmd += ["-i"] + [x for x in top_verilog_info['inputs']]
+    cmd += ["-o"] + [x for x in outputs]
 
     run_command(cmd)
 
     return {}
 
-def run_comparison(args, design_info, sta_cpd):
+def run_comparison(args, design_info):
     if args.outputs is None:
         outputs = design_info['outputs']
     else:
@@ -347,7 +356,7 @@ def run_comparison(args, design_info, sta_cpd):
 
     return {}
 
-def run_plot(args, design_info, sta_cpd):
+def run_plot(args, design_info, endpoint_timing):
     if args.outputs is None:
         outputs = design_info['outputs']
     else:
@@ -377,7 +386,7 @@ def run_plot(args, design_info, sta_cpd):
                 args.plot_exec,
                 "--exhaustive_csvs", sim_csv, esta_csv,
                 "--exhaustive_csv_labels", "Simulation", "ESTA",
-                "--sta_cpd", sta_cpd,
+                "--sta_cpd", endpoint_timing[output],
                 "--plot_title", '"{}: {}"'.format(os.path.splitext(os.path.basename(args.blif))[0], output),
                 "--plot_file", '.'.join([output, "pdf"])
               ]
@@ -437,31 +446,111 @@ def extract_design_info(top_verilog, blif_file):
     # makes verification difficult.
     #
     inputs = None
+    outputs = None
     with open(blif_file) as f:
-        for line in f:
+        for line in continued_lines(f):
             line.strip()
             if line.startswith(".inputs"):
-                inputs = line.split()[1:]
+                inputs = set(line.split()[1:])
+            if line.startswith(".outputs"):
+                outputs = set(line.split()[1:])
+            if inputs and outputs:
                 break
     assert inputs
+    assert outputs
 
-    outputs = []
-    for port in mod_def.portlist.ports:
+    clock_nets = set()
+    while True:
+        old_clock_nets = clock_nets.copy()
+        clock_nets = identify_clock_nets(mod_def, clock_nets)
 
-        io = port.children()[0]
-
-        if isinstance(io, vast.Output):
-            outputs.append(io.name)
+        if clock_nets == old_clock_nets:
+            break
         else:
-            assert isinstance(io, vast.Input)
-            assert io.name in inputs
+            old_clock_nets = clock_nets
+
+    #Remove any clocks that show up in the input list
+    clocks = inputs & clock_nets
+    inputs -= clock_nets
+
+
 
     return {
             'file': top_verilog,
             'module': name,
             'inputs': inputs,
             'outputs': outputs,
+            'clocks': clocks,
            }
+
+def continued_lines(f):
+    for line in f:
+        line = line.rstrip('\n')
+        while line.endswith('\\'):
+            line = line[:-1] + next(f).rstrip('\n')
+        yield line
+
+def identify_internal_clock_nets(vnode):
+    clocks = set()
+    if isinstance(vnode, vast.InstanceList) and vnode.module == "DFF":
+        ports = find_inst_list_ports(vnode)
+
+        clocks |= set([x.argname for x in ports if x.portname == "clock"])
+    else:
+        for child in vnode.children():
+            clocks |= identify_internal_clock_nets(child)
+    return clocks
+
+def find_inst_list_ports(vnode):
+    ports = []
+
+    if isinstance(vnode, vast.PortArg):
+        ports.append(vnode)
+    else:
+        for child in vnode.children():
+            ports += find_inst_list_ports(child)
+
+    return ports
+
+def identify_clock_nets(vnode, clock_nets):
+    if isinstance(vnode, vast.InstanceList) and vnode.module == "DFF":
+        ports = find_inst_list_ports(vnode)
+
+        clock_nets |= set([str(x.argname) for x in ports if x.portname == "clock"])
+    elif isinstance(vnode, vast.InstanceList) and vnode.module == "fpga_interconnect":
+        ports = find_inst_list_ports(vnode)
+
+        assert len(ports) == 2
+
+        port_in = ports[0]
+        port_out = ports[1]
+
+        if str(port_out.argname) in clock_nets:
+            clock_nets.add(str(port_in.argname))
+
+    elif isinstance(vnode, vast.Assign):
+        if str(vnode.left.var) in clock_nets:
+            clock_nets.add(str(vnode.right.var))
+    else:
+        #Recurse
+        for child in vnode.children():
+            clock_nets |= identify_clock_nets(child, clock_nets)
+
+    return clock_nets
+
+
+def load_endpoint_timing():
+    endpoint_timing = {}
+    with open("endpoint_timing.echo.json") as f:
+        data = json.load(f)
+
+        for entry in data['endpoint_timing']:
+            endpoint = entry['node_identifier']
+            arrival_time = float(entry['T_arr']) * 1e12 #Convert to ps
+
+            endpoint_timing[endpoint] = arrival_time
+
+    return endpoint_timing
 
 def create_modelsim_do(args, vcd_file, verilog_files):
     do_lines = []
@@ -481,7 +570,7 @@ def create_modelsim_do(args, vcd_file, verilog_files):
     do_lines.append("#Setup VCD logging")
     do_lines.append("vcd file {vcd_file}".format(vcd_file=vcd_file))
     do_lines.append("vcd add /tb/dut/*")
-    do_lines.append("vcd add /clk")
+    do_lines.append("vcd add /{sim_clk}".format(sim_clk=SIM_CLOCK))
     do_lines.append("")
     do_lines.append("add wave *")
     do_lines.append("")
@@ -502,7 +591,7 @@ def create_modelsim_do(args, vcd_file, verilog_files):
 
     return do_lines
 
-def create_testbench(args, top_module, sdf_file, critical_path_delay_ps, dut_inputs, dut_outputs):
+def create_testbench(args, top_module, sdf_file, critical_path_delay_ps, dut_inputs, dut_outputs, dut_clocks):
     sim_clock_period = 2*args.cpd_scale*critical_path_delay_ps 
 
     tb_lines = []
@@ -529,16 +618,23 @@ def create_testbench(args, top_module, sdf_file, critical_path_delay_ps, dut_inp
     tb_lines.append("logic finished;")
     tb_lines.append("")
     tb_lines.append("//Simulation clock")
-    tb_lines.append("logic clk;")
+    tb_lines.append("logic {sim_clk};".format(sim_clk=SIM_CLOCK))
     tb_lines.append("")
-    tb_lines.append("//dut inputs")
 
+    if len(dut_clocks) > 0:
+        tb_lines.append("//DUT clocks")
+        for clock in dut_clocks:
+            tb_lines.append("logic {sig};".format(sig=clock))
+        
+    tb_lines.append("")
+
+    tb_lines.append("//DUT inputs")
     for input in dut_inputs:
         tb_lines.append("logic {sig};".format(sig=input))
         
     tb_lines.append("")
 
-    tb_lines.append("//dut outputs")
+    tb_lines.append("//DUT outputs")
     for output in dut_outputs:
         tb_lines.append("logic {sig};".format(sig=output))
 
@@ -548,8 +644,8 @@ def create_testbench(args, top_module, sdf_file, critical_path_delay_ps, dut_inp
     tb_lines.append("")
     tb_lines.append("initial $sdf_annotate(\"{sdf_file}\", dut);".format(sdf_file=sdf_file))
     tb_lines.append("")
-    tb_lines.append("initial clk = '1;")
-    tb_lines.append("always #CLOCK_DELAY clk = ~clk;")
+    tb_lines.append("initial {sim_clk} = '1;".format(sim_clk=SIM_CLOCK))
+    tb_lines.append("always #CLOCK_DELAY {sim_clk} = ~{sim_clk};".format(sim_clk=SIM_CLOCK))
     tb_lines.append("")
     tb_lines.append("initial {rolled_over,state} = 0;")
     tb_lines.append("initial finished = 0;")
@@ -558,7 +654,7 @@ def create_testbench(args, top_module, sdf_file, critical_path_delay_ps, dut_inp
     tb_lines.append("assign next_state = state[STATE_W-1:W];")
     tb_lines.append("")
     tb_lines.append("//Set the inputs for this cycle")
-    tb_lines.append("always @(posedge clk) begin")
+    tb_lines.append("always @(posedge {sim_clk}) begin".format(sim_clk=SIM_CLOCK))
     tb_lines.append("    {" + ','.join(dut_inputs) + "} <= next_state[W-1:0];")
     tb_lines.append("")
     tb_lines.append("    //Finish after state repeats its first two values")
@@ -568,7 +664,7 @@ def create_testbench(args, top_module, sdf_file, critical_path_delay_ps, dut_inp
     tb_lines.append("end")
     tb_lines.append("")
     tb_lines.append("//Set-up for the next clock edge")
-    tb_lines.append("always @(negedge clk) begin")
+    tb_lines.append("always @(negedge {sim_clk}) begin".format(sim_clk=SIM_CLOCK))
     tb_lines.append("    if(finished) $stop;")
     tb_lines.append("")
     tb_lines.append("    //Advance to next state")
@@ -576,6 +672,11 @@ def create_testbench(args, top_module, sdf_file, critical_path_delay_ps, dut_inp
     tb_lines.append("")
     tb_lines.append("    {" + ','.join(dut_inputs) + "} <= prev_state[W-1:0];")
     tb_lines.append("end")
+    tb_lines.append("")
+    if len(dut_clocks) > 0:
+        tb_lines.append("//Tie all dut clocks to the sim clock")
+        for clock in dut_clocks:
+            tb_lines.append("assign {dut_clk} = {sim_clk};".format(dut_clk=clock, sim_clk=SIM_CLOCK))
     tb_lines.append("")
     tb_lines.append("endmodule")
 
