@@ -7,6 +7,7 @@ import shutil
 import re
 import fnmatch
 import json
+import numpy as np
 
 import pyverilog.vparser.parser as verilog_parser
 import pyverilog.vparser.ast as vast
@@ -26,11 +27,6 @@ def parse_args():
     parser.add_argument("blif",
                         help="Circuit BLIF file")
 
-    #parser.add_argument("--verify",
-                        #choices=["exhaustive", "sample"],
-                        #default="exhaustive",
-                        #help="Verification mode. Default: %(default)s")
-
     parser.add_argument("--vtr",
                         action="store_true",
                         dest="run_vtr",
@@ -48,6 +44,12 @@ def parse_args():
                         dest="run_sim",
                         default=False,
                         help="Run Simulation wtih SDF back-annotation")
+
+    parser.add_argument("--sim_extract",
+                        action="store_true",
+                        dest="run_sim_extract",
+                        default=False,
+                        help="Extract transition and delay data from simulation result")
 
     parser.add_argument("--compare",
                         action="store_true",
@@ -132,6 +134,15 @@ def parse_args():
 
     args = parser.parse_args()
 
+    #If none of the specific steps are specified, run all steps
+    if not args.run_vtr and not args.run_esta and not args.run_sim and not args.run_sim_extract and not args.run_compare and not args.run_plot:
+        args.run_vtr = True
+        args.run_esta = True
+        args.run_sim = True
+        args.run_sim_extract = True
+        args.run_compare = True
+        args.run_plot = True
+
     return args
 
 def main():
@@ -147,6 +158,7 @@ def esta_flow(args):
     vpr_sdf_file = "top_post_synthesis.sdf"
     vpr_verilog_file = "top_post_synthesis.v"
     vpr_log = "vpr.log"
+    vcd_file = "sim.vcd"
 
     if args.run_vtr:
         #Run VTR to generate an SDF file
@@ -158,7 +170,7 @@ def esta_flow(args):
     print "Extracting STA endpoint timing"
     vpr_cpd_ps = parse_vpr_cpd(vpr_log)
     endpoint_timing = load_endpoint_timing()
-    assert vpr_cpd_ps == max(endpoint_timing.values())
+    assert np.isclose(vpr_cpd_ps, max(endpoint_timing.values()))
 
     #Extract port and top instance information
     print
@@ -177,7 +189,6 @@ def esta_flow(args):
 
         print
         print "Running Modelsim"
-        vcd_file = "sim.vcd"
         modelsim_results = run_modelsim(args, 
                                         sdf_file=vpr_sdf_file,
                                         cpd_ps=vpr_cpd_ps,
@@ -185,6 +196,7 @@ def esta_flow(args):
                                         vcd_file=vcd_file
                                         )
 
+    if args.run_sim or args.run_sim_extract:
         print
         print "Extracting Transitions"
         transition_results = run_transition_extraction(args, vcd_file, design_info)
