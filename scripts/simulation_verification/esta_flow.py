@@ -8,6 +8,7 @@ import re
 import fnmatch
 import json
 import numpy as np
+import math
 
 import pyverilog.vparser.parser as verilog_parser
 import pyverilog.vparser.ast as vast
@@ -78,6 +79,11 @@ def parse_args():
                         choices=["exhaustive", "monte_carlo"],
                         default="exhaustive",
                         help="Simulation mode.")
+
+    parser.add_argument("--monte_carlo_iter_fraction",
+                        type=float,
+                        default=0.1,
+                        help="Sets the fraction of input space to cover during monte carlo simulation. This sets the number of monte carlo iterations to a fraction of the exhaustive iteration count")
 
     #
     # VTR related arguments
@@ -208,9 +214,9 @@ def esta_flow(args):
         print "Extracting Transitions"
         transition_results = run_transition_extraction(args, vcd_file, design_info)
 
-    if args.run_compare:
+    if args.run_compare and args.sim_mode == "exhaustive":
         print 
-        print "Comparing ESTA and Simulation Results"
+        print "Comparing ESTA and Simulation Exhaustive Results"
         run_comparison(args, design_info)
 
     if args.run_plot:
@@ -275,9 +281,11 @@ def run_esta(args, design_info, sdf_file):
             args.esta_exec,
             "-b", args.blif,
             "-s", sdf_file,
-            "-d", args.delay_bin_size,
-            "--dump_exhaustive_csv", ",".join(dump_outputs)
-          ]
+            "-d", args.delay_bin_size]
+
+    if args.sim_mode == "exhaustive":
+        cmd += ["--dump_exhaustive_csv", ",".join(dump_outputs)]
+
     run_command(cmd)
 
 def run_modelsim(args, sdf_file, cpd_ps, verilog_info, vcd_file):
@@ -290,8 +298,10 @@ def run_modelsim(args, sdf_file, cpd_ps, verilog_info, vcd_file):
         modelsim_top_verilog = top_verilog
 
 
-    #Write out the test bench
     tb_verilog = "tb.sv"
+    sim_do_file = "tb.do"
+
+    #Write out the test bench
     with open(tb_verilog, "w") as f:
         for line in create_testbench(args, 
                                      sdf_file=sdf_file,
@@ -303,9 +313,10 @@ def run_modelsim(args, sdf_file, cpd_ps, verilog_info, vcd_file):
             print >>f, line
 
     #Write out the modelsim .do file
-    sim_do_file = "tb.do"
     with open(sim_do_file, "w") as f:
-        for line in create_modelsim_do(args, vcd_file, [modelsim_top_verilog, tb_verilog] + args.link_verilog):
+        for line in create_modelsim_do(args, 
+                                       vcd_file, 
+                                       [modelsim_top_verilog, tb_verilog] + args.link_verilog):
             print >>f, line
 
     #Run the simulation
@@ -386,34 +397,58 @@ def run_plot(args, design_info, endpoint_timing):
 
         sim_csv = ".".join(["sim", output, "csv"])
 
-        esta_csvs = []
-        esta_csv_regex = re.compile(r"esta\." + output + "\.(?P<node_text>n\d+).*\.csv")
-        for filename in os.listdir(os.getcwd()):
-            match = esta_csv_regex.match(filename)
-            if match:
-                esta_csvs.append((filename, int(match.group("node_text")[1:])))
+        cmd = [args.plot_exec]
 
-        assert len(esta_csvs) > 0
+        if args.sim_mode == "exhaustive":
+            esta_csv_regex = re.compile(r"esta\." + output + "\.(?P<node_text>n\d+).*\.csv")
 
-        #In descending order
-        esta_csvs = sorted(esta_csvs, key=lambda x: x[1], reverse=True)
+            esta_exhaustive_csv = pick_esta_csv(esta_csv_regex)
 
-        #Only analyze the csv with the highest node number
-        esta_csv = esta_csvs[0][0]
+            cmd += ["--exhaustive_csvs", sim_csv, esta_exhaustive_csv]
+            cmd += ["--exhaustive_csv_labels", '"Simulation (Ex)"', "ESTA"]
+        else:
+            assert args.sim_mode == "monte_carlo"
 
-        cmd = [
-                args.plot_exec,
-                "--exhaustive_csvs", sim_csv, esta_csv,
-                "--exhaustive_csv_labels", "Simulation", "ESTA",
-                "--sta_cpd", endpoint_timing[output],
-                "--plot_title", '"{}: {}"'.format(os.path.splitext(os.path.basename(args.blif))[0], output),
-                "--plot_file", '.'.join([output, "pdf"])
-              ]
+            esta_csv_regex = re.compile(r"esta\.histogram\." + output + "\.(?P<node_text>n\d+).*\.csv")
+
+            esta_histogram_csv = pick_esta_csv(esta_csv_regex)
+
+            #Sim is always treated as exhaustive
+            cmd += ["--exhaustive_csvs", sim_csv]
+            cmd += ["--exhaustive_csv_labels", '"Simulation (MC)"']
+
+            #But now we use the esta histogram directly
+            cmd += ["--histogram_csvs", esta_histogram_csv]
+            cmd += ["--histogram_csv_labels", "ESTA"]
+
+        cmd += ["--sta_cpd", endpoint_timing[output]]
+        cmd += ["--plot_title", '"{}: {}"'.format(os.path.splitext(os.path.basename(args.blif))[0], output)]
+        cmd += ["--plot_file", output + ".pdf"]
+        #cmd += ["--plot", "stem_cdf"]
 
         run_command(cmd, log_filename='.'.join(["comparison", output, "log"]))
 
     return {}
 
+def pick_esta_csv(esta_csv_regex):
+    #Collect all the esta exhaustive csvs
+    esta_csvs = []
+    for filename in os.listdir(os.getcwd()):
+        match = esta_csv_regex.match(filename)
+        if match:
+            esta_csvs.append((filename, int(match.group("node_text")[1:])))
+
+    assert len(esta_csvs) > 0
+
+    #In descending order
+    esta_csvs = sorted(esta_csvs, key=lambda x: x[1], reverse=True)
+
+    #Only analyze the csv with the highest node number,
+    #this is a fragile assumption based on how esta constructs the timing graph
+    #the highest node number corresponds to the OUTPAD_SINK
+    esta_csv = esta_csvs[0][0]
+
+    return esta_csv
 
 def fix_modelsim_altera_sdf_annotation(top_verilog):
     base, ext = os.path.splitext(top_verilog)
@@ -622,7 +657,7 @@ def create_testbench(args, top_module, sdf_file, critical_path_delay_ps, dut_inp
     tb_lines.append("localparam CLOCK_PERIOD = {period};".format(period=sim_clock_period))
     tb_lines.append("localparam CLOCK_DELAY = CLOCK_PERIOD / 2;")
     tb_lines.append("")
-    tb_lines.append("//Input width")
+    tb_lines.append("//Total inputs width bits")
     tb_lines.append("localparam W = {W};".format(W=len(dut_inputs)))
     tb_lines.append("")
     tb_lines.append("//State width (used to iterate through all possible transitions)")
@@ -631,9 +666,9 @@ def create_testbench(args, top_module, sdf_file, critical_path_delay_ps, dut_inp
     tb_lines.append("")
     tb_lines.append("//Testbench signals")
     tb_lines.append("logic [STATE_W-1:0] state;")
-    tb_lines.append("logic rolled_over;")
     tb_lines.append("logic [W-1:0] prev_state;")
     tb_lines.append("logic [W-1:0] next_state;")
+    tb_lines.append("logic rolled_over;")
     tb_lines.append("logic finished;")
     tb_lines.append("")
     tb_lines.append("//Simulation clock")
@@ -669,28 +704,66 @@ def create_testbench(args, top_module, sdf_file, critical_path_delay_ps, dut_inp
     tb_lines.append("initial {rolled_over,state} = 0;")
     tb_lines.append("initial finished = 0;")
     tb_lines.append("")
-    tb_lines.append("assign prev_state = state[W-1:0];")
-    tb_lines.append("assign next_state = state[STATE_W-1:W];")
-    tb_lines.append("")
-    tb_lines.append("//Set the inputs for this cycle")
-    tb_lines.append("always @(posedge {sim_clk}) begin".format(sim_clk=SIM_CLOCK))
-    tb_lines.append("    {" + ','.join(dut_inputs) + "} <= next_state[W-1:0];")
-    tb_lines.append("")
-    tb_lines.append("    //Finish after state repeats its first two values")
-    tb_lines.append("    //This ensures that we cover the last transition for full coverage")
-    tb_lines.append("    if(rolled_over && state == {{STATE_W-1{1'b0}},1'b1}) finished <= 1'b1;")
-    tb_lines.append("")
-    tb_lines.append("end")
-    tb_lines.append("")
-    tb_lines.append("//Set-up for the next clock edge")
-    tb_lines.append("always @(negedge {sim_clk}) begin".format(sim_clk=SIM_CLOCK))
-    tb_lines.append("    if(finished) $stop;")
-    tb_lines.append("")
-    tb_lines.append("    //Advance to next state")
-    tb_lines.append("    {rolled_over,state} += 1;")
-    tb_lines.append("")
-    tb_lines.append("    {" + ','.join(dut_inputs) + "} <= prev_state[W-1:0];")
-    tb_lines.append("end")
+
+    num_exhaustive_states = 4**len(dut_inputs)
+    if args.sim_mode == "exhaustive":
+        tb_lines.append("")
+        tb_lines.append("//")
+        tb_lines.append("//Exhaustive mode simulation")
+        tb_lines.append("//     Exhaustive states: {num}".format(num=num_exhaustive_states))
+        tb_lines.append("//")
+        tb_lines.append("")
+        tb_lines.append("assign prev_state = state[W-1:0];")
+        tb_lines.append("assign next_state = state[STATE_W-1:W];")
+        tb_lines.append("")
+        tb_lines.append("//Set the inputs for this cycle")
+        tb_lines.append("always @(posedge {sim_clk}) begin".format(sim_clk=SIM_CLOCK))
+        tb_lines.append("    {" + ','.join(dut_inputs) + "} <= next_state[W-1:0];")
+        tb_lines.append("")
+        tb_lines.append("    //Finish after state repeats its first two values")
+        tb_lines.append("    //This ensures that we cover the last transition for full coverage")
+        tb_lines.append("    if(rolled_over && state == {{STATE_W-1{1'b0}},1'b1}) finished <= 1'b1;")
+        tb_lines.append("")
+        tb_lines.append("end")
+        tb_lines.append("")
+        tb_lines.append("//Set-up for the next clock edge")
+        tb_lines.append("always @(negedge {sim_clk}) begin".format(sim_clk=SIM_CLOCK))
+        tb_lines.append("    if(finished) $stop;")
+        tb_lines.append("")
+        tb_lines.append("    //Advance to next state")
+        tb_lines.append("    {rolled_over,state} += 1;")
+        tb_lines.append("")
+        tb_lines.append("    {" + ','.join(dut_inputs) + "} <= prev_state[W-1:0];")
+        tb_lines.append("end")
+    else:
+        assert args.sim_mode == "monte_carlo"
+
+        finish_count = int(math.ceil(args.monte_carlo_iter_fraction*num_exhaustive_states))
+
+        tb_lines.append("")
+        tb_lines.append("//")
+        tb_lines.append("//Monte Carlo mode simulation")
+        tb_lines.append("//     Exhaustive states: {num}".format(num=num_exhaustive_states))
+        tb_lines.append("//     Monte Carlo Frac : {frac}".format(frac=args.monte_carlo_iter_fraction))
+        tb_lines.append("//     Finish count     : {cnt}".format(cnt=finish_count))
+        tb_lines.append("//")
+        tb_lines.append("")
+        tb_lines.append("//State Counter: Exhaustive count {num}".format(num=num_exhaustive_states))
+        tb_lines.append("logic [2**W-1:0] count;")
+        tb_lines.append("initial count = 0;")
+        tb_lines.append("")
+        tb_lines.append("//Set the inputs for this cycle")
+        tb_lines.append("always @(posedge {sim_clk}) begin".format(sim_clk=SIM_CLOCK))
+        for input in dut_inputs:
+            tb_lines.append("    {input} <= $urandom_range(1,0);".format(input=input))
+        tb_lines.append("")
+        tb_lines.append("    count <= count + 1;")
+        tb_lines.append("")
+        tb_lines.append("    if(count >= {finish_count}) finished <= 1'b1;".format(finish_count=finish_count))
+        tb_lines.append("end")
+        
+        
+
     tb_lines.append("")
     if len(dut_clocks) > 0:
         tb_lines.append("//Tie all dut clocks to the sim clock")

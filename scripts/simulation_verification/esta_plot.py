@@ -64,14 +64,6 @@ def main():
     if args.sta_cpd:
         data_sets['STA'] = pd.DataFrame({'delay': [0., args.sta_cpd], 'probability': [0., 1.]})
 
-    for i in xrange(len(args.histogram_csvs)):
-        label = args.histogram_csvs[i] #Default the file name
-        if i < len(args.histogram_csv_labels):
-            #Use specified label
-            label = args.histogram_csv_labels[i]
-
-        data_sets[label] = load_histogram_csv(args.histogram_csvs[i])
-
     for i in xrange(len(args.exhaustive_csvs)):
         label = args.exhaustive_csvs[i] #Default the file name
         if i < len(args.exhaustive_csv_labels):
@@ -79,6 +71,14 @@ def main():
             label = args.exhaustive_csv_labels[i]
 
         data_sets[label] = load_exhaustive_csv(args.exhaustive_csvs[i])
+
+    for i in xrange(len(args.histogram_csvs)):
+        label = args.histogram_csvs[i] #Default the file name
+        if i < len(args.histogram_csv_labels):
+            #Use specified label
+            label = args.histogram_csv_labels[i]
+
+        data_sets[label] = load_histogram_csv(args.histogram_csvs[i])
 
 
     plot(data_sets, plot_style=args.plot, num_bins=args.plot_bins, plot_file=args.plot_file, plot_title=args.plot_title)
@@ -98,7 +98,14 @@ def load_exhaustive_csv(filename):
     #to get probability
     normed_counts = raw_counts / raw_data.shape[0]
 
-    return pd.DataFrame({"delay": normed_counts.index, "probability": normed_counts.values}).sort_values(by="delay")
+    #Add a zero delay @ probability zero if none is recorded
+    #this ensures matplotlib draws the CDF correctly
+
+    df = pd.DataFrame({"delay": normed_counts.index, "probability": normed_counts.values})
+
+    zero_delay_df = pd.DataFrame({"delay": [0.], "probability": [0.]})
+
+    return df.append(zero_delay_df).sort_values(by="delay")
 
 def map_to_bins(delay_prob_data, bins, histogram_range):
 
