@@ -16,7 +16,9 @@ from pyverilog.ast_code_generator.codegen import ASTCodeGenerator
 SIM_CLOCK="sim_clk"
 
 def parse_args():
-    parser = argparse.ArgumentParser()
+    parser = argparse.ArgumentParser(
+                formatter_class=argparse.ArgumentDefaultsHelpFormatter
+            )
 
     #
     # General arguments
@@ -70,7 +72,12 @@ def parse_args():
 
     parser.add_argument("-d", "--delay_bin_size",
                         default=100,
-                        help="Delay bin size for ESTA. Smaller values increase accuracy at the cost of longer run-time. Default: %(default)s")
+                        help="Delay bin size for ESTA. Smaller values increase accuracy at the cost of longer run-time.")
+
+    parser.add_argument("--sim_mode",
+                        choices=["exhaustive", "monte_carlo"],
+                        default="exhaustive",
+                        help="Simulation mode.")
 
     #
     # VTR related arguments
@@ -86,7 +93,7 @@ def parse_args():
     esta_arguments = parser.add_argument_group("ESTA", "ESTA related options")
     esta_arguments.add_argument("--esta_exec",
                                 default="esta",
-                                help="ESTA executable. Default %(default)s")
+                                help="ESTA executable.")
 
     #
     # Modelsim related arguments
@@ -94,7 +101,7 @@ def parse_args():
     modelsim_arguments = parser.add_argument_group("Modelsim", "Modelsim related options")
     modelsim_arguments.add_argument("--vsim_exec",
                                     default="vsim",
-                                    help="Modelsim vsim executable. Default %(default)s")
+                                    help="Modelsim vsim executable.")
 
     modelsim_arguments.add_argument("--fix_modelsim_altera_sdf_annotation",
                                     default=True,
@@ -108,14 +115,14 @@ def parse_args():
     modelsim_arguments.add_argument("--cpd_scale",
                                     default=1.3,
                                     type=float,
-                                    help="Factor to expand critical path delay by to set modelsim clock period. Should be >= 1.0. Default: %(default)s")
+                                    help="Factor to expand critical path delay by to set modelsim clock period. Should be >= 1.0.")
     #
     # VCD Extraction arguments
     #
     transition_extraction_arguments = parser.add_argument_group("Transition Extraction", "Options for processing simulation VCD")
     transition_extraction_arguments.add_argument("--vcd_extract_exec",
                                                  default="vcd_extract",
-                                                 help="Tool used to post-process VCD to extract transitions and delays. Default: %(default)s")
+                                                 help="Tool used to post-process VCD to extract transitions and delays.")
 
     #
     # Comparison/verification related arguments
@@ -123,14 +130,14 @@ def parse_args():
     comparison_arguments = parser.add_argument_group("Comparision and Verification", "Options for comparing the ESTA and Simulation results")
     comparison_arguments.add_argument("--comparison_exec",
                                       default="compare_exhaustive.py",
-                                      help="Tool used compare ESTA and simulation results. Default: %(default)s")
+                                      help="Tool used compare ESTA and simulation results.")
     #
     # Plotting related arguments
     #
     plot_arguments = parser.add_argument_group("Plotting", "Options for plotting the ESTA and Simulation results")
     plot_arguments.add_argument("--plot_exec",
-                                default="plot.py",
-                                help="Tool used compare ESTA and simulation results. Default: %(default)s")
+                                default="esta_plot.py",
+                                help="Tool used compare ESTA and simulation results.")
 
     args = parser.parse_args()
 
