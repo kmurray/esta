@@ -91,21 +91,8 @@ def load_exhaustive_csv(filename):
     print "Loading " + filename + "..."
     raw_data = pd.read_csv(filename)
 
-    #Counts of how often all delay values occur
-    raw_counts = raw_data['delay'].value_counts(sort=False)
-    
-    #Normalize by total combinations (i.e. number of rows)
-    #to get probability
-    normed_counts = raw_counts / raw_data.shape[0]
 
-    #Add a zero delay @ probability zero if none is recorded
-    #this ensures matplotlib draws the CDF correctly
-
-    df = pd.DataFrame({"delay": normed_counts.index, "probability": normed_counts.values})
-
-    zero_delay_df = pd.DataFrame({"delay": [0.], "probability": [0.]})
-
-    return df.append(zero_delay_df).sort_values(by="delay")
+    return transitions_to_histogram(raw_data)
 
 def map_to_bins(delay_prob_data, bins, histogram_range):
 
@@ -127,19 +114,38 @@ def map_to_bins(delay_prob_data, bins, histogram_range):
 
     return heights
 
+def transitions_to_histogram(raw_data):
+    #Counts of how often all delay values occur
+    raw_counts = raw_data['delay'].value_counts(sort=False)
+    
+    #Normalize by total combinations (i.e. number of rows)
+    #to get probability
+    normed_counts = raw_counts / raw_data.shape[0]
 
-def plot(data_sets, plot_style="cdf", plot_title=None, plot_file=None, num_bins=50):
-    color_cycle = cycle("rbgcmyk")
-    alpha = 0.6
+    df = pd.DataFrame({"delay": normed_counts.index, "probability": normed_counts.values})
 
-    fig = plt.figure()
+    #Is there a zero probability entry?
+    if not df[df['delay'] == 0.].shape[0]:
+        #If not, add a zero delay @ probability zero if none is recorded
+        #this ensures matplotlib draws the CDF correctly
+        zero_delay_df = pd.DataFrame({"delay": [0.], "probability": [0.]})
+        
+        df = df.append(zero_delay_df)
+
+    return df.sort_values(by="delay")
+
+
+def plot(ax, data_sets, plot_style="cdf", plot_title=None, plot_file=None, num_bins=50, print_data=False, show_legend=True):
+
+    #fig = plt.figure()
 
     
 
     for label, delay_prob_data in data_sets.iteritems():
-        print label
-        print delay_prob_data
-        print
+        if print_data:
+            print label
+            print delay_prob_data
+            print
 
         color = color_cycle.next()
 
@@ -162,8 +168,9 @@ def plot(data_sets, plot_style="cdf", plot_title=None, plot_file=None, num_bins=
                 bins.append(bins[-1] + bin_width)
             bins.append(histogram_range[1]) #End at high end of range, we do this explicitly to avoid FP round-off issues
 
-            print histogram_range
-            print bins
+            if print_data:
+                print histogram_range
+                print bins
 
             assert bins[-1] >= histogram_range[1]
 
@@ -193,7 +200,8 @@ def plot(data_sets, plot_style="cdf", plot_title=None, plot_file=None, num_bins=
     plt.ylabel('Probability')
 
     plt.xlabel('Delay')
-    plt.legend(loc='best', prop={'size': 12})
+    if show_legend:
+        plt.legend(loc='best', prop={'size': 11})
 
     if plot_title:
         plt.title(plot_title, loc="left")
@@ -203,6 +211,34 @@ def plot(data_sets, plot_style="cdf", plot_title=None, plot_file=None, num_bins=
     else:
         #Interactive
         plt.show()
+
+def plot_ax(ax, data_sets, plot_style="cdf"):
+    color_cycle = cycle("rbgcmyk")
+    alpha = 0.6
+
+    for label, delay_prob_data in data_sets.iteritems():
+
+        color = color_cycle.next()
+
+        max_delay = delay_prob_data['delay'].values.max()
+
+
+        if "stem" in plot_style:
+
+            ax.stem(delay_prob_data['delay'], delay_prob_data['probability'], label=label + " (pdf)", linefmt=color+'-', markerfmt=color+"o", basefmt=color+'-', alpha=alpha)
+
+        if "cdf" in plot_style:
+            #Calculate the CDF
+            delay_prob_data['cumulative_probability'] = delay_prob_data['probability'].cumsum()
+
+            ax.step(x=delay_prob_data['delay'], y=delay_prob_data['cumulative_probability'], where='post', label=label + " (cdf)", color=color)
+
+    ax.set_ylim(ymin=0., ymax=1.)
+    ax.grid()
+
+    ax.set_ylabel('Probability')
+
+    ax.set_xlabel('Delay')
 
 def draw_vline(xval, label, color, vline_text_y, vtext_margin):
     #Veritical line marking the maximum delay point
