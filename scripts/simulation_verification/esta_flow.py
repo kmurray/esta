@@ -187,7 +187,7 @@ def esta_flow(args):
 
     #Extract port and top instance information
     print
-    print "Extracting verilog information"
+    print "Extracting design information"
     design_info = extract_design_info(vpr_verilog_file, args.blif)
 
     #Run ESTA
@@ -505,9 +505,9 @@ def extract_design_info(top_verilog, blif_file):
         for line in continued_lines(f):
             line.strip()
             if line.startswith(".inputs"):
-                inputs = set(line.split()[1:])
+                inputs = set(map(escape_name, line.split()[1:]))
             if line.startswith(".outputs"):
-                outputs = set(line.split()[1:])
+                outputs = set(map(escape_name, line.split()[1:]))
             if inputs and outputs:
                 break
     assert inputs
@@ -806,6 +806,10 @@ def run_command(cmd, log_filename=None):
 
     return output
 
+def escape_name(name):
+    for char in ['.']:
+        name = name.replace(char, '_')
+    return name
 
 
 if __name__ == "__main__":
