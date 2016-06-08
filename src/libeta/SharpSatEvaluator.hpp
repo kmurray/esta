@@ -2,8 +2,6 @@
 #include <memory>
 #include "timing_graph_fwd.hpp"
 #include "ExtTimingTag.hpp"
-#include "ep_real.hpp"
-
 
 template<class Analyzer>
 class SharpSatEvaluator {
@@ -14,34 +12,7 @@ class SharpSatEvaluator {
             , nvars_(nvars) {}
         virtual ~SharpSatEvaluator() {}
 
-        struct count_support {
-            typedef real_t count_type;
-            typedef std::vector<unsigned int> support_type;
-
-            count_type count;
-            support_type support;
-            bool pure_bdd;
-
-
-            friend std::ostream& operator<<(std::ostream& os, const count_support& cs) {
-                os << "[Count: " << cs.count;
-                os << " Support: {";
-                for(size_t i = 0; i < cs.support.size(); i++) {
-                    os << cs.support[i];
-                    if(i < cs.support.size() -1) {
-                        os << " ";
-                    }
-                }
-                os << "}]";
-                return os;
-            }
-        };
-
-        virtual count_support count_sat(const ExtTimingTag* tag, NodeId node_id) = 0;
-        virtual double count_sat_fraction(const ExtTimingTag* tag, NodeId node_id) {
-            auto val = count_sat(tag, node_id).count / pow(2., nvars_);    
-            return static_cast<double>(val);
-        }
+        virtual double count_sat_fraction(const ExtTimingTag* tag, NodeId node_id) = 0;
         virtual void reset() {}
 
     protected:

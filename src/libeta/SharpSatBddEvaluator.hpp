@@ -1,5 +1,4 @@
 #pragma once
-#include "ep_real.hpp"
 #include "SharpSatEvaluator.hpp"
 #include "CuddSharpSatFraction.h"
 
@@ -13,8 +12,6 @@ class SharpSatBddEvaluator : public SharpSatEvaluator<Analyzer> {
     private:
         typedef ObjectCacheMap<const ExtTimingTag*,BDD> BddCache;
     public:
-        typedef typename SharpSatBddEvaluator<Analyzer>::count_support count_support;
-
         SharpSatBddEvaluator(const TimingGraph& tg, std::shared_ptr<Analyzer> analyzer, size_t nvars)
             : SharpSatEvaluator<Analyzer>(tg, analyzer, nvars) {
             //We have a unique logic variable for each Primary Input
@@ -42,23 +39,6 @@ class SharpSatBddEvaluator : public SharpSatEvaluator<Analyzer> {
             BDD f = build_bdd_xfunc(tag, node_id, 0);
 
             return bdd_sharpsat_fraction(f);
-        }
-
-        count_support count_sat(const ExtTimingTag* tag, NodeId node_id) override {
-            BDD f = build_bdd_xfunc(tag, node_id, 0);
-
-            real_t f_count = bdd_sharpsat(f);
-
-#ifdef DEBUG_PRINT_MINTERMS
-            //Debug code to print out the associated minterms
-            for(size_t i = 0; i < g_cudd.ReadSize(); ++i) {
-                std::cout << g_cudd.getVariableName(i) << ",";
-            }
-            std::cout << std::endl;
-            f.PrintMinterm();
-#endif
-
-            return {f_count, f.SupportIndices(), true};
         }
 
         void reset() override { 
@@ -204,20 +184,6 @@ class SharpSatBddEvaluator : public SharpSatEvaluator<Analyzer> {
             double dbl_count_custom_frac = CountMintermFraction(f.getNode());
             return dbl_count_custom_frac;
         }
-
-        real_t bdd_sharpsat(BDD f) {
-
-
-            //double dbl_count_cudd = Cudd_CountMinterm(f.manager(), f.getNode(), this->nvars_);
-            //double dbl_count_cudd_frac = dbl_count_cudd / pow(2, this->nvars_);
-            //assert(dbl_count_cudd_frac == dbl_count_custom_frac);
-
-            real_t f_count_dbl = bdd_sharpsat_fraction(f) * pow(2, this->nvars_);
-
-            return f_count_dbl;
-        }
-
-
 
         BDD generate_pi_switch_func(NodeId node_id, TransitionType trans) {
             auto curr_iter = pi_curr_bdd_vars_.find(node_id);

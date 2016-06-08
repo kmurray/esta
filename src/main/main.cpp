@@ -32,9 +32,6 @@
 
 #include "sdfparse.hpp"
 
-#include "load_delay_model.hpp"
-//#include "SharpSatDecompBddEvaluator.hpp"
-
 #include "cell_characterize.hpp"
 
 using std::cout;
@@ -58,7 +55,7 @@ ActionTimer g_action_timer;
 EtaStats g_eta_stats;
 
 optparse::Values parse_args(int argc, char** argv);
-void print_node_tags(const TimingGraph& tg, std::shared_ptr<AnalyzerType> analyzer, std::shared_ptr<SharpSatType> sharp_sat_eval, NodeId node_id, size_t nvars, real_t nassigns, float progress, bool print_sat_cnt);
+void print_node_tags(const TimingGraph& tg, std::shared_ptr<AnalyzerType> analyzer, std::shared_ptr<SharpSatType> sharp_sat_eval, NodeId node_id, size_t nvars, float progress);
 void print_node_histogram(const TimingGraph& tg, std::shared_ptr<AnalyzerType> analyzer, std::shared_ptr<SharpSatType> sharp_sat_eval, std::shared_ptr<TimingGraphNameResolver> name_resolver, NodeId node_id, float progress);
 void dump_exhaustive_csv(std::ostream& os, const TimingGraph& tg, std::shared_ptr<AnalyzerType> analyzer, std::shared_ptr<SharpSatType> sharp_sat_eval, std::shared_ptr<TimingGraphNameResolver> name_resolver, NodeId node_id, size_t nvars);
 std::vector<std::vector<int>> get_cubes(BDD f, size_t nvars);
@@ -296,7 +293,7 @@ int main(int argc, char** argv) {
             nvars += 2; //2 vars per input to encode 4 states
         }
     }
-    real_t nassigns = pow(2,(real_t) nvars);
+    float nassigns = pow(2., nvars);
     cout << "Num Logical Inputs: " << timing_graph.logical_inputs().size() << " Num BDD Vars: " << nvars << " Num Possible Assignments: " << nassigns << endl;
     cout << endl;
 
@@ -307,16 +304,16 @@ int main(int argc, char** argv) {
 
         if(options.get_as<string>("print_tags") == "pi") {
             for(auto node_id : timing_graph.primary_inputs()) {
-                print_node_tags(timing_graph, analyzer, sharp_sat_eval, node_id, nvars, nassigns, 0, true);
+                print_node_tags(timing_graph, analyzer, sharp_sat_eval, node_id, nvars, 0);
             }
         } else if(options.get_as<string>("print_tags") == "po") {
             for(auto node_id : timing_graph.primary_outputs()) {
-                print_node_tags(timing_graph, analyzer, sharp_sat_eval, node_id, nvars, nassigns, 0, true);
+                print_node_tags(timing_graph, analyzer, sharp_sat_eval, node_id, nvars, 0);
             }
         } else if(options.get_as<string>("print_tags") == "all") {
             for(LevelId level_id = 0; level_id < timing_graph.num_levels(); level_id++) {
                 for(auto node_id : timing_graph.level(level_id)) {
-                    print_node_tags(timing_graph, analyzer, sharp_sat_eval, node_id, nvars, nassigns, 0, true);
+                    print_node_tags(timing_graph, analyzer, sharp_sat_eval, node_id, nvars, 0);
                 }
             }
         } else {
@@ -433,7 +430,7 @@ int main(int argc, char** argv) {
 }
 
 
-void print_node_tags(const TimingGraph& tg, std::shared_ptr<AnalyzerType> analyzer, std::shared_ptr<SharpSatType> sharp_sat_eval, NodeId node_id, size_t nvars, real_t nassigns, float progress, bool print_sat_cnt) {
+void print_node_tags(const TimingGraph& tg, std::shared_ptr<AnalyzerType> analyzer, std::shared_ptr<SharpSatType> sharp_sat_eval, NodeId node_id, size_t nvars, float progress) {
 
     cout << "Node: " << node_id << " " << tg.node_type(node_id) << " (" << progress*100 << "%)\n";
     cout << "   Clk Tags:\n";
@@ -447,25 +444,16 @@ void print_node_tags(const TimingGraph& tg, std::shared_ptr<AnalyzerType> analyz
     cout << "   Data Tags:\n";
     auto& data_tags = analyzer->setup_data_tags(node_id);
     if(data_tags.num_tags() > 0) {
-        if(print_sat_cnt) {
-            //Calculate sat counts
-            real_t total_sat_cnt = 0;
+        float total_sat_frac = 0.;
+        for(auto tag : data_tags) {
 
-            for(auto tag : data_tags) {
-                auto sat_cnt_supp = sharp_sat_eval->count_sat(tag, node_id);
+            auto switch_prob = sharp_sat_eval->count_sat_fraction(tag, node_id);
+            cout << "\t" << *tag << ", #SAT frac: " << switch_prob << "\n";
 
-                //Adjust for any variables not included in the support
-                auto sat_cnt = sat_cnt_supp.count;
-
-                auto switch_prob = sat_cnt / real_t(nassigns);
-                cout << "\t" << *tag << ", #SAT: " << sat_cnt << " (" << switch_prob << ")\n";
-
-                total_sat_cnt += sat_cnt;
-            }
-            cout << "\tTotal #SAT: " << total_sat_cnt << "\n";
-            cout << "\n";
-            assert(total_sat_cnt == nassigns);
+            total_sat_frac += switch_prob;
         }
+
+        assert(total_sat_frac == 1.);
     }
 }
 
@@ -545,13 +533,9 @@ void dump_exhaustive_csv(std::ostream& os, const TimingGraph& tg, std::shared_pt
     std::vector<TupleVal> exhaustive_values;
 
     for(auto tag : data_tags) {
-        auto sat_cnt = sharp_sat_eval->count_sat(tag, node_id).count;
-
         auto bdd = sharp_sat_eval->build_bdd_xfunc(tag, node_id);
 
         auto input_transitions = get_transitions(bdd, nvars);
-
-        assert(input_transitions.size() == sat_cnt);
 
         for(auto input_case : input_transitions) {
             assert(input_case.size() == nvars / 2);
