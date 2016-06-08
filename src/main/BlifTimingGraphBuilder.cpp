@@ -5,7 +5,6 @@
 #include <queue>
 #include <algorithm>
 #include "BlifTimingGraphBuilder.hpp"
-#include "load_delay_model.hpp"
 #include "cell_characterize.hpp"
 
 #include <iostream>

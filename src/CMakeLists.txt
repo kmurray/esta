@@ -57,6 +57,5 @@ target_link_libraries(esta
                       cpp-argparse 
                       blifparse
                       sdfparse
-                      libyaml-cpp.a #TODO: find this properly...
                       libeta)
 
