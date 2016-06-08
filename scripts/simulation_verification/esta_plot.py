@@ -81,7 +81,18 @@ def main():
         data_sets[label] = load_histogram_csv(args.histogram_csvs[i])
 
 
-    plot(data_sets, plot_style=args.plot, num_bins=args.plot_bins, plot_file=args.plot_file, plot_title=args.plot_title)
+    fig = plt.figure()
+
+    ax = fig.add_subplot(1, 1, 1)
+
+    plot_ax(ax, data_sets, plot_style=args.plot, plot_title=args.plot_title)
+
+    if args.plot_file:
+        plt.savefig(args.plot_file)
+    else:
+        #Interactive
+        plt.show()
+
 
 def load_histogram_csv(filename):
     print "Loading " + filename + "..."
@@ -206,13 +217,7 @@ def plot(ax, data_sets, plot_style="cdf", plot_title=None, plot_file=None, num_b
     if plot_title:
         plt.title(plot_title, loc="left")
 
-    if plot_file:
-        plt.savefig(plot_file)
-    else:
-        #Interactive
-        plt.show()
-
-def plot_ax(ax, data_sets, plot_style="cdf"):
+def plot_ax(ax, data_sets, plot_style="cdf",  plot_title=None, labelx=True, labely=True, show_legend=True):
     color_cycle = cycle("rbgcmyk")
     alpha = 0.6
 
@@ -236,9 +241,17 @@ def plot_ax(ax, data_sets, plot_style="cdf"):
     ax.set_ylim(ymin=0., ymax=1.)
     ax.grid()
 
-    ax.set_ylabel('Probability')
+    if labely:
+        ax.set_ylabel('Probability')
 
-    ax.set_xlabel('Delay')
+    if labelx:
+        ax.set_xlabel('Delay')
+
+    if show_legend:
+        plt.legend(loc='best', prop={'size': 11})
+
+    if plot_title:
+        ax.set_title(plot_title)
 
 def draw_vline(xval, label, color, vline_text_y, vtext_margin):
     #Veritical line marking the maximum delay point

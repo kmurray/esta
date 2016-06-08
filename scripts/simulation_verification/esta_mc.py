@@ -34,6 +34,13 @@ def parse_args():
                         default=10,
                         type=int,
                         help="Number of samples to draw")
+    parser.add_argument("--base_title",
+                        default="",
+                        help="Base component of figure title")
+
+    parser.add_argument("--plot_file",
+                        default=None,
+                        help="Output file")
 
     args = parser.parse_args()
 
@@ -76,13 +83,16 @@ def main():
     ncols = 1
 
     fig = plt.figure(figsize=(8,8))
+    fig.suptitle("{base_title} (Sample Frac.: {sample_frac}, Num. Samples: {num_samples})".format(base_title=args.base_title, sample_frac=args.sample_frac, num_samples=args.num_samples), fontsize=14)
 
 
     gs = GridSpec(3,1)
 
     cdf_ax = fig.add_subplot(gs[0,0])
 
-    plot_ax(cdf_ax, all_data_sets)
+    plot_ax(cdf_ax, all_data_sets, labelx=False, show_legend=False)
+
+    cdf_ax.set_title("Delay CDF")
 
     cdf_xlim = cdf_ax.get_xlim()
 
@@ -96,7 +106,10 @@ def main():
     max_ax.set_xlim(cdf_xlim)
     mean_ax.set_xlim(cdf_xlim)
 
-    plt.show()
+    if args.plot_file:
+        plt.savefig(args.plot_file)
+    else:
+        plt.show()
 
 def plot_mean(ax, data_sets):
     means = []
@@ -110,7 +123,7 @@ def plot_mean(ax, data_sets):
 
     ax.set_ylabel("Sample Count")
 
-    #ax.set_title(None)
+    ax.set_title("Mean Delay")
 
     #value_counts = df['mean_delay'].value_counts()
     #ax.stem(value_counts.index, value_counts.values)
@@ -134,7 +147,7 @@ def plot_max(ax, sampled_data_sets, true_max):
     max_stats['cumulative_probability'] = max_stats['probability'].cumsum()
 
 
-    ax.stem(max_stats['delay'], max_stats['probability'], label="Sample's Max Delay (pdf)", basefmt="")
+    ax.stem(max_stats['delay'], max_stats['probability'], label="Sample Max Delays (pdf)", basefmt="")
 
     ax.axvline(true_max, color="red", label="True Max Delay")
     #ax.plot(max_stats['delay'], max_stats['cumulative_probability'], color="green", label="Sample's Max Delay (cdf)")
@@ -144,6 +157,11 @@ def plot_max(ax, sampled_data_sets, true_max):
     ax.set_ylim(ymin=0., ymax=1.)
 
     ax.set_ylabel("Sample Probability")
+
+    ax.set_xlabel("Delay")
+    ax.grid()
+
+    ax.set_title("Max Delay")
 
     
 
