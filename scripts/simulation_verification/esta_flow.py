@@ -316,7 +316,10 @@ def run_modelsim(args, sdf_file, cpd_ps, verilog_info, vcd_file):
     with open(sim_do_file, "w") as f:
         for line in create_modelsim_do(args, 
                                        vcd_file, 
-                                       [modelsim_top_verilog, tb_verilog] + args.link_verilog):
+                                       [modelsim_top_verilog, tb_verilog] + args.link_verilog,
+                                       dut_inputs=verilog_info['inputs'], 
+                                       dut_outputs=verilog_info['outputs'],
+                                       dut_clocks=verilog_info['clocks']):
             print >>f, line
 
     #Run the simulation
@@ -606,7 +609,7 @@ def load_endpoint_timing():
 
     return endpoint_timing
 
-def create_modelsim_do(args, vcd_file, verilog_files):
+def create_modelsim_do(args, vcd_file, verilog_files, dut_inputs, dut_outputs, dut_clocks):
     do_lines = []
 
     do_lines.append("transcript on")
@@ -623,13 +626,15 @@ def create_modelsim_do(args, vcd_file, verilog_files):
     do_lines.append("")
     do_lines.append("#Setup VCD logging")
     do_lines.append("vcd file {vcd_file}".format(vcd_file=vcd_file))
-    do_lines.append("vcd add /tb/dut/*")
+    for io in dut_inputs | dut_outputs | dut_clocks:
+        do_lines.append("vcd add /tb/dut/{io}".format(io=io))
     do_lines.append("vcd add /{sim_clk}".format(sim_clk=SIM_CLOCK))
     do_lines.append("")
-    do_lines.append("add wave *")
+    do_lines.append("add wave /tb/*")
     do_lines.append("")
-    do_lines.append("log -r /*")
-    do_lines.append("log -r /*/dut/*")
+    do_lines.append("log /*")
+    for io in dut_inputs | dut_outputs | dut_clocks:
+        do_lines.append("log /tb/dut/{io}".format(io=io))
     do_lines.append("")
     do_lines.append("view structure")
     do_lines.append("view signals")
