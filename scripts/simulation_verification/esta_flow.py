@@ -109,9 +109,10 @@ def parse_args():
                                     default="vsim",
                                     help="Modelsim vsim executable.")
 
-    modelsim_arguments.add_argument("--fix_modelsim_altera",
-                                    default=True,
-                                    help="Include Altera primitives and Fix bug with Modelsim-Altera where it will not allow SDF annotation without an instantiated Altera primitive")
+    modelsim_arguments.add_argument("--modelsim_flavour",
+                                    choices=['modelsim', 'modelsim_altera'],
+                                    default='modelsim_altera',
+                                    help="Adjust modlesim scripts if running vanilla modelsim (no adjustments) or altera modelsim (Include Altera primitives and Fix bug with Modelsim-Altera where it will not allow SDF annotation without an instantiated Altera primitive)")
 
     modelsim_arguments.add_argument("--link_verilog",
                                     nargs="+",
@@ -292,7 +293,7 @@ def run_modelsim(args, sdf_file, cpd_ps, verilog_info, vcd_file):
     top_verilog = verilog_info["file"]
 
     #Fix the input verilog for Modelsim-Altera if required
-    if args.fix_modelsim_altera:
+    if args.modelsim_flavour == "modelsim_altera":
         modelsim_top_verilog = fix_modelsim_altera_sdf_annotation(top_verilog)
     else:
         modelsim_top_verilog = top_verilog
@@ -623,7 +624,7 @@ def create_modelsim_do(args, vcd_file, verilog_files, dut_inputs, dut_outputs, d
         do_lines.append("vlog -sv -work work {" + file + "}")
     do_lines.append("")
 
-    if args.fix_modelsim_altera:
+    if args.modelsim_flavour == "modelsim_altera":
         do_lines.append("vsim -t 1ps -L rtl_work -L work -L altera_mf_ver -L altera_ver -L lpm_ver -L sgate_ver -L stratixiv_hssi_ver -L stratixiv_pcie_hip_ver -L stratixiv_ver -voptargs=\"+acc\" +transport_int_delays +transport_path_delays +sdf_verbose tb")
     else:
         do_lines.append("vsim -t 1ps -L rtl_work -L work -voptargs=\"+acc\" +transport_int_delays +transport_path_delays +sdf_verbose tb")
