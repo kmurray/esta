@@ -283,7 +283,7 @@ def run_esta(args, design_info, sdf_file):
             "-s", sdf_file,
             "-d", args.delay_bin_size]
 
-    if args.sim_mode == "exhaustive":
+    if args.sim_mode == "exhaustive" and len(dump_outputs) > 0:
         cmd += ["--dump_exhaustive_csv", ",".join(dump_outputs)]
 
     run_command(cmd)
