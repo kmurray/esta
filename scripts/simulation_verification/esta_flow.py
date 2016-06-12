@@ -239,7 +239,7 @@ def run_vtr(args, vpr_log_filename):
             args.vpr_exec,
             args.arch,
             args.blif,
-            "-sweep_hanging_nets_and_inputs," "off",
+            "-sweep_hanging_nets_and_inputs", "off",
             "-route_chan_width", "300",
             "-echo_file", "on",
             "-gen_postsynthesis_netlist", "on"
