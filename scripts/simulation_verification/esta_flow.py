@@ -750,14 +750,14 @@ def create_testbench(args, top_module, sdf_file, critical_path_delay_ps, dut_inp
     else:
         assert args.sim_mode == "monte_carlo"
 
-        finish_count = int(math.ceil(args.monte_carlo_iter_fraction*num_exhaustive_states))
+        #finish_count = int(math.ceil(args.monte_carlo_iter_fraction*num_exhaustive_states))
 
         tb_lines.append("")
         tb_lines.append("//")
         tb_lines.append("//Monte Carlo mode simulation")
         tb_lines.append("//     Exhaustive states: {num}".format(num=num_exhaustive_states))
         tb_lines.append("//     Monte Carlo Frac : {frac}".format(frac=args.monte_carlo_iter_fraction))
-        tb_lines.append("//     Finish count     : {cnt}".format(cnt=finish_count))
+        #tb_lines.append("//     Finish count     : {cnt}".format(cnt=finish_count))
         tb_lines.append("//")
         tb_lines.append("")
         tb_lines.append("//State Counter: Exhaustive count {num}".format(num=num_exhaustive_states))
@@ -771,7 +771,7 @@ def create_testbench(args, top_module, sdf_file, critical_path_delay_ps, dut_inp
         tb_lines.append("")
         tb_lines.append("    count <= count + 1;")
         tb_lines.append("")
-        tb_lines.append("    if(count >= {finish_count}) finished <= 1'b1;".format(finish_count=finish_count))
+        #tb_lines.append("    if(count >= {finish_count}) finished <= 1'b1;".format(finish_count=finish_count))
         tb_lines.append("end")
         
         
@@ -819,7 +819,7 @@ def run_command(cmd, log_filename=None):
     return output
 
 def escape_name(name):
-    for char in ['.']:
+    for char in ['.', '[', ']']:
         name = name.replace(char, '_')
     return name
 
