@@ -239,6 +239,8 @@ def run_vtr(args, vpr_log_filename):
             args.vpr_exec,
             args.arch,
             args.blif,
+            "-sweep_hanging_nets_and_inputs," "off",
+            "-route_chan_width", "300",
             "-echo_file", "on",
             "-gen_postsynthesis_netlist", "on"
           ]
@@ -284,7 +286,7 @@ def run_esta(args, design_info, sdf_file):
             "-s", sdf_file,
             "-d", args.delay_bin_size]
 
-    if args.sim_mode == "exhaustive":
+    if args.sim_mode == "exhaustive" and len(dump_outputs) > 0:
         cmd += ["--dump_exhaustive_csv", ",".join(dump_outputs)]
 
     run_command(cmd)
