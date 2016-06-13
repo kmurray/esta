@@ -523,7 +523,7 @@ void print_node_histogram(const TimingGraph& tg, std::shared_ptr<AnalyzerType> a
         total_prob += switch_prob;
     }
 
-
+    sharp_sat_eval->reset();
 }
 
 void dump_exhaustive_csv(std::ostream& os, const TimingGraph& tg, std::shared_ptr<AnalyzerType> analyzer, std::shared_ptr<SharpSatType> sharp_sat_eval, std::shared_ptr<TimingGraphNameResolver> name_resolver, NodeId node_id, size_t nvars) {
