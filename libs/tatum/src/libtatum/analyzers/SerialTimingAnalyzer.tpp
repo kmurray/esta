@@ -2,11 +2,12 @@
 #include <algorithm>
 
 template<class AnalysisType, class DelayCalcType>
-SerialTimingAnalyzer<AnalysisType,DelayCalcType>::SerialTimingAnalyzer(const TimingGraph& tg, const TimingConstraints& tc, const DelayCalcType& dc, double delay_bin_size)
+SerialTimingAnalyzer<AnalysisType,DelayCalcType>::SerialTimingAnalyzer(const TimingGraph& tg, const TimingConstraints& tc, const DelayCalcType& dc, double delay_bin_size, size_t max_output_tags)
     : tg_(tg)
     , tc_(tc)
     , dc_(dc)
-    , delay_bin_size_(delay_bin_size) {
+    , delay_bin_size_(delay_bin_size)
+    , max_output_tags_(max_output_tags) {
     AnalysisType::initialize_traversal(tg_);
 }
 
@@ -63,49 +64,54 @@ void SerialTimingAnalyzer<AnalysisType,DelayCalcType>::forward_traversal() {
     for(LevelId level_id = 1; level_id < tg_.num_levels(); level_id++) {
         auto fwd_level_start = high_resolution_clock::now();
 
-        /*
-         * //Track extra statistics
-         *float xfunc_nnodes_total = 0;
-         *float xfunc_nnodes_min = std::numeric_limits<float>::max();
-         *float xfunc_nnodes_max = std::numeric_limits<float>::lowest();
-         *float xfunc_nvars_total = 0;
-         *float xfunc_nvars_min = std::numeric_limits<float>::max();
-         *float xfunc_nvars_max = std::numeric_limits<float>::lowest();
-         *int ntags = 0;
-         */
-
         std::cout << "\tLevel " << level_id << " ";
         const auto& level = tg_.level(level_id);
+
+        double total_level_tags = 0.;
+        double min_level_tags = std::numeric_limits<double>::max();
+        double max_level_tags = 0.;
+
+        double total_permutations = 0.;
+        double min_permutations = std::numeric_limits<double>::max();
+        double max_permutations = 0.;
+
         for(size_t i = 0; i < level.size(); ++i) {
             std::cout << ".";
             std::cout.flush();
             NodeId node_id = level[i];
-            /*std::cout << "\t\tNode " << node_id << std::endl;*/
-            forward_traverse_node(node_id);
 
-/*
- *            //Collect statistics
- *            for(const auto& tag : this->setup_data_tags_[node_id]) {
- *                auto xfunc = tag.switch_func();
- *
- *                float nnodes = xfunc.nodeCount();
- *                float nvars = xfunc.SupportSize();
- *                xfunc_nnodes_total += nnodes;
- *                xfunc_nnodes_min = std::min(xfunc_nnodes_min, nnodes);
- *                xfunc_nnodes_max = std::max(xfunc_nnodes_max, nnodes);
- *                xfunc_nvars_total += nvars;
- *                xfunc_nvars_min = std::min(xfunc_nvars_min, nvars);
- *                xfunc_nvars_max = std::max(xfunc_nvars_max, nvars);
- *                ntags++;
- *            }
- */
+            forward_traverse_node(node_id);
+            
+            //Stats
+            total_level_tags += this->setup_data_tags_[node_id].num_tags();
+            min_level_tags = std::min(min_level_tags, (double) this->setup_data_tags_[node_id].num_tags());
+            max_level_tags = std::max(max_level_tags, (double) this->setup_data_tags_[node_id].num_tags());
+
+            double node_perms = 1.;
+            for(int iedge = 0; iedge < tg_.num_node_in_edges(node_id); iedge++) {
+                EdgeId edge_id = tg_.node_in_edge(node_id, iedge);
+                NodeId src_node_id = tg_.edge_src_node(edge_id);
+                
+                node_perms *= this->setup_data_tags_[src_node_id].num_tags();
+            }
+            total_permutations += node_perms;
+            min_permutations = std::min(min_permutations, node_perms);
+            max_permutations = std::max(max_permutations, node_perms);
         }
         std::cout << std::endl;
 
-        /*
-         *std::cout << "\t\tmin_nnodes: " << xfunc_nnodes_min << " avg_nnodes: " << xfunc_nnodes_total / ntags << " max_nnodes: " << xfunc_nnodes_max << " nnodes_total: " << xfunc_nnodes_total << "\n";
-         *std::cout << "\t\tmin_nvars : " << xfunc_nvars_min << " avg_nvars : " << xfunc_nvars_total / ntags << " (" << (xfunc_nvars_total / ntags) / (2*tg_.logical_inputs().size()) << ")" << " max_nvars : " << xfunc_nvars_max << "\n";
-         */
+        std::cout << "\tLevel " << level_id << " Tags:";
+        std::cout << " Avg: " << total_level_tags / level.size();
+        std::cout << " Min: " << min_level_tags;
+        std::cout << " Max: " << max_level_tags;
+        std::cout << std::endl;
+
+        std::cout << "\tLevel " << level_id << " Permutations:";
+        std::cout << " Total: " << total_permutations;
+        std::cout << " Avg: " << total_permutations / level.size();
+        std::cout << " Min: " << min_permutations;
+        std::cout << " Max: " << max_permutations;
+        std::cout << std::endl;
 
 
         auto fwd_level_end = high_resolution_clock::now();
@@ -141,7 +147,7 @@ void SerialTimingAnalyzer<AnalysisType,DelayCalcType>::forward_traverse_node(con
         AnalysisType::forward_traverse_edge(tg_, tc_, dc_, node_id, edge_id);
     }
 
-    AnalysisType::forward_traverse_finalize_node(tg_, tc_, dc_, node_id, delay_bin_size_);
+    AnalysisType::forward_traverse_finalize_node(tg_, tc_, dc_, node_id, delay_bin_size_, max_output_tags_);
 }
 
 template<class AnalysisType, class DelayCalcType>

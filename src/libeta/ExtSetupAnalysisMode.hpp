@@ -34,7 +34,7 @@ class ExtSetupAnalysisMode : public BaseAnalysisMode {
          */
 
         template<class DelayCalc>
-        void forward_traverse_finalize_node(const TimingGraph& tg, const TimingConstraints& tc, const DelayCalc& dc, const NodeId node_id, const double delay_bin_size);
+        void forward_traverse_finalize_node(const TimingGraph& tg, const TimingConstraints& tc, const DelayCalc& dc, const NodeId node_id, const double delay_bin_size, size_t max_output_tags);
 
         /*
          *template<class DelayCalc>
@@ -49,6 +49,8 @@ class ExtSetupAnalysisMode : public BaseAnalysisMode {
         Time map_to_delay_bin(Time delay, const double delay_bin_size);
 
         BDD apply_restriction(int var_idx, TransitionType input_trans, BDD f);
+
+        void reduce_tags(NodeId node_id, Tags& sink_tags, const size_t max_num_output_tags, double delay_bin_size, double delay_bin_size_scale_fac);
     protected:
 
         //Setup tag data storage
@@ -62,6 +64,8 @@ class ExtSetupAnalysisMode : public BaseAnalysisMode {
         NextStateTransitionFilter transition_filter_;
 
         ObjectCacheMap<std::pair<NodeId,TransitionType>,BDD> bdd_cache_;
+
+        double delay_bin_size_scale_fac_;
 };
 
 

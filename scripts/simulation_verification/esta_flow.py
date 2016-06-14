@@ -228,6 +228,10 @@ def parse_args():
                         default=100,
                         help="Delay bin size for ESTA. Smaller values increase accuracy at the cost of longer run-time.")
 
+    parser.add_argument("-m", "--max_output_tags",
+                        default=0,
+                        help="Maximum number of tags (per node) for ESTA. Smaller values reduce runtime at the cost of lower accuracy. A value of 0 causes no limit to be enforced.")
+
     parser.add_argument("--sim_mode",
                         choices=["exhaustive", "monte_carlo"],
                         default="exhaustive",
@@ -443,7 +447,8 @@ def run_esta(args, design_info, sdf_file):
             args.esta_exec,
             "-b", args.blif,
             "-s", sdf_file,
-            "-d", args.delay_bin_size]
+            "-d", args.delay_bin_size,
+            "-m", args.max_output_tags]
 
     if args.sim_mode == "exhaustive" and len(dump_outputs) > 0:
         cmd += ["--dump_exhaustive_csv", ",".join(dump_outputs)]
@@ -579,8 +584,9 @@ def run_plot(args, design_info, endpoint_timing):
             esta_histogram_csv = pick_esta_csv(esta_csv_regex)
 
             #Sim is always treated as exhaustive
-            cmd += ["--exhaustive_csvs", sim_csv]
-            cmd += ["--exhaustive_csv_labels", '"Simulation (MC)"']
+            if os.path.exists(sim_csv):
+                cmd += ["--exhaustive_csvs", sim_csv]
+                cmd += ["--exhaustive_csv_labels", '"Simulation (MC)"']
 
             #But now we use the esta histogram directly
             cmd += ["--histogram_csvs", esta_histogram_csv]

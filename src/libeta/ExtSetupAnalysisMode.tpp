@@ -112,7 +112,7 @@ void ExtSetupAnalysisMode<BaseAnalysisMode,Tags>::pre_traverse_node(const Timing
 
 template<class BaseAnalysisMode, class Tags>
 template<class DelayCalcType>
-void ExtSetupAnalysisMode<BaseAnalysisMode,Tags>::forward_traverse_finalize_node(const TimingGraph& tg, const TimingConstraints& tc, const DelayCalcType& dc, const NodeId node_id, double delay_bin_size) {
+void ExtSetupAnalysisMode<BaseAnalysisMode,Tags>::forward_traverse_finalize_node(const TimingGraph& tg, const TimingConstraints& tc, const DelayCalcType& dc, const NodeId node_id, double delay_bin_size, size_t max_output_tags) {
     //Chain to base class
     BaseAnalysisMode::forward_traverse_finalize_node(tg, tc, dc, node_id);
 
@@ -179,13 +179,13 @@ void ExtSetupAnalysisMode<BaseAnalysisMode,Tags>::forward_traverse_finalize_node
         std::cout << "Evaluating Node: " << node_id << " " << tg.node_type(node_id) << " (" << node_func << ")\n";
 
         //Print out the input tags to this node
-        for(size_t i = 0; i < src_data_tag_sets.size(); ++i) {
-            std::cout << "\tInput " << i << ": ";
-                for(const auto tag : src_data_tag_sets[i]) {
-                    std::cout << tag->trans_type() << "@" << tag->arr_time() << " "; 
-                }
-            std::cout << "\n";
-        }
+        /*for(size_t i = 0; i < src_data_tag_sets.size(); ++i) {*/
+            /*std::cout << "\tInput " << i << ": ";*/
+                /*for(const auto tag : src_data_tag_sets[i]) {*/
+                    /*std::cout << tag->trans_type() << "@" << tag->arr_time() << " "; */
+                /*}*/
+            /*std::cout << "\n";*/
+        /*}*/
 #endif
 
         size_t i_case = 0;
@@ -194,6 +194,14 @@ void ExtSetupAnalysisMode<BaseAnalysisMode,Tags>::forward_traverse_finalize_node
         TagPermutationGenerator tag_permutation_generator(src_data_tag_sets);
         if(tag_permutation_generator.num_permutations() > PERMUTATION_WARNING_THRESHOLD) {
             std::cout << "Warning: Node " << node_id << " will evaluate " << tag_permutation_generator.num_permutations() / 1e6 << "M tag permutations" << std::endl;
+            //Print out the input tags to this node
+            for(size_t i = 0; i < src_data_tag_sets.size(); ++i) {
+                std::cout << "\tInput " << i << ": ";
+                    for(const auto tag : src_data_tag_sets[i]) {
+                        std::cout << tag->trans_type() << "@" << tag->arr_time() << " "; 
+                    }
+                std::cout << std::endl;
+            }
         }
         while(!tag_permutation_generator.done()) {
             std::vector<const Tag*> src_tags = tag_permutation_generator.next();
@@ -361,6 +369,11 @@ void ExtSetupAnalysisMode<BaseAnalysisMode,Tags>::forward_traverse_finalize_node
             i_case++;
         }
 
+        const double delay_bin_size_scale_fac = 1.2;
+
+        //Reduce tags further if too many were created
+        reduce_tags(node_id, sink_tags, max_output_tags, delay_bin_size, delay_bin_size_scale_fac);
+
 #ifdef TAG_DEBUG
         //The output tags from this node
         std::cout << "\tOutput Tags:\n";
@@ -449,3 +462,32 @@ Time ExtSetupAnalysisMode<BaseAnalysisMode,Tags>::map_to_delay_bin(Time delay, c
         return Time(binned_delay_val);
     }
 }
+
+template<class BaseAnalysisMode, class Tags>
+void ExtSetupAnalysisMode<BaseAnalysisMode,Tags>::reduce_tags(NodeId node_id ,Tags& sink_tags, const size_t max_num_output_tags, double delay_bin_size, double delay_bin_size_scale_fac) {
+
+    
+    if(sink_tags.num_tags() > max_num_output_tags && max_num_output_tags > 0) {
+        Tags reduced_tags;
+
+        size_t iter_cnt = 0;
+        do {
+            reduced_tags = Tags();
+
+            delay_bin_size *= delay_bin_size_scale_fac;
+
+            for(ExtTimingTag* tag : sink_tags) {
+                reduced_tags.max_arr(tag, delay_bin_size);
+            }
+
+            ++iter_cnt;
+        } while(reduced_tags.num_tags() > max_num_output_tags);
+
+        std::cout << "Reduced tags at node " << node_id << " " << sink_tags.num_tags() << " -> " << reduced_tags.num_tags() << "(in " << iter_cnt << " iterations)" << std::endl;
+        
+        //Relace the original tags with the newly reduced tags
+        sink_tags = reduced_tags;
+    }
+
+}
+
