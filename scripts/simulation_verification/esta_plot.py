@@ -7,6 +7,7 @@ import math
 import pandas as pd
 import numpy as np
 import matplotlib.pyplot as plt
+import seaborn as sns
 
 
 def parse_args():
@@ -79,7 +80,6 @@ def main():
             label = args.histogram_csv_labels[i]
 
         data_sets[label] = load_histogram_csv(args.histogram_csvs[i])
-
 
     fig = plt.figure()
 
@@ -206,7 +206,7 @@ def plot(ax, data_sets, plot_style="cdf", plot_title=None, plot_file=None, num_b
             plt.step(x=delay_prob_data['delay'], y=delay_prob_data['cumulative_probability'], where='post', label=label + " (cdf)", color=color)
 
     plt.ylim(ymin=0., ymax=1.)
-    plt.grid()
+    #plt.grid()
 
     plt.ylabel('Probability')
 
@@ -239,7 +239,7 @@ def plot_ax(ax, data_sets, plot_style="cdf",  plot_title=None, labelx=True, labe
             ax.step(x=delay_prob_data['delay'], y=delay_prob_data['cumulative_probability'], where='post', label=label + " (cdf)", color=color)
 
     ax.set_ylim(ymin=0., ymax=1.)
-    ax.grid()
+    #ax.grid()
 
     if labely:
         ax.set_ylabel('Probability')
