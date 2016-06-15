@@ -347,7 +347,7 @@ void BlifTimingGraphBuilder::create_net_edges(TimingGraph& tg) {
     const BlifModel* top_model = blif_data_->get_top_model();
 
     for(const BlifNet* net : top_model->nets) {
-        cout << "Net: " << *net->name << " (" << net->sinks.size() << " sinks)\n";
+        //cout << "Net: " << *net->name << " (" << net->sinks.size() << " sinks)\n";
         assert(net->drivers.size() == 1);
         const BlifPort* driver_port = net->drivers[0]->port;
         

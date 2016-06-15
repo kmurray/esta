@@ -24,9 +24,6 @@ using std::unordered_map;
 
 template class std::vector<TimeValue>;
 
-//#define cilk_for _Cilk_for
-#define cilk_for for
-
 enum class PortType {
     INPUT,
     OUTPUT
@@ -38,7 +35,8 @@ class Transition {
             RISE=0,
             FALL=1,
             HIGH=2,
-            LOW=3
+            LOW=3,
+            UNKOWN
         };
         Transition(Type type_val, size_t time_val)
             : type_(type_val)
@@ -66,6 +64,7 @@ std::ostream& operator<<(std::ostream& os, Transition::Type type) {
     else if(type == Transition::Type::FALL) os << "F";
     else if(type == Transition::Type::HIGH) os << "H";
     else if(type == Transition::Type::LOW) os << "L";
+    else if(type == Transition::Type::UNKOWN) os << "X";
     else assert(false);
     return os;
 }
@@ -83,6 +82,13 @@ class DelayScenario {
             }
 
         void print_csv_row(std::ostream& os) const {
+            auto pred = [](const Transition::Type& trans) { return trans == Transition::Type::UNKOWN; };
+            auto iter = std::find_if(input_transition_types_.begin(), input_transition_types_.end(), pred);
+
+            if(iter != input_transition_types_.end()) {
+                std::cout << "Warning skipping transition due to X value" << std::endl;
+                return;
+            }
             for(auto trans_type : input_transition_types_) {
                 os << trans_type << ",";
             }
@@ -103,7 +109,7 @@ class DelayScenario {
 
 };
 
-tuple<string,string,vector<string>,vector<string>> parse_args(int argc, char** argv);
+tuple<string,string,vector<string>,vector<string>,bool> parse_args(int argc, char** argv);
 
 
 std::vector<TimeValue> find_time_values(const VcdData& vcd_data, std::string port_name);
@@ -116,16 +122,16 @@ vector<Transition> extract_transitions(const VcdData& vcd_data, PortType port_ty
 
 vector<DelayScenario> extract_delay_scenarios(const vector<vector<Transition>>& all_input_transitions, const vector<Transition>& output_transitions, const vector<size_t>& rise_clock_edges, const vector<size_t>& fall_clock_edges);
 
-void write_csv(std::ostream& os, vector<string> input_names, string output_name, vector<DelayScenario> delay_scenarios); 
+void write_csv(std::ostream& os, bool append, vector<string> input_names, string output_name, vector<DelayScenario> delay_scenarios); 
 
 
 
 
 
-tuple<string,string,vector<string>,vector<string>> parse_args(int argc, char** argv) {
+tuple<string,string,vector<string>,vector<string>,bool> parse_args(int argc, char** argv) {
     if(argc < 8) {
         cout << "Usage: \n";
-        cout << "\t" << argv[0] << " vcd_file -c clock -i input_name [input_name...] -o output_name [output_name ...]\n";
+        cout << "\t" << argv[0] << " vcd_file -c clock -i input_name [input_name...] -o output_name [output_name ...] --append\n";
         exit(1);
     }
 
@@ -134,6 +140,7 @@ tuple<string,string,vector<string>,vector<string>> parse_args(int argc, char** a
 
     vector<string> inputs;
     vector<string> outputs;
+    bool append = false;
 
     int state = 0;
     for(int i = 4; i < argc; ++i) {
@@ -141,12 +148,13 @@ tuple<string,string,vector<string>,vector<string>> parse_args(int argc, char** a
 
         if(value == "-i") state = 1;
         else if(value == "-o") state = 2;
+        else if(value == "--append") state = 3, append = true;
         else if(state == 1) inputs.push_back(value);
         else if(state == 2) outputs.push_back(value);
         else assert(false);
     }
 
-    return make_tuple(vcd_file, clock, inputs, outputs);
+    return make_tuple(vcd_file, clock, inputs, outputs, append);
 }
 
 int main(int argc, char** argv) {
@@ -154,8 +162,9 @@ int main(int argc, char** argv) {
     string clock_name;
     vector<string> input_names;
     vector<string> output_names;
+    bool append;
 
-    tie(vcd_file, clock_name, input_names, output_names) = parse_args(argc, argv);
+    tie(vcd_file, clock_name, input_names, output_names, append) = parse_args(argc, argv);
 
     vcdparse::Loader vcd_loader;
 
@@ -167,6 +176,8 @@ int main(int argc, char** argv) {
     }
 
     const VcdData& vcd_data = vcd_loader.get_vcd_data();
+
+
 
     //Extract clock transitions
     cout << "Extracting clock edges" << endl;
@@ -185,7 +196,7 @@ int main(int argc, char** argv) {
     //Extract output transitions
     cout << "Extracting output transitions" << endl;
     vector<vector<Transition>> output_transitions(output_names.size());
-    cilk_for(size_t i = 0; i < output_names.size(); ++i) {
+    for(size_t i = 0; i < output_names.size(); ++i) {
         output_transitions[i] = extract_transitions(vcd_data, PortType::OUTPUT, output_names[i], rise_clock_edges, fall_clock_edges);
     }
 
@@ -195,34 +206,49 @@ int main(int argc, char** argv) {
     for(auto output : output_names) { //Intialize
         output_delay_scenarios[output] = vector<DelayScenario>();
     }
-    cilk_for(size_t i = 0; i < output_names.size(); ++i) {
+    for(size_t i = 0; i < output_names.size(); ++i) {
         output_delay_scenarios[output_names[i]] = extract_delay_scenarios(input_transitions, output_transitions[i], rise_clock_edges, fall_clock_edges);
     }
 
     //Write the results
-    cout << "Writting result CSVs" << endl;
+    if(append) {
+        cout << "Appending result CSVs" << endl;
+    } else {
+        cout << "Writting result CSVs" << endl;
+    }
     for(auto kv : output_delay_scenarios) {
 
         auto output_name = kv.first;
 
         //Get the basename
-        size_t idx = vcd_file.find_last_of("/");
-        if(idx == string::npos) {
-            idx = 0;
+        size_t base_idx = vcd_file.find_last_of("/");
+        if(base_idx == string::npos) {
+            base_idx = 0;
         } else {
-            idx += 1;
+            base_idx += 1;
         }
 
-        std::string csv_out(vcd_file.begin() + idx, vcd_file.end() - 4);
+        size_t end_idx = vcd_file.find_first_of(".vcd");
+        if(end_idx == string::npos) {
+            end_idx = 0;
+        }
+
+        std::string csv_out(vcd_file.begin() + base_idx, vcd_file.begin() + end_idx);
         csv_out += ".";
         csv_out += output_name;
         csv_out += ".csv";
 
 
-        std::ofstream os(csv_out);
+        std::ios_base::openmode mode = std::ios_base::out;
+        
+        if(append) {
+            mode |= std::ofstream::app;
+        }
+
+        std::ofstream os(csv_out, mode);
 
         std::cout << "  " << csv_out << std::endl;
-        write_csv(os, input_names, output_name, kv.second); 
+        write_csv(os, append, input_names, output_name, kv.second); 
 
     }
     
@@ -320,10 +346,12 @@ tuple<vector<size_t>,vector<size_t>> extract_edges(const std::vector<TimeValue>&
         auto trans = transition(prev_val, next_val);
         if(trans == Transition::Type::RISE) {
             rise_edges.push_back(time_values[i].time());
-        } else {
-            assert(trans == Transition::Type::FALL);
+        } else if (trans == Transition::Type::FALL) {
             fall_edges.push_back(time_values[i].time());
         }
+        //We skip other types of transitions, nominally we would expect only
+        //RISE/FALL transitions (since this function is called only on clocks)
+        //but if we are parsing a split VCD we could get repeated high/high or low/low states
 
         prev_val = next_val;
     }
@@ -344,12 +372,20 @@ Transition::Type transition(LogicValue prev, LogicValue next) {
         return Transition::Type::RISE;
     } else if (prev == LogicValue::UNKOWN && next == LogicValue::ZERO) {
         return Transition::Type::FALL;
+    } else if (prev == LogicValue::UNKOWN && next == LogicValue::UNKOWN) {
+        return Transition::Type::UNKOWN;
     }
     assert(false);
 }
 
 vector<Transition> extract_transitions(const VcdData& vcd_data, PortType port_type, string port, const vector<size_t>& rise_clock_edges, const vector<size_t>& fall_clock_edges) {
     vector<Transition> transitions;
+
+    //Return empty if we have no clocks to reference against
+    //  This may happen if we are parsing a header-only VCD file
+    if(rise_clock_edges.size() == 0 && fall_clock_edges.size() == 0) {
+        return transitions;
+    }
 
     const std::vector<TimeValue>& time_values = find_time_values(vcd_data, port);
     auto sort_order = [](const TimeValue& lhs, const TimeValue& rhs) {
@@ -425,6 +461,12 @@ vector<DelayScenario> extract_delay_scenarios(const vector<vector<Transition>>& 
     
     vector<DelayScenario> output_delay_scenarios;
 
+    //Return empty if we have no clocks to reference against
+    //  This may happen if we are parsing a header-only VCD file
+    if(rise_clock_edges.size() == 0 && fall_clock_edges.size() == 0) {
+        return output_delay_scenarios;
+    }
+
     for(size_t i = 0; i < rise_clock_edges.size()-1; ++i) {
         std::vector<Transition::Type> input_trans_types;
 
@@ -476,14 +518,16 @@ vector<DelayScenario> extract_delay_scenarios(const vector<vector<Transition>>& 
     return output_delay_scenarios;
 }
 
-void write_csv(std::ostream& os, vector<string> input_names, string output_name, vector<DelayScenario> delay_scenarios) {
+void write_csv(std::ostream& os, bool append, vector<string> input_names, string output_name, vector<DelayScenario> delay_scenarios) {
     //The header
-    for(auto input_name : input_names) {
-        os << input_name << ",";
+    if(!append) {
+        for(auto input_name : input_names) {
+            os << input_name << ",";
+        }
+        os << output_name << ",";
+        os << "delay" << ",";
+        os << "sim_time" << "\n";
     }
-    os << output_name << ",";
-    os << "delay" << ",";
-    os << "sim_time" << "\n";
 
     //The body
     for(const auto& scenario : delay_scenarios) {

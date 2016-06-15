@@ -27,7 +27,7 @@ class CommandError(Exception):
         log: The log filename (if applicable)
     """
     def __init__(self, msg, cmd, returncode, log=None):
-        super(CommandError, self).__init__(msg=msg)
+        super(CommandError, self).__init__(msg)
         self.returncode = returncode
         self.cmd = cmd
         self.log = log
@@ -85,7 +85,7 @@ class CommandRunner(object):
             cmd = memory_limit + cmd
 
         #Enable memory tracking?
-        memory_tracking = ["/usr/bin/time", "-v"]
+        memory_tracking = ["/usr/bin/env", "time", "-v"]
         if self._track_memory and self.check_command(memory_tracking[0]):
             cmd = memory_tracking + cmd
 
@@ -292,6 +292,12 @@ def parse_args():
     transition_extraction_arguments.add_argument("--vcd_extract_exec",
                                                  default="vcd_extract",
                                                  help="Tool used to post-process VCD to extract transitions and delays.")
+    transition_extraction_arguments.add_argument("--vcd_split_exec",
+                                                 default="vcd_split",
+                                                 help="Tool used to split VCD files into chunks.")
+    transition_extraction_arguments.add_argument("--vcd_size_limit",
+                                                 default=107374182400,
+                                                 help="Maximum VCD file size (in bytes) before it is split into chunks. Downstream tools currently read the whole VCD file into memory -- chunking limits their memory usage")
 
     #
     # Comparison/verification related arguments
@@ -318,6 +324,9 @@ def parse_args():
         args.run_sim_extract = True
         args.run_compare = True
         args.run_plot = True
+
+    if args.vcd_size_limit != None:
+        args.vcd_size_limit = int(args.vcd_size_limit)
 
     return args
 
@@ -502,23 +511,66 @@ def run_modelsim(args, sdf_file, cpd_ps, verilog_info, vcd_file):
             'vcd_file': vcd_file,
            }
 
-def run_transition_extraction(args, vcd_file, top_verilog_info):
+def run_transition_extraction(args, raw_vcd_file, top_verilog_info):
+    """
+    Extracts transition scenarios from a VCD file.
+
+    If vcd_size_limit is specified, and the vcd file is greater than its value,
+    the VCD file is split into chunks and processed seperately, with each
+    chunk's results being appended to the output CSVs.
+    """
+
+    vcd_size = os.path.getsize(raw_vcd_file)
+
+    vcd_files = []
+    if args.vcd_size_limit != None and vcd_size > args.vcd_size_limit:
+        vcd_files += run_vcd_split(args, raw_vcd_file, args.vcd_size_limit)
+    else:
+        vcd_files.append(raw_vcd_file)
+
     if args.outputs is None:
         outputs = top_verilog_info['outputs']
     else:
         outputs = args.outputs
 
-    cmd = [
-            args.vcd_extract_exec,
-            vcd_file,
-            '-c', SIM_CLOCK,
-          ]
-    cmd += ["-i"] + [x for x in top_verilog_info['inputs']]
-    cmd += ["-o"] + [x for x in outputs]
+    base_args = ['-c', SIM_CLOCK]
+    base_args += ["-i"] + [x for x in top_verilog_info['inputs']]
+    base_args += ["-o"] + [x for x in outputs]
 
-    run_command(cmd, verbose=args.verbose)
+    for i, vcd_file in enumerate(vcd_files):
+        cmd = [args.vcd_extract_exec, vcd_file] + base_args
+
+        if i != 0:
+            #Not first, so append
+            cmd += ["--append"]
+
+        run_command(cmd, verbose=args.verbose)
 
     return {}
+
+def run_vcd_split(args, vcd_file, vcd_size_limit):
+    """
+    Splits a VCD file into chunks based on the vcd_size_limit and its size
+
+    Returns a list of the resulting files
+    """
+    cmd = [
+            args.vcd_split_exec,
+            vcd_file,
+            vcd_size_limit
+            ]
+
+    output = run_command(cmd, verbose=args.verbose)
+
+    #Collect the result filenames
+    split_files = []
+    for line in output:
+        if line.startswith("Writting"):
+            filename = line.split()[1]
+
+            split_files.append(filename)
+
+    return split_files
 
 def run_comparison(args, design_info):
     if args.outputs is None:
