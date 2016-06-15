@@ -458,6 +458,8 @@ void print_node_tags(const TimingGraph& tg, std::shared_ptr<AnalyzerType> analyz
 }
 
 void print_node_histogram(const TimingGraph& tg, std::shared_ptr<AnalyzerType> analyzer, std::shared_ptr<SharpSatType> sharp_sat_eval, std::shared_ptr<TimingGraphNameResolver> name_resolver, NodeId node_id, float progress) {
+    g_action_timer.push_timer("Node " + std::to_string(node_id) + " histogram"); 
+
     std::string node_name;
     if(tg.node_type(node_id) == TN_Type::OUTPAD_SINK) {
         auto edge_id = tg.node_in_edge(node_id, 0);
@@ -466,6 +468,7 @@ void print_node_histogram(const TimingGraph& tg, std::shared_ptr<AnalyzerType> a
     } else {
         node_name = name_resolver->get_node_name(node_id);
     }
+
 
     cout << "Node: " << node_id << " (" << node_name << ") " << tg.node_type(node_id) << " (" << progress*100 << "%)\n";
 
@@ -524,6 +527,8 @@ void print_node_histogram(const TimingGraph& tg, std::shared_ptr<AnalyzerType> a
     }
 
     sharp_sat_eval->reset();
+
+    g_action_timer.pop_timer("Node " + std::to_string(node_id) + " histogram"); 
 }
 
 void dump_exhaustive_csv(std::ostream& os, const TimingGraph& tg, std::shared_ptr<AnalyzerType> analyzer, std::shared_ptr<SharpSatType> sharp_sat_eval, std::shared_ptr<TimingGraphNameResolver> name_resolver, NodeId node_id, size_t nvars) {
