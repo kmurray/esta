@@ -13,9 +13,9 @@ using std::endl;
 std::tuple<std::string,size_t> parse_args(int argc, char** argv);
 
 int main(int argc, char** argv) {
-    size_t n;
+    size_t size_limit;
     std::string vcd_file;
-    tie(vcd_file, n) = parse_args(argc, argv);
+    tie(vcd_file, size_limit) = parse_args(argc, argv);
 
     cout << "Counting lines" << endl;
 
@@ -23,9 +23,10 @@ int main(int argc, char** argv) {
 
     size_t line_num = 0;
     size_t header_end_line = 0;
+    size_t raw_size_bytes = 0;
     std::vector<size_t> time_step_lines;
 
-    //Fist pass count lines and not good break positions
+    //Fist pass count lines and note good break positions
     std::string line;
     bool in_header = true;
     bool seen_dumpvars = false;
@@ -44,13 +45,23 @@ int main(int argc, char** argv) {
         }
 
         line_num++;
+
+        raw_size_bytes += line.size() + 1; //+1 for \n getline removed
     }
 
     size_t num_lines = line_num;
 
+    cout << "size bytes: " << raw_size_bytes << endl;
     cout << "Num Lines: " << num_lines << endl;
     cout << "Header end line: " << header_end_line << endl;
     cout << "Num timesteps: " << time_step_lines.size() << endl;
+
+    double bytes_per_line = (double) raw_size_bytes / num_lines;
+    double lines_per_file = size_limit / bytes_per_line;
+
+    size_t n = std::ceil(num_lines / lines_per_file) + 1; //+1 for header in filename.0
+
+    cout << "Num Files: " << n << endl;
 
     size_t time_steps_per_file = ceil((float) time_step_lines.size() / (n-1)); //-1 since we put the header in a separate file
     cout << "time steps per file: " << time_steps_per_file << endl;
@@ -100,6 +111,13 @@ int main(int argc, char** argv) {
             outfile.close();
             outfile.open(split_filename);
             cout << "Writting " << split_filename << endl;
+
+            //re-write the header in each new file
+            std::ifstream header_is(base_name + "." + std::to_string(0));
+            std::string header_line;
+            while(std::getline(header_is, header_line)) {
+                outfile << header_line << "\n";
+            }
         }
 
         outfile << line << "\n";
@@ -112,15 +130,15 @@ int main(int argc, char** argv) {
 std::tuple<std::string,size_t> parse_args(int argc, char** argv) {
     if(argc != 3) {
         cout << "Usage: \n";
-        cout << "\t" << argv[0] << " vcd_file num_output_files\n";
+        cout << "\t" << argv[0] << " vcd_file split_file_size_limit\n";
         exit(1);
     }
 
     std::string vcd_file = argv[1];
     std::stringstream ss;
     ss << argv[2];
-    size_t n;
-    ss >> n;
+    size_t size_limit;
+    ss >> size_limit;
 
-    return make_tuple(vcd_file, n);
+    return make_tuple(vcd_file, size_limit);
 }
