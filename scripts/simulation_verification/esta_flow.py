@@ -85,7 +85,7 @@ class CommandRunner(object):
             cmd = memory_limit + cmd
 
         #Enable memory tracking?
-        memory_tracking = ["/usr/bin/time", "-v"]
+        memory_tracking = ["/usr/bin/env", "time", "-v"]
         if self._track_memory and self.check_command(memory_tracking[0]):
             cmd = memory_tracking + cmd
 
