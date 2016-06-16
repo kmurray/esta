@@ -2,7 +2,6 @@
 #include <sstream>
 #include "transition_eval.hpp"
 #include "util.hpp"
-#include "TagPermutationGenerator.hpp"
 #include "transition_eval.hpp"
 
 //Print out detailed information about tags during analysis
@@ -189,11 +188,13 @@ void ExtSetupAnalysisMode<BaseAnalysisMode,Tags>::forward_traverse_finalize_node
 #endif
 
         size_t i_case = 0;
+        const double delay_bin_size_scale_fac = 1.2;
 
         //Generate all tag transition permutations
-        TagPermutationGenerator tag_permutation_generator(src_data_tag_sets);
-        if(tag_permutation_generator.num_permutations() > PERMUTATION_WARNING_THRESHOLD) {
-            std::cout << "Warning: Node " << node_id << " will evaluate " << tag_permutation_generator.num_permutations() / 1e6 << "M tag permutations" << std::endl;
+        TagPermutationGenerator tag_permutation_generator = reduce_permutations(node_id, src_data_tag_sets, max_output_tags, delay_bin_size, delay_bin_size_scale_fac);
+
+        if (tag_permutation_generator.num_permutations() > PERMUTATION_WARNING_THRESHOLD) {
+            std::cout << "Warning Orig: Node " << node_id << " would evaluate " << tag_permutation_generator.num_permutations() / 1e6 << "M tag permutations" << std::endl;
             //Print out the input tags to this node
             for(size_t i = 0; i < src_data_tag_sets.size(); ++i) {
                 std::cout << "\tInput " << i << ": ";
@@ -203,6 +204,8 @@ void ExtSetupAnalysisMode<BaseAnalysisMode,Tags>::forward_traverse_finalize_node
                 std::cout << std::endl;
             }
         }
+
+
         while(!tag_permutation_generator.done()) {
             std::vector<const Tag*> src_tags = tag_permutation_generator.next();
 
@@ -369,11 +372,6 @@ void ExtSetupAnalysisMode<BaseAnalysisMode,Tags>::forward_traverse_finalize_node
             i_case++;
         }
 
-        const double delay_bin_size_scale_fac = 1.2;
-
-        //Reduce tags further if too many were created
-        reduce_tags(node_id, sink_tags, max_output_tags, delay_bin_size, delay_bin_size_scale_fac);
-
 #ifdef TAG_DEBUG
         //The output tags from this node
         std::cout << "\tOutput Tags:\n";
@@ -464,7 +462,7 @@ Time ExtSetupAnalysisMode<BaseAnalysisMode,Tags>::map_to_delay_bin(Time delay, c
 }
 
 template<class BaseAnalysisMode, class Tags>
-void ExtSetupAnalysisMode<BaseAnalysisMode,Tags>::reduce_tags(NodeId node_id ,Tags& sink_tags, const size_t max_num_output_tags, double delay_bin_size, double delay_bin_size_scale_fac) {
+void ExtSetupAnalysisMode<BaseAnalysisMode,Tags>::reduce_tags(NodeId node_id, Tags& sink_tags, const size_t max_num_output_tags, double delay_bin_size, double delay_bin_size_scale_fac) {
 
     
     if(sink_tags.num_tags() > max_num_output_tags && max_num_output_tags > 0) {
@@ -491,3 +489,76 @@ void ExtSetupAnalysisMode<BaseAnalysisMode,Tags>::reduce_tags(NodeId node_id ,Ta
 
 }
 
+template<class BaseAnalysisMode, class Tags>
+TagPermutationGenerator ExtSetupAnalysisMode<BaseAnalysisMode,Tags>::reduce_permutations(NodeId node_id, std::vector<Tags> src_data_tag_sets, size_t max_permutations, double delay_bin_size, double delay_bin_size_scale_fac) {
+    //This function returns a TagPermutationGenerator used to drive the main analysis loop for a 
+    //single node
+    //
+    //Since the number of permutation is exponential in the number of tags. That is:
+    //      O(L^K)
+    //where L is the maximum number of tags on any input and K is the number of inputs.
+    //In practice this is a pessimistic bound (typically not all inputs have L tags), how ever the number
+    //of permutations can still grow large.
+    //
+    //To handle this we 'reduce' the input tags to keep the number of permutations below a specified
+    //threshold (max_permutations)
+    //
+    //We 'reduce' the tags on a particular input by re-merging them at increasing delay bin sizes.
+    // 
+    //We always reduce the input with the most tags. This ensures we loose resolution somewhat uniformally,
+    //avoiding the loss of all resolution on a particular input.
+
+
+    //Create the tag permutation generator from the given set of tags
+    TagPermutationGenerator tag_permutation_generator(src_data_tag_sets);
+
+    //Initialize scaling factors
+    std::vector<double> input_scale_factors(src_data_tag_sets.size(), delay_bin_size_scale_fac);
+
+    size_t num_permutations = tag_permutation_generator.num_permutations();
+
+    if(num_permutations > max_permutations && max_permutations != 0) {
+        std::cout << "Node " << node_id << "(bin_size=" << delay_bin_size << "): Orig Perms " << num_permutations << std::endl;
+    }
+
+    //Iteratively reduce the number of tags (by increasing the delay bin size on the input which causes tags to merge)
+    while(num_permutations > max_permutations && max_permutations != 0) {
+
+        //Find the element with the most tags
+        auto cmp = [](const Tags& lhs, const Tags& rhs) {
+            return lhs.num_tags() < rhs.num_tags();
+        };
+        auto iter = std::max_element(src_data_tag_sets.begin(), src_data_tag_sets.end(), cmp);
+
+        //Get it's index
+        size_t i = iter - src_data_tag_sets.begin();
+
+        //Increase the bin size
+        double new_bin_size = delay_bin_size * input_scale_factors[i];
+
+        //Reduce the tags of this input
+        Tags reduced_tags;
+        for(ExtTimingTag* tag : src_data_tag_sets[i]) {
+            reduced_tags.max_arr(tag, new_bin_size);
+        }
+
+        //Update the set of input tags
+        src_data_tag_sets[i] = reduced_tags;
+
+        //Increase the scale factor (for the next time we reduce this input)
+        input_scale_factors[i] *= delay_bin_size_scale_fac;
+
+        //Create the new generator
+        tag_permutation_generator = TagPermutationGenerator(src_data_tag_sets);
+
+        std::cout << "Node " << node_id;
+        std::cout << " reduced tags on input " << i;
+        std::cout << " (new_bin_size=" << new_bin_size;
+        std::cout << ", tags=" << reduced_tags.num_tags() << "):";
+        std::cout << " Perms " << tag_permutation_generator.num_permutations() << std::endl;
+
+        num_permutations = tag_permutation_generator.num_permutations();
+    } 
+
+    return tag_permutation_generator;
+}
