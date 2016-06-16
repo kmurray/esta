@@ -111,7 +111,7 @@ void ExtSetupAnalysisMode<BaseAnalysisMode,Tags>::pre_traverse_node(const Timing
 
 template<class BaseAnalysisMode, class Tags>
 template<class DelayCalcType>
-void ExtSetupAnalysisMode<BaseAnalysisMode,Tags>::forward_traverse_finalize_node(const TimingGraph& tg, const TimingConstraints& tc, const DelayCalcType& dc, const NodeId node_id, double delay_bin_size, size_t max_output_tags) {
+void ExtSetupAnalysisMode<BaseAnalysisMode,Tags>::forward_traverse_finalize_node(const TimingGraph& tg, const TimingConstraints& tc, const DelayCalcType& dc, const NodeId node_id, double delay_bin_size, size_t max_permutations) {
     //Chain to base class
     BaseAnalysisMode::forward_traverse_finalize_node(tg, tc, dc, node_id);
 
@@ -191,7 +191,7 @@ void ExtSetupAnalysisMode<BaseAnalysisMode,Tags>::forward_traverse_finalize_node
         const double delay_bin_size_scale_fac = 1.2;
 
         //Generate all tag transition permutations
-        TagPermutationGenerator tag_permutation_generator = reduce_permutations(node_id, src_data_tag_sets, max_output_tags, delay_bin_size, delay_bin_size_scale_fac);
+        TagPermutationGenerator tag_permutation_generator = reduce_permutations(node_id, src_data_tag_sets, max_permutations, delay_bin_size, delay_bin_size_scale_fac);
 
         if (tag_permutation_generator.num_permutations() > PERMUTATION_WARNING_THRESHOLD) {
             std::cout << "Warning Orig: Node " << node_id << " would evaluate " << tag_permutation_generator.num_permutations() / 1e6 << "M tag permutations" << std::endl;
@@ -431,62 +431,6 @@ void ExtSetupAnalysisMode<BaseAnalysisMode,Tags>::gen_tag_permutations_recurr(co
             tag_permutations.push_back(new_perm);
         }
     }
-}
-
-template<class BaseAnalysisMode, class Tags>
-Time ExtSetupAnalysisMode<BaseAnalysisMode,Tags>::map_to_delay_bin(Time delay, const double delay_bin_size) {
-    if(delay_bin_size == 0.) {
-        //No binning
-        return delay;
-    } else {
-        //Bin the input delay by shifting it up to the edge of its current bin
-        double delay_val = delay.value();
-
-        double remainder = std::fmod(delay_val, delay_bin_size);
-
-        //We take care to only increase the delay if the remainder is non-zero
-        //
-        //This avoids increasing the delay of values which are already at the edge of
-        //a bin (and introducing unneccessarily pessimism)
-        double binned_delay_val = delay_val;
-        if(remainder != 0.) {
-            binned_delay_val = delay_val + (delay_bin_size - remainder);
-        }
-
-        /*std::cout << "Delay: " << delay_val << " Binned delay: " << binned_delay_val << std::endl;*/
-
-        assert(std::fmod(binned_delay_val, delay_bin_size) < 1e-15);
-
-        return Time(binned_delay_val);
-    }
-}
-
-template<class BaseAnalysisMode, class Tags>
-void ExtSetupAnalysisMode<BaseAnalysisMode,Tags>::reduce_tags(NodeId node_id, Tags& sink_tags, const size_t max_num_output_tags, double delay_bin_size, double delay_bin_size_scale_fac) {
-
-    
-    if(sink_tags.num_tags() > max_num_output_tags && max_num_output_tags > 0) {
-        Tags reduced_tags;
-
-        size_t iter_cnt = 0;
-        do {
-            reduced_tags = Tags();
-
-            delay_bin_size *= delay_bin_size_scale_fac;
-
-            for(ExtTimingTag* tag : sink_tags) {
-                reduced_tags.max_arr(tag, delay_bin_size);
-            }
-
-            ++iter_cnt;
-        } while(reduced_tags.num_tags() > max_num_output_tags);
-
-        std::cout << "Reduced tags at node " << node_id << " " << sink_tags.num_tags() << " -> " << reduced_tags.num_tags() << "(in " << iter_cnt << " iterations)" << std::endl;
-        
-        //Relace the original tags with the newly reduced tags
-        sink_tags = reduced_tags;
-    }
-
 }
 
 template<class BaseAnalysisMode, class Tags>

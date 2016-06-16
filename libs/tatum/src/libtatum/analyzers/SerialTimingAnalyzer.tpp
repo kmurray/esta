@@ -2,12 +2,12 @@
 #include <algorithm>
 
 template<class AnalysisType, class DelayCalcType>
-SerialTimingAnalyzer<AnalysisType,DelayCalcType>::SerialTimingAnalyzer(const TimingGraph& tg, const TimingConstraints& tc, const DelayCalcType& dc, double delay_bin_size, size_t max_output_tags)
+SerialTimingAnalyzer<AnalysisType,DelayCalcType>::SerialTimingAnalyzer(const TimingGraph& tg, const TimingConstraints& tc, const DelayCalcType& dc, double delay_bin_size, size_t max_permutations)
     : tg_(tg)
     , tc_(tc)
     , dc_(dc)
     , delay_bin_size_(delay_bin_size)
-    , max_output_tags_(max_output_tags) {
+    , max_permutations_(max_permutations) {
     AnalysisType::initialize_traversal(tg_);
 }
 
@@ -147,7 +147,7 @@ void SerialTimingAnalyzer<AnalysisType,DelayCalcType>::forward_traverse_node(con
         AnalysisType::forward_traverse_edge(tg_, tc_, dc_, node_id, edge_id);
     }
 
-    AnalysisType::forward_traverse_finalize_node(tg_, tc_, dc_, node_id, delay_bin_size_, max_output_tags_);
+    AnalysisType::forward_traverse_finalize_node(tg_, tc_, dc_, node_id, delay_bin_size_, max_permutations_);
 }
 
 template<class AnalysisType, class DelayCalcType>

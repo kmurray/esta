@@ -508,12 +508,12 @@ vector<DelayScenario> extract_delay_scenarios(const vector<vector<Transition>>& 
     }
 
     //Radix-style stable sort -- very slow
-    for(int i = (int) all_input_transitions.size() - 1; i >= 0; --i) {
-        auto sort_order = [&](const DelayScenario& lhs, const DelayScenario& rhs) {
-            return lhs.input_transition_type(i) < rhs.input_transition_type(i);
-        };
-        std::stable_sort(output_delay_scenarios.begin(), output_delay_scenarios.end(), sort_order);
-    }
+    //for(int i = (int) all_input_transitions.size() - 1; i >= 0; --i) {
+        //auto sort_order = [&](const DelayScenario& lhs, const DelayScenario& rhs) {
+            //return lhs.input_transition_type(i) < rhs.input_transition_type(i);
+        //};
+        //std::stable_sort(output_delay_scenarios.begin(), output_delay_scenarios.end(), sort_order);
+    //}
 
     return output_delay_scenarios;
 }

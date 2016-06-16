@@ -228,9 +228,9 @@ def parse_args():
                         default=100,
                         help="Delay bin size for ESTA. Smaller values increase accuracy at the cost of longer run-time.")
 
-    parser.add_argument("-m", "--max_output_tags",
-                        default=0,
-                        help="Maximum number of tags (per node) for ESTA. Smaller values reduce runtime at the cost of lower accuracy. A value of 0 causes no limit to be enforced.")
+    parser.add_argument("-m", "--max_permutations",
+                        default=1e7,
+                        help="Maximum number of permutations (per node) for ESTA. Smaller values reduce runtime at the cost of lower accuracy. A value of 0 causes no limit to be enforced.")
 
     parser.add_argument("--sim_mode",
                         choices=["exhaustive", "monte_carlo"],
@@ -345,17 +345,14 @@ def esta_flow(args):
     vpr_log = "vpr.log"
     vcd_file = "sim.vcd"
 
+    vpr_cpd_ps = None
+    endpoint_timing = None
+
     if args.run_vtr:
         #Run VTR to generate an SDF file
         print
         print "Running VTR"
         vtr_results = run_vtr(args, vpr_log)
-
-    print
-    print "Extracting STA endpoint timing"
-    vpr_cpd_ps = parse_vpr_cpd(vpr_log)
-    endpoint_timing = load_endpoint_timing()
-    assert np.isclose(vpr_cpd_ps, max(endpoint_timing.values()))
 
     #Extract port and top instance information
     print
@@ -371,6 +368,10 @@ def esta_flow(args):
 
     #Run Modelsim to collect simulation statistics
     if args.run_sim:
+        print
+        print "Extracting STA endpoint timing"
+        vpr_cpd_ps = parse_vpr_cpd(vpr_log)
+
 
         print
         print "Running Modelsim"
@@ -392,6 +393,13 @@ def esta_flow(args):
         run_comparison(args, design_info)
 
     if args.run_plot:
+        print 
+        print "Loading STA Endpoint Timing"
+        endpoint_timing = load_endpoint_timing()
+
+        if vpr_cpd_ps != None:
+            assert np.isclose(vpr_cpd_ps, max(endpoint_timing.values()))
+
         print 
         print "Plotting ESTA and Simulation Results"
         run_plot(args, design_info, endpoint_timing)
@@ -457,7 +465,7 @@ def run_esta(args, design_info, sdf_file):
             "-b", args.blif,
             "-s", sdf_file,
             "-d", args.delay_bin_size,
-            "-m", args.max_output_tags]
+            "-m", args.max_permutations]
 
     if args.sim_mode == "exhaustive" and len(dump_outputs) > 0:
         cmd += ["--dump_exhaustive_csv", ",".join(dump_outputs)]
