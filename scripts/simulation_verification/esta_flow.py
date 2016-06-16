@@ -341,17 +341,14 @@ def esta_flow(args):
     vpr_log = "vpr.log"
     vcd_file = "sim.vcd"
 
+    vpr_cpd_ps = None
+    endpoint_timing = None
+
     if args.run_vtr:
         #Run VTR to generate an SDF file
         print
         print "Running VTR"
         vtr_results = run_vtr(args, vpr_log)
-
-    print
-    print "Extracting STA endpoint timing"
-    vpr_cpd_ps = parse_vpr_cpd(vpr_log)
-    endpoint_timing = load_endpoint_timing()
-    assert np.isclose(vpr_cpd_ps, max(endpoint_timing.values()))
 
     #Extract port and top instance information
     print
@@ -367,6 +364,10 @@ def esta_flow(args):
 
     #Run Modelsim to collect simulation statistics
     if args.run_sim:
+        print
+        print "Extracting STA endpoint timing"
+        vpr_cpd_ps = parse_vpr_cpd(vpr_log)
+
 
         print
         print "Running Modelsim"
@@ -388,6 +389,13 @@ def esta_flow(args):
         run_comparison(args, design_info)
 
     if args.run_plot:
+        print 
+        print "Loading STA Endpoint Timing"
+        endpoint_timing = load_endpoint_timing()
+
+        if vpr_cpd_ps != None:
+            assert np.isclose(vpr_cpd_ps, max(endpoint_timing.values()))
+
         print 
         print "Plotting ESTA and Simulation Results"
         run_plot(args, design_info, endpoint_timing)
