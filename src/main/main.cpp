@@ -92,6 +92,12 @@ optparse::Values parse_args(int argc, char** argv) {
           .help("The delay bin size to apply during analysis.")
           ;
 
+    parser.add_option("-m", "--max_permutations")
+          .dest("max_permutations")
+          .metavar("MAX_PERMUTATIONS")
+          .help("The maximum number of permutations to be evaluated at a node in the timing graph during analysis. Zero implies no limit.")
+          ;
+
     parser.add_option("--print_graph")
           .action("store_true")
           .set_default("false")
@@ -274,7 +280,7 @@ int main(int argc, char** argv) {
     }
 
     //The actual analyzer
-    auto analyzer = std::make_shared<AnalyzerType>(timing_graph, timing_constraints, delay_calc, options.get_as<double>("delay_bin_size"));
+    auto analyzer = std::make_shared<AnalyzerType>(timing_graph, timing_constraints, delay_calc, options.get_as<double>("delay_bin_size"), options.get_as<double>("max_permutations"));
 
     g_action_timer.push_timer("Analysis");
 

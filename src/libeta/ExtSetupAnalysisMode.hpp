@@ -8,6 +8,7 @@
 #include <iostream>
 #include <unordered_set>
 #include "transition_filters.hpp"
+#include "TagPermutationGenerator.hpp"
 
 template<class BaseAnalysisMode = BaseAnalysisMode, class Tags=TimingTags>
 class ExtSetupAnalysisMode : public BaseAnalysisMode {
@@ -34,7 +35,7 @@ class ExtSetupAnalysisMode : public BaseAnalysisMode {
          */
 
         template<class DelayCalc>
-        void forward_traverse_finalize_node(const TimingGraph& tg, const TimingConstraints& tc, const DelayCalc& dc, const NodeId node_id, const double delay_bin_size);
+        void forward_traverse_finalize_node(const TimingGraph& tg, const TimingConstraints& tc, const DelayCalc& dc, const NodeId node_id, const double delay_bin_size, size_t max_output_tags);
 
         /*
          *template<class DelayCalc>
@@ -49,6 +50,8 @@ class ExtSetupAnalysisMode : public BaseAnalysisMode {
         Time map_to_delay_bin(Time delay, const double delay_bin_size);
 
         BDD apply_restriction(int var_idx, TransitionType input_trans, BDD f);
+
+        TagPermutationGenerator reduce_permutations(NodeId node_id, std::vector<Tags> src_data_tag_sets, size_t max_permutations, double delay_bin_size, double delay_bin_size_scale_fac);
     protected:
 
         //Setup tag data storage
@@ -62,6 +65,8 @@ class ExtSetupAnalysisMode : public BaseAnalysisMode {
         NextStateTransitionFilter transition_filter_;
 
         ObjectCacheMap<std::pair<NodeId,TransitionType>,BDD> bdd_cache_;
+
+        double delay_bin_size_scale_fac_;
 };
 
 

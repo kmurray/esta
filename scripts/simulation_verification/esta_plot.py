@@ -81,6 +81,10 @@ def main():
 
         data_sets[label] = load_histogram_csv(args.histogram_csvs[i])
 
+    sns.set_palette(sns.color_palette("husl", len(data_sets)))
+
+    #sns.palplot(sns.color_palette())
+
     fig = plt.figure()
 
     ax = fig.add_subplot(1, 1, 1)
@@ -193,17 +197,20 @@ def plot(ax, data_sets, plot_style="cdf", plot_title=None, plot_file=None, num_b
             vline_text_y = draw_vline(max_delay, label, color, vline_text_y, vtext_margin)
             heights = map_to_bins(delay_prob_data, bins, histogram_range)
 
-            plt.bar(bins, heights, width=bin_width, label=label, color=color, alpha=alpha)
+            #plt.bar(bins, heights, width=bin_width, label=label, color=color, alpha=alpha)
+            plt.bar(bins, heights, width=bin_width, label=label, alpha=alpha)
 
         if "stem" in plot_style:
 
-            plt.stem(delay_prob_data['delay'], delay_prob_data['probability'], label=label + " (pdf)", linefmt=color+'-', markerfmt=color+"o", basefmt=color+'-', alpha=alpha)
+            #plt.stem(delay_prob_data['delay'], delay_prob_data['probability'], label=label + " (pdf)", linefmt=color+'-', markerfmt=color+"o", basefmt=color+'-', alpha=alpha)
+            plt.stem(delay_prob_data['delay'], delay_prob_data['probability'], label=label + " (pdf)")
 
         if "cdf" in plot_style:
             #Calculate the CDF
             delay_prob_data['cumulative_probability'] = delay_prob_data['probability'].cumsum()
 
-            plt.step(x=delay_prob_data['delay'], y=delay_prob_data['cumulative_probability'], where='post', label=label + " (cdf)", color=color)
+            #plt.step(x=delay_prob_data['delay'], y=delay_prob_data['cumulative_probability'], where='post', label=label + " (cdf)", color=color)
+            plt.step(x=delay_prob_data['delay'], y=delay_prob_data['cumulative_probability'], where='post', label=label + " (cdf)")
 
     plt.ylim(ymin=0., ymax=1.)
     #plt.grid()
@@ -230,13 +237,15 @@ def plot_ax(ax, data_sets, plot_style="cdf",  plot_title=None, labelx=True, labe
 
         if "stem" in plot_style:
 
-            ax.stem(delay_prob_data['delay'], delay_prob_data['probability'], label=label + " (pdf)", linefmt=color+'-', markerfmt=color+"o", basefmt=color+'-', alpha=alpha)
+            #ax.stem(delay_prob_data['delay'], delay_prob_data['probability'], label=label + " (pdf)", linefmt=color+'-', markerfmt=color+"o", basefmt=color+'-', alpha=alpha)
+            ax.stem(delay_prob_data['delay'], delay_prob_data['probability'], label=label + " (pdf)")
 
         if "cdf" in plot_style:
             #Calculate the CDF
             delay_prob_data['cumulative_probability'] = delay_prob_data['probability'].cumsum()
 
-            ax.step(x=delay_prob_data['delay'], y=delay_prob_data['cumulative_probability'], where='post', label=label + " (cdf)", color=color)
+            #ax.step(x=delay_prob_data['delay'], y=delay_prob_data['cumulative_probability'], where='post', label=label + " (cdf)", color=color)
+            ax.step(x=delay_prob_data['delay'], y=delay_prob_data['cumulative_probability'], where='post', label=label + " (cdf)")
 
     ax.set_ylim(ymin=0., ymax=1.)
     #ax.grid()

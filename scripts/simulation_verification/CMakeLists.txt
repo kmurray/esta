@@ -45,6 +45,7 @@ list(REMOVE_DUPLICATES EXEC_VCD_EXTRACT_PIPE_INCLUDE_DIRS)
 
 #Define library
 add_executable(vcd_extract_pipe ${EXEC_VCD_EXTRACT_PIPE_SOURCES} ${EXEC_VCD_EXTRACT_PIPE_HEADERS})
+
 #
 # Executable Source files
 #
