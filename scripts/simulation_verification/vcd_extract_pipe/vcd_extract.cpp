@@ -7,14 +7,19 @@ using std::endl;
 
 #include "vcd_extract.hpp"
 
-VcdExtractor::VcdExtractor(std::string clock_name, std::vector<std::string> inputs, std::vector<std::string> outputs)
+VcdExtractor::VcdExtractor(std::string clock_name, std::vector<std::string> inputs, std::vector<std::string> outputs, std::string output_dir)
     : clock_name_(clock_name)
     , inputs_(inputs)
     , outputs_(outputs)
+    , output_dir_(output_dir)
     , transition_count_(0) 
     , state_(State::INITIAL)
 {
     //cout << "State: INITIAL" << endl;
+
+    for(const auto& output_name : outputs_) {
+        output_files_[output_name] = std::make_shared<std::ofstream>(get_filename(output_name));  
+    }
 
     for(const auto& output_name : outputs_) {
         write_header(output_name);
@@ -118,35 +123,27 @@ void VcdExtractor::finalize_measure() {
 }
 
 std::string VcdExtractor::get_filename(const std::string& output_name) {
-    return "sim." + output_name + ".csv";
+    return output_dir_ + "/sim." + output_name + ".csv";
 }
 
 void VcdExtractor::write_header(const std::string& output_name) {
-    std::string filename = get_filename(output_name);
-
-    std::ofstream os(filename);
+    auto& os_ptr = output_files_[output_name];
 
     for(const auto& input_name : inputs_) {
-        os << input_name << ",";
+        *os_ptr << input_name << ",";
     }
-    os << output_name << ",";
-    os << "delay" << ",";
-    os << "sim_time";
-    os << endl;
+    *os_ptr << output_name << ",";
+    *os_ptr << "delay" << ",";
+    *os_ptr << "sim_time";
+    *os_ptr << endl;
 }
 
 
 
 void VcdExtractor::write_transition(const std::string& output_name) {
-    //Deterime the delay and 
-
-    std::string filename = get_filename(output_name);
-
-    //Open in append
-    std::ofstream os(filename, std::ofstream::app);
-
 
     //Write the row to the CSV
+    auto& os_ptr = output_files_[output_name];
 
     //Inputs
     for(const auto& input_name : inputs_) {
@@ -156,7 +153,7 @@ void VcdExtractor::write_transition(const std::string& output_name) {
         char final_value = std::get<0>(id_to_measure_final_value_[id]);
 
         char input_trans = transition(initial_value, final_value);
-        os << input_trans << ",";
+        *os_ptr << input_trans << ",";
     }
 
     //Output transition
@@ -164,7 +161,7 @@ void VcdExtractor::write_transition(const std::string& output_name) {
     char initial_value = std::get<0>(id_to_measure_initial_value_[id]);
     char final_value = std::get<0>(id_to_measure_final_value_[id]);
 
-    os << transition(initial_value, final_value) << ",";
+    *os_ptr << transition(initial_value, final_value) << ",";
 
     //Delay
     size_t output_trans_time = std::get<1>(id_to_measure_final_value_[id]);
@@ -178,10 +175,10 @@ void VcdExtractor::write_transition(const std::string& output_name) {
         delay = output_trans_time - clock_rise_time_;
         sim_time = output_trans_time;
     }
-    os << delay << ",";
+    *os_ptr << delay << ",";
 
     //Sim time (launch clock)
-    os << sim_time << endl;
+    *os_ptr << sim_time << endl;
 }
 
 char VcdExtractor::transition(char initial_value, char final_value) {

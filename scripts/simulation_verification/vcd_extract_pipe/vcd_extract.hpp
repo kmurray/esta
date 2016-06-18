@@ -2,6 +2,7 @@
 #include <vector>
 #include <string>
 #include <unordered_map>
+#include <memory>
 
 #include "vcd_parse.hpp"
 
@@ -33,7 +34,7 @@
 class VcdExtractor : public VcdCallback {
     
     public:
-        VcdExtractor(std::string clock_name , std::vector<std::string> inputs, std::vector<std::string> outputs);
+        VcdExtractor(std::string clock_name , std::vector<std::string> inputs, std::vector<std::string> outputs, std::string output_dir=".");
 
         void start() override;
         void finish() override;
@@ -54,6 +55,9 @@ class VcdExtractor : public VcdCallback {
         std::string clock_name_;
         std::vector<std::string> inputs_;
         std::vector<std::string> outputs_;
+        std::string output_dir_;
+
+        std::unordered_map<std::string,std::shared_ptr<std::ostream>> output_files_;
 
         std::unordered_map<std::string,std::string> id_to_name_;
         std::unordered_map<std::string,std::string> name_to_id_;
