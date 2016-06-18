@@ -295,8 +295,11 @@ def parse_args():
     transition_extraction_arguments.add_argument("--vcd_split_exec",
                                                  default="vcd_split",
                                                  help="Tool used to split VCD files into chunks.")
+    transition_extraction_arguments.add_argument("--vcd_output_dir",
+                                                 default=None,
+                                                 help="Directory to write extraction results. None implies the current directory.")
     transition_extraction_arguments.add_argument("--vcd_size_limit",
-                                                 default=107374182400,
+                                                 default=None,
                                                  help="Maximum VCD file size (in bytes) before it is split into chunks. Downstream tools currently read the whole VCD file into memory -- chunking limits their memory usage")
 
     #
@@ -544,6 +547,9 @@ def run_transition_extraction(args, raw_vcd_file, top_verilog_info):
     base_args = ['-c', SIM_CLOCK]
     base_args += ["-i"] + [x for x in top_verilog_info['inputs']]
     base_args += ["-o"] + [x for x in outputs]
+
+    if args.vcd_output_dir:
+        base_args += ["--output_dir", args.vcd_output_dir]
 
     for i, vcd_file in enumerate(vcd_files):
         cmd = [args.vcd_extract_exec, vcd_file] + base_args
