@@ -142,13 +142,6 @@ optparse::Values parse_args(int argc, char** argv) {
                 "the specified nodes. Must be 'po', 'all', a comma sepearted list of node names.")
           ;
 
-    parser.add_option("--csv_base")
-          .dest("csv_base")
-          .set_default("esta")
-          .metavar("CSV_OUTPUT_FILE_BASE")
-          .help("The base name for output csv files. Default: %default")
-          ;
-
     parser.add_option("--bdd_stats")
           .dest("show_bdd_stats")
           .action("store_true")
@@ -388,7 +381,7 @@ int main(int argc, char** argv) {
             std::string node_name = name_resolver->get_node_name(node_id);
 
 
-            std::string csv_filename = options.get_as<std::string>("csv_base") + "." + node_name + ".n" + std::to_string(node_id) + ".csv";
+            std::string csv_filename = "esta.trans." + node_name + ".n" + std::to_string(node_id) + ".csv";
             std::ofstream csv_os(csv_filename);
 
             std::cout << "Writing " << csv_filename << " for node " << node_id << "\n";
@@ -516,7 +509,7 @@ void print_node_histogram(const TimingGraph& tg, std::shared_ptr<AnalyzerType> a
     assert(total_prob >= 1. - epsilon && total_prob <= 1. + epsilon);
 
     //Print to a csv
-    std::string filename = "esta.histogram." + node_name + ".n" + std::to_string(node_id) + ".csv";
+    std::string filename = "esta.hist." + node_name + ".n" + std::to_string(node_id) + ".csv";
     std::ofstream os(filename);
 
     //Header
