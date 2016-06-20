@@ -9,7 +9,7 @@ import numpy as np
 import matplotlib.pyplot as plt
 import seaborn as sns
 
-from esta_exhaustive_to_histogram import load_exhaustive_csv
+from esta_util import load_exhaustive_csv
 
 
 def parse_args():
