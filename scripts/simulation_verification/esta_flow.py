@@ -273,7 +273,7 @@ def parse_args():
 
     modelsim_arguments.add_argument("--modelsim_flavour",
                                     choices=['modelsim', 'modelsim_altera'],
-                                    default='modelsim_altera',
+                                    default='modelsim',
                                     help="Adjust modlesim scripts if running vanilla modelsim (no adjustments) or altera modelsim (Include Altera primitives and Fix bug with Modelsim-Altera where it will not allow SDF annotation without an instantiated Altera primitive)")
 
     modelsim_arguments.add_argument("--link_verilog",
@@ -290,7 +290,7 @@ def parse_args():
     #
     transition_extraction_arguments = parser.add_argument_group("Transition Extraction", "Options for processing simulation VCD")
     transition_extraction_arguments.add_argument("--vcd_extract_exec",
-                                                 default="vcd_extract",
+                                                 default="vcd_extract_pipe",
                                                  help="Tool used to post-process VCD to extract transitions and delays.")
     transition_extraction_arguments.add_argument("--vcd_split_exec",
                                                  default="vcd_split",
