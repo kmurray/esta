@@ -178,13 +178,13 @@ void ExtSetupAnalysisMode<BaseAnalysisMode,Tags>::forward_traverse_finalize_node
         std::cout << "Evaluating Node: " << node_id << " " << tg.node_type(node_id) << " (" << node_func << ")\n";
 
         //Print out the input tags to this node
-        /*for(size_t i = 0; i < src_data_tag_sets.size(); ++i) {*/
-            /*std::cout << "\tInput " << i << ": ";*/
-                /*for(const auto tag : src_data_tag_sets[i]) {*/
-                    /*std::cout << tag->trans_type() << "@" << tag->arr_time() << " "; */
-                /*}*/
-            /*std::cout << "\n";*/
-        /*}*/
+        for(size_t i = 0; i < src_data_tag_sets.size(); ++i) {
+            std::cout << "\tInput " << i << ": ";
+                for(const auto tag : src_data_tag_sets[i]) {
+                    std::cout << tag->trans_type() << "@" << tag->arr_time() << " "; 
+                }
+            std::cout << "\n";
+        }
 #endif
 
         size_t i_case = 0;
@@ -192,19 +192,6 @@ void ExtSetupAnalysisMode<BaseAnalysisMode,Tags>::forward_traverse_finalize_node
 
         //Generate all tag transition permutations
         TagPermutationGenerator tag_permutation_generator = reduce_permutations(node_id, src_data_tag_sets, max_permutations, delay_bin_size, delay_bin_size_scale_fac);
-
-        if (tag_permutation_generator.num_permutations() > PERMUTATION_WARNING_THRESHOLD) {
-            std::cout << "Warning Orig: Node " << node_id << " would evaluate " << tag_permutation_generator.num_permutations() / 1e6 << "M tag permutations" << std::endl;
-            //Print out the input tags to this node
-            for(size_t i = 0; i < src_data_tag_sets.size(); ++i) {
-                std::cout << "\tInput " << i << ": ";
-                    for(const auto tag : src_data_tag_sets[i]) {
-                        std::cout << tag->trans_type() << "@" << tag->arr_time() << " "; 
-                    }
-                std::cout << std::endl;
-            }
-        }
-
 
         while(!tag_permutation_generator.done()) {
             std::vector<const Tag*> src_tags = tag_permutation_generator.next();
