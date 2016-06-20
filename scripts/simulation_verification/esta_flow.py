@@ -15,6 +15,8 @@ import pyverilog.vparser.parser as verilog_parser
 import pyverilog.vparser.ast as vast
 from pyverilog.ast_code_generator.codegen import ASTCodeGenerator
 
+from esta_exhaustive_to_histogram import exhaustive_csv_to_histogram_csv
+
 SIM_CLOCK="sim_clk"
 
 class CommandError(Exception):
@@ -559,6 +561,12 @@ def run_transition_extraction(args, raw_vcd_file, top_verilog_info):
             cmd += ["--append"]
 
         run_command(cmd, verbose=args.verbose)
+
+    output_path = args.vcd_output_dir if args.vcd_output_dir != None else "."
+    for exhaustive_csv in os.listdir(output_path):
+        if fnmatch.fnmatch(exhaustive_csv, "sim.*.csv") and 'histogram' not in exhaustive_csv:
+            histogram_csv = ".".join(['sim', 'histogram'] + exhaustive_csv.split('.')[1:])
+            exhaustive_csv_to_histogram_csv(exhaustive_csv, histogram_csv)
 
     return {}
 
