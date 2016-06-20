@@ -135,7 +135,7 @@ void VcdExtractor::write_header(const std::string& output_name) {
     *os_ptr << output_name << ",";
     *os_ptr << "delay" << ",";
     *os_ptr << "sim_time";
-    *os_ptr << endl;
+    *os_ptr << "\n";
 }
 
 
@@ -178,7 +178,7 @@ void VcdExtractor::write_transition(const std::string& output_name) {
     *os_ptr << delay << ",";
 
     //Sim time (launch clock)
-    *os_ptr << sim_time << endl;
+    *os_ptr << sim_time << "\n";
 }
 
 char VcdExtractor::transition(char initial_value, char final_value) {
