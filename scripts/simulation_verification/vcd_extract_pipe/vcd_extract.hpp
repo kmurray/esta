@@ -1,35 +1,14 @@
 #pragma once
 #include <vector>
 #include <string>
+#include <map>
 #include <unordered_map>
 #include <memory>
 
+#include "AssocVector.h"
+
 #include "vcd_parse.hpp"
 
-
-/*
- *class Transition {
- *    public:
- *        enum class Type {
- *            RISE,
- *            FALL,
- *            HIGH,
- *            LOW,
- *            UNKOWN
- *        };
- *
- *        Transition(Type type_val, size_t time_val)
- *            : type_(type_val)
- *            , time_(time_val)
- *            {}
- *
- *        Type type() { return type_; }
- *        size_t time() { return time_; }
- *    private:
- *        size_t time_;
- *        Type type_;
- *}
- */
 
 class VcdExtractor : public VcdCallback {
     
@@ -62,11 +41,11 @@ class VcdExtractor : public VcdCallback {
         std::unordered_map<std::string,std::string> id_to_name_;
         std::unordered_map<std::string,std::string> name_to_id_;
 
-        std::unordered_map<std::string,std::tuple<char,size_t>> id_to_current_value_;
-        std::unordered_map<std::string,std::tuple<char,size_t>> id_to_previous_value_;
-
-        std::unordered_map<std::string,std::tuple<char,size_t>> id_to_measure_initial_value_;
-        std::unordered_map<std::string,std::tuple<char,size_t>> id_to_measure_final_value_;
+	//We use a sorted vector implementation of a map for speed
+        Loki::AssocVector<std::string,std::tuple<char,size_t>> id_to_current_value_;
+        Loki::AssocVector<std::string,std::tuple<char,size_t>> id_to_previous_value_;
+        Loki::AssocVector<std::string,std::tuple<char,size_t>> id_to_measure_initial_value_;
+        Loki::AssocVector<std::string,std::tuple<char,size_t>> id_to_measure_final_value_;
 
         size_t current_time_;
         size_t clock_rise_time_;

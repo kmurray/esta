@@ -31,7 +31,7 @@ void VcdExtractor::start() {
 }
 
 void VcdExtractor::finish() {
-    cout << "Finished VCD" << endl;
+    cout << "Finished VCD (" << transition_count_ << " transitions)" << endl;
 }
 
 void VcdExtractor::add_var(std::string type, size_t width, std::string id, std::string name) {
