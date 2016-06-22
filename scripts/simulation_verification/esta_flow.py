@@ -129,6 +129,7 @@ class CommandRunner(object):
 
                     #Send to log file
                     print >> log_f, line,
+		    log_f.flush()
 
                     #Save the output
                     cmd_output.append(line)
@@ -136,6 +137,7 @@ class CommandRunner(object):
                     #Send to stdout
                     if self._verbose:
                         print indent_depth*self._indent + line,
+			sys.stdout.flush()
 
                     #Abort if over time limit
                     elapsed_time = time.time() - start_time
