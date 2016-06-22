@@ -1,3 +1,4 @@
+import gzip
 import pandas as pd
 
 def load_histogram_csv(filename):
@@ -10,6 +11,15 @@ def load_exhaustive_csv(filename):
     raw_data = pd.read_csv(filename)
 
     return transitions_to_histogram(raw_data)
+
+def load_trans_csv(filename):
+    base, ext = os.path.splitext(filename)
+
+    if ext == "gz":
+        with gzip.open(filename, 'rb') as f:
+            return pd.read_csv(f)
+    else:
+        return pd.read_csv(filename)
 
 def transitions_to_histogram(raw_data):
     #Counts of how often all delay values occur
