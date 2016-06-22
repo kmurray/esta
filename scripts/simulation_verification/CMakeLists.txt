@@ -23,6 +23,8 @@ add_executable(vcd_extract ${EXEC_VCD_EXTRACT_SOURCES} ${EXEC_VCD_EXTRACT_HEADER
 target_link_libraries(vcd_extract
                       vcdparse)
 
+find_package(ZLIB REQUIRED)
+
 #
 # Executable Source files
 #
@@ -45,6 +47,8 @@ list(REMOVE_DUPLICATES EXEC_VCD_EXTRACT_PIPE_INCLUDE_DIRS)
 
 #Define library
 add_executable(vcd_extract_pipe ${EXEC_VCD_EXTRACT_PIPE_SOURCES} ${EXEC_VCD_EXTRACT_PIPE_HEADERS})
+include_directories(${ZLIB_INCLUDE_DIRS})
+target_link_libraries(vcd_extract_pipe ${ZLIB_LIBRARIES})
 
 #
 # Executable Source files

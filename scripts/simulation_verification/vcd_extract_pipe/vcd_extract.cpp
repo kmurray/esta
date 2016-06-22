@@ -4,6 +4,7 @@
 #include <limits>
 #include <iomanip>
 
+
 using std::cout;
 using std::endl;
 
@@ -20,7 +21,7 @@ VcdExtractor::VcdExtractor(std::string clock_name, std::vector<std::string> inpu
     //cout << "State: INITIAL" << endl;
 
     for(const auto& output_name : outputs_) {
-        auto fp = std::make_shared<std::ofstream>(get_filename(output_name));  
+        auto fp = std::make_shared<ogzstream>(get_filename(output_name).c_str());  
         *fp << std::setprecision(std::numeric_limits<double>::digits10);
         output_files_[output_name] = fp;
     }
@@ -127,7 +128,7 @@ void VcdExtractor::finalize_measure() {
 }
 
 std::string VcdExtractor::get_filename(const std::string& output_name) {
-    return output_dir_ + "/sim.trans." + output_name + ".csv";
+    return output_dir_ + "/sim.trans." + output_name + ".csv.gz";
 }
 
 void VcdExtractor::write_header(const std::string& output_name) {
