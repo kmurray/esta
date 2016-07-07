@@ -7,6 +7,7 @@ from collections import OrderedDict
 
 import pandas as pd
 import numpy as np
+import scipy as sp
 
 import matplotlib.pyplot as plt
 #import matplotlib.gridspec as gridspec
@@ -49,12 +50,19 @@ def parse_args():
                         help="Search for the minimum sample size")
 
     parser.add_argument("--search_confidence",
-                        default=0.95,
+                        default=0.99,
+                        type=float,
                         help="Confidence (mean search mode: interval specification, max search mode: probability have max)")
 
     parser.add_argument("--search_mean_interval_length",
+                        default=5,
+                        type=float,
+                        help="Interval length to search for")
+
+    parser.add_argument("--search_mean_interval_tol",
                         default=0.01,
-                        help="Fraction of total delay")
+                        type=float,
+                        help="Error Tolerance in search for mean interval")
 
     args = parser.parse_args()
 
@@ -70,40 +78,51 @@ def main():
     num_sim_cases, num_inputs, output_name = inspect_sim_file(args.simulation_csv)
     print "Data file contains:", num_sim_cases, "cases"
 
-    print "Loading Data..."
+    num_exhaustive_cases = 4**num_inputs
+
     reader = pd.read_csv(args.simulation_csv, 
                          usecols=['delay'],  #Read in only the delay to save time and memory
                          iterator=True)
 
-    #Read the first element to figure out the header
-    df = reader.get_chunk(1)
-
-    num_exhaustive_cases = 4**num_inputs
-
     print "Inputs: ", num_inputs
     print "Exhaustive cases: {:g}".format(num_exhaustive_cases)
-    print "Num Samples: ", args.num_samples
 
     if args.search is None:
-        sample_size = math.floor(num_sim_cases / args.num_samples) #-1 since we read one to get the dimensions
+        print "Num Samples: ", args.num_samples
+
+        sample_size = math.floor(num_sim_cases / args.num_samples)
         print "Sample Size: ", sample_size
 
-        sample_frac = sample_size / num_exhaustive_cases
-        print "Sample Frac (exhaustive): ", sample_frac
         print "Sample Frac (sim): ", sample_size / num_sim_cases
 
 
-        sampled_data_sets = generate_samples(args.num_samples, sample_size, reader, args.chunk_size)
-
-        all_data_sets.update(sampled_data_sets)
-
     elif args.search == 'mean':
-        assert False
+        sample_size, confidence_interval = search_mean(args.simulation_csv, num_sim_cases, args.search_confidence, args.search_mean_interval_length, args.search_mean_interval_tol, args.chunk_size)
+
+        args.num_samples = int(math.floor(num_sim_cases / float(sample_size)))
+
+
     elif args.search == 'max':
         assert False
     else:
         assert False
 
+    sample_frac = sample_size / float(num_exhaustive_cases)
+    print "Sample Frac (exhaustive): ", sample_frac
+
+    sampled_data_sets = generate_samples(args.num_samples, sample_size, reader, args.chunk_size)
+    all_data_sets.update(sampled_data_sets)
+
+    if args.search == 'mean':
+        num_samples_within_confidence = 0
+        for k, df in all_data_sets.iteritems():
+            sample_mean = (df['delay']*df['probability']).sum() 
+            if sample_mean < confidence_interval[0] or sample_mean > confidence_interval[1]:
+                print "Warning: sample {} has mean {} outside of confidence interval {}".format(k, sample_mean, confidence_interval)
+            else:
+                num_samples_within_confidence += 1
+
+        print "Fraction of samples within confidence interval: {} (target confidence level {})".format(float(num_samples_within_confidence) / args.num_samples, args.search_confidence)
 
 
     print "Plotting..."
@@ -140,23 +159,105 @@ def main():
     else:
         plt.show()
 
+def search_mean(filename, num_sim_cases, search_confidence, search_mean_interval_len, search_mean_interval_tol, chunk_size):
+    """
+    Searches various samples sizes to find the smallest size which results in convergence,
+    where convergence is defined as having the length of the mean's confidence interval less 
+    a target for a given confidence level.
+
+    A binary search on the sample size is used
+
+    Arguments
+    =========
+        reader: The CSV reader to get data from
+        num_sim_cases: Number of simulation cases in the input file
+        search_confidence: Confidence level for confidence interval
+        search_mean_interval_len: Maximum allowed length for mean confidence interval
+    """
+
+    reader = pd.read_csv(filename, 
+                         usecols=['delay'],  #Read in only the delay to save time and memory
+                         iterator=True)
+    #Initial Guess
+    sample_size = num_sim_cases
+
+    #Sample
+    sample = generate_sample(sample_size, reader, chunk_size)
+
+    #Calculate the interval
+    mean, confidence_interval = mean_confidence_interval(sample, search_confidence)
+
+    interval_len = confidence_interval[1] - confidence_interval[0]
+
+    print "Sample Size: {size}, Interval Length Lower Bound: {lb}".format(size=sample_size, 
+                                                                          lb=interval_len)
+
+    scale = 2
+    meta_scale = 1
+
+    if interval_len > search_mean_interval_len:
+        raise ValueError("Insufficient samples for target interval length {len} at confidence {conf}".format(len=search_mean_interval_len, conf=search_confidence))
+
+    prev_shrink = True
+
+    #Shrink the interval length with binary search until it is close to target
+    i = 0
+    while abs(interval_len - search_mean_interval_len) > search_mean_interval_tol and sample_size > 2 and i < 10000:
+        reader = pd.read_csv(filename, 
+                             usecols=['delay'],  #Read in only the delay to save time and memory
+                             iterator=True)
+
+        #Increase the sample size
+        if interval_len < search_mean_interval_len:
+            curr_shrink = True
+            sample_size = int(sample_size / scale)
+            # print "Shrink Sample Size to: ", sample_size
+        else:
+            assert interval_len > search_mean_interval_len
+
+            curr_shrink = False
+            sample_size = int(sample_size * scale)
+            # print "Increase Sample Size to: ", sample_size
+
+
+        assert sample_size <= num_sim_cases
+
+        #Sample
+        sample = generate_sample(sample_size, reader, chunk_size)
+
+        #Calculate the interval
+        mean, confidence_interval = mean_confidence_interval(sample, search_confidence)
+
+        interval_len = confidence_interval[1] - confidence_interval[0]
+
+        print "Sample Size: {size}, Interval Length: {len}".format(size=sample_size, 
+                                                                 len=interval_len)
+        if prev_shrink != curr_shrink:
+            meta_scale *= 0.75
+            scale = 1 + meta_scale
+            # print "Next Scale: {}".format(scale)
+
+        i += 1
+
+    print "Sample Size: {size}, Interval: {inter}, Len: {len}".format(size=sample_size,
+                                                                      inter=confidence_interval,
+                                                                      len=interval_len)
+    return sample_size, confidence_interval
+
+def mean_confidence_interval(sample, confidence):
+    sample_mean = sample['delay'].mean()
+    std_error_mean = sp.stats.sem(sample['delay'])
+    dof = len(sample) - 1
+    return sample_mean, sp.stats.t.interval(confidence, dof, loc=sample_mean, scale=std_error_mean)
+
+
 def generate_samples(num_samples, sample_size, reader, max_chunk_size):
     sampled_data_sets = OrderedDict()
 
     for i in xrange(num_samples):
         print "Generating Sample", i, "..."
 
-        sample = pd.DataFrame()
-
-        while sample.shape[0] != sample_size:
-            #Read a chunk
-            chunk_size = min(max_chunk_size, sample_size - sample.shape[0])
-            chunk = reader.get_chunk(chunk_size)
-
-            #Concatenate it together
-            sample = pd.concat([sample, chunk])
-
-        assert sample.shape[0] == sample_size
+        sample = generate_sample(sample_size, reader, max_chunk_size)
 
         #Convert data sample to histogram
         sample_hist = transitions_to_histogram(sample)
@@ -167,6 +268,24 @@ def generate_samples(num_samples, sample_size, reader, max_chunk_size):
         sample = pd.DataFrame()
 
     return sampled_data_sets
+
+def generate_sample(sample_size, reader, max_chunk_size, repeat=False):
+    sample = pd.DataFrame()
+
+    while sample.shape[0] != sample_size:
+        #Read a chunk
+        chunk_size = min(max_chunk_size, sample_size - sample.shape[0])
+
+        chunk = reader.get_chunk(chunk_size)
+
+
+        #Concatenate it together
+        sample = pd.concat([sample, chunk])
+
+    assert sample.shape[0] == sample_size
+
+    return sample
+
 
 def plot_mean(ax, data_sets):
     means = []
