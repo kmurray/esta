@@ -582,9 +582,8 @@ def run_transition_extraction(args, raw_vcd_file, top_verilog_info):
 
     #Calculate the maximum transition and histogram results
     max_cmd = [args.max_trans_exec]
-    max_cmd += ["--input_csvs"] + trans_csvs
-    max_cmd += ["--output_max_hist", "sim.max_hist.csv"]
-    max_cmd += ["--output_max_trans", "sim.max_trans.csv"]
+    max_cmd += ["--i"] + trans_csvs
+    max_cmd += ["--o", "sim.max_trans.csv"]
 
     run_command(max_cmd, verbose=args.verbose)
 
@@ -624,10 +623,10 @@ def run_comparison(args, design_info):
     for output in outputs:
         print "Comparing output: {port}".format(port=output)
 
-        sim_csv = ".".join(["sim", output, "csv"])
+        sim_csv = ".".join(["sim.trans", output, "csv"])
 
         esta_csvs = []
-        esta_csv_regex = re.compile(r"esta\." + output + "\.(?P<node_text>n\d+).*\.csv")
+        esta_csv_regex = re.compile(r"esta\.trans\." + output + "\.(?P<node_text>n\d+).*\.csv")
         for filename in os.listdir(os.getcwd()):
             match = esta_csv_regex.match(filename)
             if match:

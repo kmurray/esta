@@ -4,6 +4,7 @@
 #include <limits>
 #include <iomanip>
 
+#include "gzstream.h"
 
 using std::cout;
 using std::endl;

@@ -6,7 +6,6 @@
 #include <memory>
 
 #include "string.h"
-#include "gzstream.h"
 
 #include "AssocVector.h"
 

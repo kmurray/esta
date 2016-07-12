@@ -21,12 +21,7 @@ def parse_args():
                         nargs="+",
                         required=True,
                         help="Input CSVs")
-
-    parser.add_argument("--output_max_hist",
-                        required=True,
-                        help="Output max histogram")
-
-    parser.add_argument("--output_max_trans",
+    parser.add_argument("-o", "--output_max_trans",
                         required=True,
                         help="Output max histogram")
 
@@ -47,12 +42,6 @@ def main():
     max_trans = max_transition(input_trans_csvs)
 
     max_trans.to_csv(args.output_max_trans, index=False)
-
-    max_hist = transitions_to_histogram(max_trans)
-
-
-    #Write it out
-    max_hist.to_csv(args.output_max_hist, index=False)
 
 def max_transition(trans_results):
     series = [x['delay'] for x in trans_results]

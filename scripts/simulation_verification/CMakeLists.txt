@@ -47,8 +47,7 @@ list(REMOVE_DUPLICATES EXEC_VCD_EXTRACT_PIPE_INCLUDE_DIRS)
 
 #Define library
 add_executable(vcd_extract_pipe ${EXEC_VCD_EXTRACT_PIPE_SOURCES} ${EXEC_VCD_EXTRACT_PIPE_HEADERS})
-include_directories(${ZLIB_INCLUDE_DIRS})
-target_link_libraries(vcd_extract_pipe ${ZLIB_LIBRARIES})
+target_link_libraries(vcd_extract_pipe gzstream)
 
 #
 # Executable Source files
