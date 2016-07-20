@@ -28,10 +28,14 @@ class VcdExtractor : public VcdCallback {
         void finalize_measure();
 
         std::string get_filename(const std::string& output_name);
-        void write_header(const std::string& output_name);
-        void write_transition(const std::string& output_name);
-        char transition(char initial_value, char final_value);
+        std::string get_max_filename();
 
+        void write_header(std::shared_ptr<std::ostream> os_ptr, const std::string& output_name);
+        void write_transition(const std::string& output_name);
+        void write_max_transition();
+
+        char transition(char initial_value, char final_value);
+        std::pair<size_t,size_t> output_delay(const std::string& output_name);
     private:
         std::string clock_name_;
         std::vector<std::string> inputs_;
@@ -39,11 +43,12 @@ class VcdExtractor : public VcdCallback {
         std::string output_dir_;
 
         std::unordered_map<std::string,std::shared_ptr<std::ostream>> output_files_;
+        std::shared_ptr<std::ostream> max_os_;
 
         std::unordered_map<std::string,std::string> id_to_name_;
         std::unordered_map<std::string,std::string> name_to_id_;
 
-	//We use a sorted vector implementation of a map for speed
+        //We use a sorted vector implementation of a map for speed
         Loki::AssocVector<std::string,std::tuple<char,size_t>> id_to_current_value_;
         Loki::AssocVector<std::string,std::tuple<char,size_t>> id_to_previous_value_;
         Loki::AssocVector<std::string,std::tuple<char,size_t>> id_to_measure_initial_value_;
