@@ -307,9 +307,6 @@ def parse_args():
                                                  default=None,
                                                  help="Maximum VCD file size (in bytes) before it is split into chunks. Downstream tools currently read the whole VCD file into memory -- chunking limits their memory usage")
 
-    transition_extraction_arguments.add_argument("--max_trans_exec",
-                                                 default="esta_max.py",
-                                                 help="Tool used to post-process VCD to extract transitions and delays.")
     #
     # Comparison/verification related arguments
     #
@@ -580,14 +577,6 @@ def run_transition_extraction(args, raw_vcd_file, top_verilog_info):
     for in_csv in trans_csvs:
         histogram_csv = ".".join(['sim', 'hist'] + exhaustive_csv.split('.')[1:])
         exhaustive_csv_to_histogram_csv(in_csv, histogram_csv)
-
-    #Calculate the maximum transition and histogram results
-    max_cmd = [args.max_trans_exec]
-    max_cmd += ["--i"] + trans_csvs
-    max_cmd += ["--o", "sim.max_trans.csv"]
-
-    run_command(max_cmd, verbose=args.verbose)
-
 
     return {}
 
