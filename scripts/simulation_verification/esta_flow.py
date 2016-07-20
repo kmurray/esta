@@ -10,6 +10,7 @@ import json
 import numpy as np
 import math
 import time
+import glob
 
 import pyverilog.vparser.parser as verilog_parser
 import pyverilog.vparser.ast as vast
@@ -350,8 +351,6 @@ def main():
     sys.exit(0)
 
 def esta_flow(args):
-    vpr_sdf_file = "top_post_synthesis.sdf"
-    vpr_verilog_file = "top_post_synthesis.v"
     vpr_log = "vpr.log"
     vcd_file = "sim.vcd"
 
@@ -367,13 +366,15 @@ def esta_flow(args):
     #Extract port and top instance information
     print
     print "Extracting design information"
-    design_info = extract_design_info(vpr_verilog_file, args.blif)
+    post_synth_blif, post_synth_verilog, post_synth_sdf = find_post_synth()
+    design_info = extract_design_info(post_synth_verilog, args.blif)
+
 
     #Run ESTA
     if args.run_esta:
         print
         print "Running ESTA"
-        esta_results = run_esta(args, design_info=design_info, sdf_file=vpr_sdf_file)
+        esta_results = run_esta(args, design_info=design_info, sdf_file=post_synth_sdf)
 
 
     #Run Modelsim to collect simulation statistics
@@ -386,7 +387,7 @@ def esta_flow(args):
         print
         print "Running Modelsim"
         modelsim_results = run_modelsim(args, 
-                                        sdf_file=vpr_sdf_file,
+                                        sdf_file=post_synth_sdf,
                                         cpd_ps=vpr_cpd_ps,
                                         verilog_info=design_info,
                                         vcd_file=vcd_file
@@ -430,7 +431,7 @@ def run_vtr(args, vpr_log_filename):
             args.blif,
             "-sweep_hanging_nets_and_inputs", "off",
             "-absorb_buffer_luts", "off",
-            "-route_chan_width", "300",
+            "-route_chan_width", "100",
             "-echo_file", "on",
             "-gen_postsynthesis_netlist", "on"
           ]
@@ -770,9 +771,9 @@ def extract_design_info(top_verilog, blif_file):
         for line in continued_lines(f):
             line.strip()
             if line.startswith(".inputs"):
-                inputs = set(map(escape_name, line.split()[1:]))
+                inputs = set(line.split()[1:])
             if line.startswith(".outputs"):
-                outputs = set(map(escape_name, line.split()[1:]))
+                outputs = set(line.split()[1:])
             if inputs and outputs:
                 break
     assert inputs
@@ -871,6 +872,18 @@ def load_endpoint_timing():
 
     return endpoint_timing
 
+def find_post_synth():
+    blif_matches = glob.glob("*post_synthesis.blif")
+    sdf_matches = glob.glob("*post_synthesis.sdf")
+    verilog_matches = glob.glob("*post_synthesis.v")
+
+    assert len(blif_matches) == 1, "Found multiple post synthesis BLIF files"
+    assert len(sdf_matches) == 1, "Found multiple post synthesis SDF files"
+    assert len(verilog_matches) == 1, "Found multiple post synthesis Verilog files"
+
+    return (blif_matches[0], verilog_matches[0], sdf_matches[0])
+
+
 def create_modelsim_do(args, vcd_file, verilog_files, dut_inputs, dut_outputs, dut_clocks):
     do_lines = []
 
@@ -888,7 +901,7 @@ def create_modelsim_do(args, vcd_file, verilog_files, dut_inputs, dut_outputs, d
     if args.modelsim_flavour == "modelsim_altera":
         do_lines.append("vsim -t 1ps -L rtl_work -L work -L altera_mf_ver -L altera_ver -L lpm_ver -L sgate_ver -L stratixiv_hssi_ver -L stratixiv_pcie_hip_ver -L stratixiv_ver -voptargs=\"+acc\" +transport_int_delays +transport_path_delays +sdf_verbose tb")
     else:
-        do_lines.append("vsim -t 1ps -L rtl_work -L work -voptargs=\"+acc\" +transport_int_delays +transport_path_delays +sdf_verbose tb")
+        do_lines.append("vsim -t 1ps -L rtl_work -L work -voptargs=\"+acc\" +transport_int_delays +transport_path_delays +sdf_verbose +bitblast tb")
     do_lines.append("")
     do_lines.append("#Setup VCD logging")
     do_lines.append("vcd file {vcd_file}".format(vcd_file=vcd_file))
@@ -1067,10 +1080,10 @@ def run_command(cmd, log_filename=None, verbose=False):
     return output
 
 def escape_name(name):
-    for char in ['.', '[', ']']:
-        name = name.replace(char, '_')
-    return name
+    return "\\" + name + " "
 
+def unescape_name(name):
+    return name.replace("\\", "")
 
 if __name__ == "__main__":
     main()
