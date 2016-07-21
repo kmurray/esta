@@ -613,10 +613,13 @@ def run_comparison(args, design_info):
     for output in outputs:
         print "Comparing output: {port}".format(port=output)
 
-        sim_csv = ".".join(["sim.trans", output, "csv"])
+        sim_csv = ".".join(["sim", "trans", output, "csv"])
+        if not os.path.isfile(sim_csv):
+            sim_csv = ".".join([sim_csv, "gz"])
+            assert os.path.isfile(sim_csv), "Could not find sim CSV file for port {}".format(output)
 
         esta_csvs = []
-        esta_csv_regex = re.compile(r"esta\.trans\." + output + "\.(?P<node_text>n\d+).*\.csv")
+        esta_csv_regex = re.compile(r"esta\.trans\." + output + "\.(?P<node_text>n\d+).*\.csv(.gz)?")
         for filename in os.listdir(os.getcwd()):
             match = esta_csv_regex.match(filename)
             if match:

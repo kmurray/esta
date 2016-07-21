@@ -96,9 +96,17 @@ def compare_exhaustive_csv(ref_data, cmp_data, show_pessimistic):
         if ref_col_name == 'delay':
             assert cmp_col_name == ref_col_name
             ref_output_col_name = ref_col_names[i-1]
-            ref_input_col_names = ref_col_names[:i-2]
+            ref_input_col_names = ref_col_names[:i-1]
             cmp_output_col_name = cmp_col_names[i-1]
-            cmp_input_col_names = cmp_col_names[:i-2]
+            cmp_input_col_names = cmp_col_names[:i-1]
+
+    #Sort the two data frames so the input transitions are in the same order
+    ref_data = ref_data.sort_values(ref_input_col_names)
+    cmp_data = cmp_data.sort_values(cmp_input_col_names)
+
+    #Now re-index them so we can walk through them in order by row index
+    ref_data.index = range(0,len(ref_data))
+    cmp_data.index = range(0,len(cmp_data))
 
     if not np.array_equal(ref_data.loc[:,ref_input_col_names].values, cmp_data.loc[:,cmp_input_col_names].values):
         assert False, "Mismtached input transitions"
@@ -135,8 +143,13 @@ def compare_exhaustive_csv(ref_data, cmp_data, show_pessimistic):
     delay_difference = delay_difference[delay_difference != 0]
 
     if not show_pessimistic:
-        #Filter out safely pessimsitic values
+        #Filter out safely pessimsitic values, by keeping only
+        #optimistic (negative difference) values
         delay_difference = delay_difference[delay_difference < 0]
+
+    #Filter out differences less than 1ps (i.e. simulation resolution)
+    # by keeping differences with magnitude >= 1ps
+    delay_difference = delay_difference[abs(delay_difference) >= 1]
 
     optimistic_count = 0
     for idx, val in delay_difference.iteritems():
