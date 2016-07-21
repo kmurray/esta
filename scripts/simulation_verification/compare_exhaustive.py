@@ -100,6 +100,10 @@ def compare_exhaustive_csv(ref_data, cmp_data, show_pessimistic):
             cmp_output_col_name = cmp_col_names[i-1]
             cmp_input_col_names = cmp_col_names[:i-1]
 
+    #Verify that the inputs are in the same order
+    reduced_cmp_col_names = map(lambda x: x.split(":")[0], cmp_input_col_names) #Name is part before ':'
+    assert ref_input_col_names == reduced_cmp_col_names, "CSV input columns not in the same order"
+
     #Sort the two data frames so the input transitions are in the same order
     ref_data = ref_data.sort_values(ref_input_col_names)
     cmp_data = cmp_data.sort_values(cmp_input_col_names)

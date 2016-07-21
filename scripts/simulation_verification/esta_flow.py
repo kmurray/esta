@@ -752,9 +752,9 @@ def extract_design_info(top_verilog, blif_file):
         for line in continued_lines(f):
             line.strip()
             if line.startswith(".inputs"):
-                inputs = set(line.split()[1:])
+                inputs = line.split()[1:]
             if line.startswith(".outputs"):
-                outputs = set(line.split()[1:])
+                outputs = line.split()[1:]
             if inputs and outputs:
                 break
     assert inputs
@@ -771,8 +771,8 @@ def extract_design_info(top_verilog, blif_file):
             old_clock_nets = clock_nets
 
     #Remove any clocks that show up in the input list
-    clocks = inputs & clock_nets
-    inputs -= clock_nets
+    clocks = [x for x in inputs if x in clock_nets]
+    inputs = [x for x in inputs if x not in clock_nets]
 
 
 
@@ -886,14 +886,14 @@ def create_modelsim_do(args, vcd_file, verilog_files, dut_inputs, dut_outputs, d
     do_lines.append("")
     do_lines.append("#Setup VCD logging")
     do_lines.append("vcd file {vcd_file}".format(vcd_file=vcd_file))
-    for io in dut_inputs | dut_outputs | dut_clocks:
+    for io in dut_inputs + dut_outputs + dut_clocks:
         do_lines.append("vcd add /tb/dut/{io}".format(io=io))
     do_lines.append("vcd add /{sim_clk}".format(sim_clk=SIM_CLOCK))
     do_lines.append("")
     do_lines.append("add wave /tb/*")
     do_lines.append("")
     do_lines.append("log /*")
-    for io in dut_inputs | dut_outputs | dut_clocks:
+    for io in dut_inputs + dut_outputs + dut_clocks:
         do_lines.append("log /tb/dut/{io}".format(io=io))
     do_lines.append("")
     do_lines.append("view structure")
