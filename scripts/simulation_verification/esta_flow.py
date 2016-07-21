@@ -613,25 +613,9 @@ def run_comparison(args, design_info):
     for output in outputs:
         print "Comparing output: {port}".format(port=output)
 
-        sim_csv = ".".join(["sim", "trans", output, "csv"])
-        if not os.path.isfile(sim_csv):
-            sim_csv = ".".join([sim_csv, "gz"])
-            assert os.path.isfile(sim_csv), "Could not find sim CSV file for port {}".format(output)
+        sim_csv = pick_sim_csv(output, "trans")
 
-        esta_csvs = []
-        esta_csv_regex = re.compile(r"esta\.trans\." + output + "\.(?P<node_text>n\d+).*\.csv(.gz)?")
-        for filename in os.listdir(os.getcwd()):
-            match = esta_csv_regex.match(filename)
-            if match:
-                esta_csvs.append((filename, int(match.group("node_text")[1:])))
-
-        assert len(esta_csvs) > 0
-
-        #In descending order
-        esta_csvs = sorted(esta_csvs, key=lambda x: x[1], reverse=True)
-
-        #Only analyze the csv with the highest node number
-        esta_csv = esta_csvs[0][0]
+        esta_csv = pick_esta_csv(output, "trans")
 
         cmd = [
                 args.comparison_exec,
@@ -652,35 +636,31 @@ def run_plot(args, design_info, endpoint_timing):
     for output in outputs:
         print "Plotting output: {port}".format(port=output)
 
-        sim_csv = ".".join(["sim", output, "csv"])
+        sim_csv = pick_sim_csv(output, "trans")
 
         cmd = [args.plot_exec]
 
         if args.sim_mode == "exhaustive":
-            esta_csv_regex = re.compile(r"esta\." + output + "\.(?P<node_text>n\d+).*\.csv")
-
-            esta_exhaustive_csv = pick_esta_csv(esta_csv_regex)
+            esta_exhaustive_csv = pick_esta_csv(output, "trans")
 
             cmd += ["--exhaustive_csvs", sim_csv, esta_exhaustive_csv]
-            cmd += ["--exhaustive_csv_labels", '"Simulation (Ex)"', "ESTA"]
+            cmd += ["--exhaustive_csv_labels", 'SIM_EXHAUSTIVE', "ESTA"]
         else:
             assert args.sim_mode == "monte_carlo"
 
-            esta_csv_regex = re.compile(r"esta\.histogram\." + output + "\.(?P<node_text>n\d+).*\.csv")
-
-            esta_histogram_csv = pick_esta_csv(esta_csv_regex)
+            esta_histogram_csv = pick_esta_csv(output, "hist")
 
             #Sim is always treated as exhaustive
             if os.path.exists(sim_csv):
                 cmd += ["--exhaustive_csvs", sim_csv]
-                cmd += ["--exhaustive_csv_labels", '"Simulation (MC)"']
+                cmd += ["--exhaustive_csv_labels", 'SIM_MC']
 
             #But now we use the esta histogram directly
             cmd += ["--histogram_csvs", esta_histogram_csv]
             cmd += ["--histogram_csv_labels", "ESTA"]
 
         cmd += ["--sta_cpd", endpoint_timing[output]]
-        cmd += ["--plot_title", '"{}: {}"'.format(os.path.splitext(os.path.basename(args.blif))[0], output)]
+        cmd += ["--plot_title", '{}: {}'.format(os.path.splitext(os.path.basename(args.blif))[0], output)]
         cmd += ["--plot_file", output + ".pdf"]
         #cmd += ["--plot", "stem_cdf"]
 
@@ -688,7 +668,16 @@ def run_plot(args, design_info, endpoint_timing):
 
     return {}
 
-def pick_esta_csv(esta_csv_regex):
+def pick_sim_csv(output, type):
+    sim_csv = ".".join(["sim", type, output, "csv"])
+    if not os.path.isfile(sim_csv):
+        sim_csv = ".".join([sim_csv, "gz"])
+        assert os.path.isfile(sim_csv), "Could not find sim CSV file for port {}".format(output)
+
+    return sim_csv
+
+def pick_esta_csv(output, type):
+    esta_csv_regex = re.compile(r"esta\." + type + "\." + output + "\.(?P<node_text>n\d+).*\.csv(.gz)?")
     #Collect all the esta exhaustive csvs
     esta_csvs = []
     for filename in os.listdir(os.getcwd()):
