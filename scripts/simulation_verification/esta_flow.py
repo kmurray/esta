@@ -477,6 +477,7 @@ def run_esta(args, design_info, sdf_file):
 
     if args.sim_mode == "exhaustive" and len(dump_outputs) > 0:
         cmd += ["--dump_exhaustive_csv", ",".join(dump_outputs)]
+        cmd += ["--max_exhaustive"]
 
     run_command(cmd, verbose=args.verbose)
 
@@ -610,8 +611,9 @@ def run_comparison(args, design_info):
     else:
         outputs = args.outputs
 
-    for output in outputs:
-        print "Comparing output: {port}".format(port=output)
+    #Per output comparisions
+    for output in outputs + ["MAX"]:
+        print "Comparing: {port}".format(port=output)
 
         sim_csv = pick_sim_csv(output, "trans")
 
@@ -669,7 +671,10 @@ def run_plot(args, design_info, endpoint_timing):
     return {}
 
 def pick_sim_csv(output, type):
-    sim_csv = ".".join(["sim", type, output, "csv"])
+    if output == "MAX":
+        sim_csv = ".".join(["sim", "max_" + type, "csv"])
+    else:
+        sim_csv = ".".join(["sim", type, output, "csv"])
     if not os.path.isfile(sim_csv):
         sim_csv = ".".join([sim_csv, "gz"])
         assert os.path.isfile(sim_csv), "Could not find sim CSV file for port {}".format(output)
@@ -677,7 +682,12 @@ def pick_sim_csv(output, type):
     return sim_csv
 
 def pick_esta_csv(output, type):
-    esta_csv_regex = re.compile(r"esta\." + type + "\." + output + "\.(?P<node_text>n\d+).*\.csv(.gz)?")
+    if output == "MAX":
+        esta_csv = "esta.max_" + type + ".csv"
+        assert os.path.isfile(esta_csv), "Could not find file " + esta_csv
+        return esta_csv
+    else:
+        esta_csv_regex = re.compile(r"esta\." + type + "\." + output + "\.(?P<node_text>n\d+).*\.csv(.gz)?")
     #Collect all the esta exhaustive csvs
     esta_csvs = []
     for filename in os.listdir(os.getcwd()):

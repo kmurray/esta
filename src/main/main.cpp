@@ -122,8 +122,20 @@ optparse::Values parse_args(int argc, char** argv) {
           .help("The method to use for dynamic BDD variable re-ordering. Default: %default")
           ;
 
+    parser.add_option("--max_histogram")
+          .action("store_true")
+          .set_default("true")
+          .help("Output the maximum delay histogram")
+          ;
+
+    parser.add_option("--max_exhaustive")
+          .action("store_true")
+          .set_default("false")
+          .help("Output the maximum delay exhaustively to a CSV file")
+          ;
+
     //Sets of possible node choices
-    std::vector<std::string> node_choices = {"po", "pi", "all", "max", "none"};
+    std::vector<std::string> node_choices = {"po", "pi", "all", "none"};
 
     parser.add_option("--print_histograms")
           .dest("print_histograms")
@@ -325,16 +337,15 @@ int main(int argc, char** argv) {
         g_action_timer.pop_timer("Output tags"); 
     }
 
-    //sharp_sat_eval = std::make_shared<SharpSatType>(timing_graph, analyzer, nvars);
+    if(options.is_set("max_histogram")) {
+        print_max_node_histogram(timing_graph, analyzer, sharp_sat_eval, options.get_as<double>("delay_bin_size"));
+    }
 
     if(options.get_as<string>("print_histogram") != "none") {
         g_action_timer.push_timer("Output tag histograms");
 
         float node_count = 0;
-        if(options.get_as<string>("print_histograms") == "max") {
-                print_max_node_histogram(timing_graph, analyzer, sharp_sat_eval, options.get_as<double>("delay_bin_size"));
-
-        } else if(options.get_as<string>("print_histograms") == "pi") {
+        if(options.get_as<string>("print_histograms") == "pi") {
             for(auto node_id : timing_graph.primary_inputs()) {
                 print_node_histogram(timing_graph, analyzer, sharp_sat_eval, name_resolver, node_id, node_count / timing_graph.primary_inputs().size());
                 node_count += 1;
@@ -357,53 +368,52 @@ int main(int argc, char** argv) {
         g_action_timer.pop_timer("Output tag histograms"); 
     }
 
+    if(options.is_set("max_exhaustive")) {
+        std::string csv_filename = "esta.max_trans.csv";
+        std::ofstream csv_os(csv_filename);
+
+        std::cout << "Writing " << csv_filename << " for circuit max delay\n";
+
+        dump_max_exhaustive_csv(csv_os, timing_graph, analyzer, sharp_sat_eval, name_resolver, nvars, options.get_as<double>("delay_bin_size"));
+    }
+
     if(options.is_set("dump_exhaustive_csv")) {
         g_action_timer.push_timer("Exhaustive CSV");
 
 
         std::string node_spec = options.get_as<string>("dump_exhaustive_csv");
-        if(node_spec == "max") {
-            std::string csv_filename = "esta.max_trans.csv";
-            std::ofstream csv_os(csv_filename);
-
-            std::cout << "Writing " << csv_filename << " for circuit max delay\n";
-
-            dump_max_exhaustive_csv(csv_os, timing_graph, analyzer, sharp_sat_eval, name_resolver, nvars, options.get_as<double>("delay_bin_size"));
-
+        std::vector<NodeId> nodes_to_dump;
+        if(node_spec == "po") {
+            for(NodeId id : timing_graph.primary_outputs()) {
+                nodes_to_dump.push_back(id);
+            }
+        } else if(node_spec == "all") {
+            for(NodeId id = 0; id < timing_graph.num_nodes(); ++id) {
+                nodes_to_dump.push_back(id);
+            }
         } else {
-            std::vector<NodeId> nodes_to_dump;
-            if(node_spec == "po") {
-                for(NodeId id : timing_graph.primary_outputs()) {
-                    nodes_to_dump.push_back(id);
-                }
-            } else if(node_spec == "all") {
-                for(NodeId id = 0; id < timing_graph.num_nodes(); ++id) {
-                    nodes_to_dump.push_back(id);
-                }
-            } else {
-                auto names = split(node_spec, ',');
+            auto names = split(node_spec, ',');
 
-                //Naieve
-                for(NodeId id = 0; id < timing_graph.num_nodes(); ++id) {
-                    for(auto name : names) {
-                        if(name == name_resolver->get_node_name(id)) {
-                            nodes_to_dump.push_back(id);
-                        }
+            //Naieve
+            for(NodeId id = 0; id < timing_graph.num_nodes(); ++id) {
+                for(auto name : names) {
+                    if(name == name_resolver->get_node_name(id)) {
+                        nodes_to_dump.push_back(id);
                     }
                 }
             }
+        }
 
-            for(NodeId node_id : nodes_to_dump) {
-                std::string node_name = name_resolver->get_node_name(node_id);
+        for(NodeId node_id : nodes_to_dump) {
+            std::string node_name = name_resolver->get_node_name(node_id);
 
 
-                std::string csv_filename = "esta.trans." + node_name + ".n" + std::to_string(node_id) + ".csv";
-                std::ofstream csv_os(csv_filename);
+            std::string csv_filename = "esta.trans." + node_name + ".n" + std::to_string(node_id) + ".csv";
+            std::ofstream csv_os(csv_filename);
 
-                std::cout << "Writing " << csv_filename << " for node " << node_id << "\n";
+            std::cout << "Writing " << csv_filename << " for node " << node_id << "\n";
 
-                dump_exhaustive_csv(csv_os, timing_graph, analyzer, sharp_sat_eval, name_resolver, node_id, nvars);
-            }
+            dump_exhaustive_csv(csv_os, timing_graph, analyzer, sharp_sat_eval, name_resolver, node_id, nvars);
         }
 
         g_action_timer.pop_timer("Exhaustive CSV");
