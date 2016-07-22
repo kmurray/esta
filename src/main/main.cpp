@@ -58,6 +58,9 @@ optparse::Values parse_args(int argc, char** argv);
 void print_node_tags(const TimingGraph& tg, std::shared_ptr<AnalyzerType> analyzer, std::shared_ptr<SharpSatType> sharp_sat_eval, NodeId node_id, size_t nvars, float progress);
 void print_node_histogram(const TimingGraph& tg, std::shared_ptr<AnalyzerType> analyzer, std::shared_ptr<SharpSatType> sharp_sat_eval, std::shared_ptr<TimingGraphNameResolver> name_resolver, NodeId node_id, float progress);
 void dump_exhaustive_csv(std::ostream& os, const TimingGraph& tg, std::shared_ptr<AnalyzerType> analyzer, std::shared_ptr<SharpSatType> sharp_sat_eval, std::shared_ptr<TimingGraphNameResolver> name_resolver, NodeId node_id, size_t nvars);
+void dump_max_exhaustive_csv(std::ostream& os, const TimingGraph& tg, std::shared_ptr<AnalyzerType> analyzer, std::shared_ptr<SharpSatType> sharp_sat_eval, std::shared_ptr<TimingGraphNameResolver> name_resolver, size_t nvars, double delay_bin_size);
+std::string print_tag_debug(const ExtTimingTag* tag, BDD f, size_t nvars);
+std::vector<std::tuple<const ExtTimingTag*,BDD>> circuit_max_delays(const TimingGraph& tg, std::shared_ptr<AnalyzerType> analyzer, std::shared_ptr<SharpSatType> sharp_sat_eval, double delay_bin_size);
 std::vector<std::vector<int>> get_cubes(BDD f, size_t nvars);
 std::vector<std::vector<int>> get_minterms(BDD f, size_t nvars);
 std::vector<std::vector<int>> cube_to_minterms(std::vector<int> cube);
@@ -119,7 +122,7 @@ optparse::Values parse_args(int argc, char** argv) {
           ;
 
     //Sets of possible node choices
-    std::vector<std::string> node_choices = {"po", "pi", "all", "none"};
+    std::vector<std::string> node_choices = {"po", "pi", "all", "max", "none"};
 
     parser.add_option("--print_histograms")
           .dest("print_histograms")
@@ -353,40 +356,50 @@ int main(int argc, char** argv) {
     if(options.is_set("dump_exhaustive_csv")) {
         g_action_timer.push_timer("Exhaustive CSV");
 
-        std::vector<NodeId> nodes_to_dump;
 
         std::string node_spec = options.get_as<string>("dump_exhaustive_csv");
-        if(node_spec == "po") {
-            for(NodeId id : timing_graph.primary_outputs()) {
-                nodes_to_dump.push_back(id);
-            }
-        } else if(node_spec == "all") {
-            for(NodeId id = 0; id < timing_graph.num_nodes(); ++id) {
-                nodes_to_dump.push_back(id);
-            }
-        } else {
-            auto names = split(node_spec, ',');
+        if(node_spec == "max") {
+            std::string csv_filename = "esta.max_trans.csv";
+            std::ofstream csv_os(csv_filename);
 
-            //Naieve
-            for(NodeId id = 0; id < timing_graph.num_nodes(); ++id) {
-                for(auto name : names) {
-                    if(name == name_resolver->get_node_name(id)) {
-                        nodes_to_dump.push_back(id);
+            std::cout << "Writing " << csv_filename << " for circuit max delay\n";
+
+            dump_max_exhaustive_csv(csv_os, timing_graph, analyzer, sharp_sat_eval, name_resolver, nvars, options.get_as<double>("delay_bin_size"));
+
+        } else {
+            std::vector<NodeId> nodes_to_dump;
+            if(node_spec == "po") {
+                for(NodeId id : timing_graph.primary_outputs()) {
+                    nodes_to_dump.push_back(id);
+                }
+            } else if(node_spec == "all") {
+                for(NodeId id = 0; id < timing_graph.num_nodes(); ++id) {
+                    nodes_to_dump.push_back(id);
+                }
+            } else {
+                auto names = split(node_spec, ',');
+
+                //Naieve
+                for(NodeId id = 0; id < timing_graph.num_nodes(); ++id) {
+                    for(auto name : names) {
+                        if(name == name_resolver->get_node_name(id)) {
+                            nodes_to_dump.push_back(id);
+                        }
                     }
                 }
             }
-        }
 
-        for(NodeId node_id : nodes_to_dump) {
-            std::string node_name = name_resolver->get_node_name(node_id);
+            for(NodeId node_id : nodes_to_dump) {
+                std::string node_name = name_resolver->get_node_name(node_id);
 
 
-            std::string csv_filename = "esta.trans." + node_name + ".n" + std::to_string(node_id) + ".csv";
-            std::ofstream csv_os(csv_filename);
+                std::string csv_filename = "esta.trans." + node_name + ".n" + std::to_string(node_id) + ".csv";
+                std::ofstream csv_os(csv_filename);
 
-            std::cout << "Writing " << csv_filename << " for node " << node_id << "\n";
+                std::cout << "Writing " << csv_filename << " for node " << node_id << "\n";
 
-            dump_exhaustive_csv(csv_os, timing_graph, analyzer, sharp_sat_eval, name_resolver, node_id, nvars);
+                dump_exhaustive_csv(csv_os, timing_graph, analyzer, sharp_sat_eval, name_resolver, node_id, nvars);
+            }
         }
 
         g_action_timer.pop_timer("Exhaustive CSV");
@@ -584,6 +597,120 @@ void dump_exhaustive_csv(std::ostream& os, const TimingGraph& tg, std::shared_pt
         }
         //Output transition
         os << std::get<1>(tuple) << ",";
+        //Delay
+        os << std::get<2>(tuple) << ",";
+        
+        os << "\n";
+    }
+}
+
+std::string print_tag_debug(const ExtTimingTag* tag, BDD f, size_t nvars) {
+    double sat_frac = CountMintermFraction(f.getNode());
+
+    std::stringstream ss;
+    ss << tag << " OutTrans: " << tag->trans_type() << " Arr: " << tag->arr_time().value();
+    ss << " #SAT: " << sat_frac * pow(2, nvars) << " (" << sat_frac << ")";
+    return ss.str();
+}
+
+std::vector<std::tuple<const ExtTimingTag*,BDD>> circuit_max_delays(const TimingGraph& tg, std::shared_ptr<AnalyzerType> analyzer, std::shared_ptr<SharpSatType> sharp_sat_eval, double delay_bin_size) {
+    ExtTimingTags max_tags;
+
+    //Calculate the max tags
+    for(NodeId po_node_id : tg.primary_outputs()) {
+        const ExtTimingTags& node_tags = analyzer->setup_data_tags(po_node_id);
+
+        //std::cout << "Max Input Tags (Node " << po_node_id << "):" << std::endl;
+        for(const ExtTimingTag* tag : node_tags) {
+            //std::cout << "\t" << *tag << std::endl;
+            ExtTimingTag* new_tag = new ExtTimingTag(*tag);
+            new_tag->set_trans_type(TransitionType::MAX);
+            max_tags.max_arr(new_tag, delay_bin_size);
+        }
+    }
+
+    //When we calculate the max tags above, we may end up with the same set of input transitions
+    //appearing multiple times in different tags (i.e. different delays to the primary outputs).
+    //
+    //Since we want to ensure we report *only* the maximum delay for a particular set of input transitions
+    //we walk through the tags from highest to lowest delay and record which minterms have already
+    //been covered.  These covered minterms are then used to exclude any repeated minterms with delay
+    //lower than the maximum.
+
+    //TODO: Sort
+    std::sort(max_tags.begin(), max_tags.end(),
+                [](const ExtTimingTag* lhs, const ExtTimingTag* rhs) {
+                    return lhs->arr_time().value() > rhs->arr_time().value();
+                }
+             );
+
+    std::vector<std::tuple<const ExtTimingTag*,BDD>> max_delays;
+
+    BDD covered_terms = g_cudd.bddZero();
+    for(const auto tag : max_tags) {
+        auto bdd = sharp_sat_eval->build_bdd_xfunc(tag);
+
+        //Remove any terms already covered
+        bdd = bdd.And(!covered_terms);
+
+        //Save the result
+        max_delays.emplace_back(tag, bdd);
+
+        covered_terms |= bdd;
+    }
+
+    return max_delays;
+}
+
+void dump_max_exhaustive_csv(std::ostream& os, const TimingGraph& tg, std::shared_ptr<AnalyzerType> analyzer, std::shared_ptr<SharpSatType> sharp_sat_eval, std::shared_ptr<TimingGraphNameResolver> name_resolver, size_t nvars, double delay_bin_size) {
+    ExtTimingTags max_tags;
+
+
+    //Evaluate and them
+    using TupleVal = std::tuple<std::vector<TransitionType>,TransitionType,double>;
+    std::vector<TupleVal> exhaustive_values;
+
+    auto max_delays = circuit_max_delays(tg, analyzer, sharp_sat_eval, delay_bin_size);
+    for(auto tag_bdd_tuple : max_delays) {
+        auto tag = std::get<0>(tag_bdd_tuple);
+        auto bdd = std::get<1>(tag_bdd_tuple);
+
+        auto input_transitions = get_transitions(bdd, nvars);
+
+        for(auto input_case : input_transitions) {
+            assert(input_case.size() == nvars / 2);
+            auto tuple = std::make_tuple(input_case, TransitionType::MAX, tag->arr_time().value());
+            exhaustive_values.push_back(tuple);
+        }
+    }
+
+    assert(exhaustive_values.size() == pow(2, nvars));
+
+    //CSV Header
+    for(int i = g_cudd.ReadSize() - nvars; i < g_cudd.ReadSize(); i += 2) {
+        auto var_name = g_cudd.getVariableName(i);
+        NodeId pi_node_id;
+
+        //Extract the node id
+        std::stringstream(std::string(var_name.begin() + 1, var_name.end())) >> pi_node_id;
+
+        //We use pi_node_id+1 since we name the input pin, rather than the source
+
+        os << name_resolver->get_node_name(pi_node_id+1) << ":" << var_name << ",";
+    }
+    os << "MAX" << ",";
+    os << "delay" << ",";
+    os << "\n";
+
+    //CSV Values
+    for(auto tuple : exhaustive_values) {
+        //Input transitions
+        for(auto trans : std::get<0>(tuple)) {
+            os << trans << ",";
+        }
+        //Output transition
+        //os << std::get<1>(tuple) << ",";
+        os << "-" << ",";
         //Delay
         os << std::get<2>(tuple) << ",";
         

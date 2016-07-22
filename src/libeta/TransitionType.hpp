@@ -8,6 +8,7 @@ enum class TransitionType {
     HIGH,
     LOW,
     CLOCK,
+    MAX,
     //STEADY,
     //SWITCH
     UNKOWN

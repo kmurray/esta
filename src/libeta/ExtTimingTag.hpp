@@ -187,7 +187,7 @@ inline bool ExtTimingTag::matches(const ExtTimingTag* other, double delay_bin_si
     bool match = (clock_domain() == other->clock_domain());
 
 #ifdef TAG_MATCH_TRANSITION
-    match &= (trans_type() == other->trans_type());
+    match &= (trans_type() == other->trans_type() || trans_type() == TransitionType::MAX);
 #endif
 
 #ifdef TAG_MATCH_DELAY

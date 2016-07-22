@@ -9,6 +9,7 @@ std::ostream& operator<<(std::ostream& os, const TransitionType& trans) {
     else if (trans == TransitionType::HIGH) os << "H";
     else if (trans == TransitionType::LOW) os << "L";
     else if (trans == TransitionType::CLOCK) os << "C";
+    else if (trans == TransitionType::MAX) os << "M";
     else if (trans == TransitionType::UNKOWN) os << "U";
     else assert(0);
     return os;
@@ -19,5 +20,4 @@ bool operator<(const std::vector<TransitionType>& lhs, const std::vector<Transit
         if(lhs[i] < rhs[i]) return true;
     }
     return false;
-    //return true;
 }
