@@ -446,7 +446,7 @@ void print_node_tags(const TimingGraph& tg, std::shared_ptr<AnalyzerType> analyz
         float total_sat_frac = 0.;
         for(auto tag : data_tags) {
 
-            auto switch_prob = sharp_sat_eval->count_sat_fraction(tag, node_id);
+            auto switch_prob = sharp_sat_eval->count_sat_fraction(tag);
             cout << "\t" << *tag << ", #SAT frac: " << switch_prob << "\n";
 
             total_sat_frac += switch_prob;
@@ -484,7 +484,7 @@ void print_node_histogram(const TimingGraph& tg, std::shared_ptr<AnalyzerType> a
     for(auto tag : sorted_data_tags) {
 
         auto delay = tag->arr_time().value();
-        auto switch_prob = sharp_sat_eval->count_sat_fraction(tag, node_id);
+        auto switch_prob = sharp_sat_eval->count_sat_fraction(tag);
 
         delay_prob_histo[delay] += switch_prob;
     }

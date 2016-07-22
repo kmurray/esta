@@ -29,14 +29,16 @@ class SharpSatBddEvaluator : public SharpSatEvaluator<Analyzer> {
                     //We need to generate and record a new 'next' variable
                     pi_next_bdd_vars_[node_id] = g_cudd.bddVar();
                     g_cudd.pushVariableName("n" + std::to_string(node_id) + "'");
+                } else if(node_type == TN_Type::CONSTANT_GEN_SOURCE) {
+                    const_gens_.insert(node_id);
                 }
             }
 
             assert(pi_curr_bdd_vars_.size() + pi_curr_bdd_vars_.size() == nvars);
         }
 
-        double count_sat_fraction(const ExtTimingTag* tag, NodeId node_id) override {
-            BDD f = build_bdd_xfunc(tag, node_id, 0);
+        double count_sat_fraction(const ExtTimingTag* tag) override {
+            BDD f = build_bdd_xfunc(tag);
 
             return bdd_sharpsat_fraction(f);
         }
@@ -65,57 +67,13 @@ class SharpSatBddEvaluator : public SharpSatEvaluator<Analyzer> {
              g_cudd.SetNextReordering(4096);
         }
 
-        BDD build_bdd_xfunc(const ExtTimingTag* tag, const NodeId node_id, int level=0) {
+        BDD build_bdd_xfunc(const ExtTimingTag* tag, int level=0) {
             /*std::cout << "build_xfunc at Node: " << node_id << " TAG: " << tag << "\n";*/
             auto key = tag;
 
+#ifdef BDD_CALC_DEBUG
             //Indent based on recursion level 
             std::string tab(level, ' ');
-
-#ifndef USE_BDD_CACHE
-            BDD f;
-            auto node_type = this->tg_.node_type(node_id);
-            if(node_type == TN_Type::INPAD_SOURCE || node_type == TN_Type::FF_SOURCE) {
-                f = generate_pi_switch_func(node_id, tag->trans_type());
-                //std::cout << tab << "Node " << node_id << " " << tag->trans_type() << " Base xfunc: " << f << "\n";
-            } else if(node_type == TN_Type::CONSTANT_GEN_SOURCE) {
-                //Constant generator always satisifes any input combination
-                f = g_cudd.bddOne(); 
-            } else {
-                //Recursive case
-                f = g_cudd.bddZero();
-                int scenario_cnt = 0;
-
-                //Consider every input which generates this tag
-                for(const auto& transition_scenario : tag->input_tags()) {
-                    BDD f_scenario = g_cudd.bddOne();
-
-                    for(int edge_idx = 0; edge_idx < this->tg_.num_node_in_edges(node_id); edge_idx++) {
-                        EdgeId edge_id = this->tg_.node_in_edge(node_id, edge_idx);
-                        NodeId src_node_id = this->tg_.edge_src_node(edge_id);
-
-                        if(this->tg_.node_type(src_node_id) == TN_Type::FF_CLOCK) {
-                            continue;
-                        }
-
-                        const ExtTimingTag* src_tag = transition_scenario[edge_idx];
-                        f_scenario &= this->build_bdd_xfunc(src_tag, src_node_id, level+1);
-                    }
-
-                    f |= f_scenario;
-                    //std::cout << tab;
-                    //std::cout << "Node " << node_id << " Scenario: " << scenario_cnt << " f_scenario: " << f_scenario;
-                    //std::cout << " xfunc: " << f << " #SAT(f_scenario): " << bdd_sharpsat(f_scenario) << " #SAT(f): " << bdd_sharpsat(f) << "\n";
-
-                    scenario_cnt++;
-                }
-            }
-            return f;
-
-#else //USE_BDD_CACHE
-
-
-#ifdef BDD_CALC_DEBUG
             std::cout << tab << "Requested BDD for " << node_id << " " << tag << " " << this->tg_.node_type(node_id) << "\n";
 #endif
 
@@ -123,38 +81,27 @@ class SharpSatBddEvaluator : public SharpSatEvaluator<Analyzer> {
                 //Not found calculate it
 
                 BDD f;
-                auto node_type = this->tg_.node_type(node_id);
-                if(node_type == TN_Type::INPAD_SOURCE || node_type == TN_Type::FF_SOURCE) {
-                    /*std::cout << "Node " << node_id << " Base";*/
-                    f = generate_pi_switch_func(node_id, tag->trans_type());
-                    /*std::cout << " xfunc: " << f << "\n";*/
-                } else if(node_type == TN_Type::CONSTANT_GEN_SOURCE) {
-                    //Constant generator always satisifes any input combination
-                    f = g_cudd.bddOne(); 
+                const auto& input_tags = tag->input_tags();
+                if(input_tags.empty()) {
+                    //std::cout << "Node " << tag.launch_node() << " Base";
+                    f = generate_pi_switch_func(tag->launch_node(), tag->trans_type());
+                    //std::cout << " xfunc: " << f << "\n";
                 } else {
+                    //Recursive case
                     f = g_cudd.bddZero();
-                    int scenario_cnt = 0;
+                    //int scenario_cnt = 0;
 
-                    for(const auto& transition_scenario : tag->input_tags()) {
+                    for(const auto& transition_scenario : input_tags) {
                         BDD f_scenario = g_cudd.bddOne();
 
-                        for(int edge_idx = 0; edge_idx < this->tg_.num_node_in_edges(node_id); edge_idx++) {
-                            EdgeId edge_id = this->tg_.node_in_edge(node_id, edge_idx);
-                            NodeId src_node_id = this->tg_.edge_src_node(edge_id);
-
-                            if(this->tg_.node_type(src_node_id) == TN_Type::FF_CLOCK) {
-                                continue;
-                            }
-
-                            const ExtTimingTag* src_tag = transition_scenario[edge_idx];
-                            f_scenario &= this->build_bdd_xfunc(src_tag, src_node_id, level+1);
+                        for(const ExtTimingTag* src_tag : transition_scenario) {
+                            f_scenario &= this->build_bdd_xfunc(src_tag, level+1);
                         }
 
                         f |= f_scenario;
-                        /*std::cout << "Node " << node_id << " Scenario: " << scenario_cnt;*/
-                        /*std::cout << " xfunc: " << f << "\n";*/
-
-                        scenario_cnt++;
+                        //std::cout << "Node " << node_id << " Scenario: " << scenario_cnt;
+                        //std::cout << " xfunc: " << f << "\n";
+                        //scenario_cnt++;
                     }
                 }
 
@@ -174,7 +121,6 @@ class SharpSatBddEvaluator : public SharpSatEvaluator<Analyzer> {
                 //Found it
                 return f;
             }
-#endif //USE_BDD_CACHE
             assert(0);
         }
 
@@ -186,6 +132,14 @@ class SharpSatBddEvaluator : public SharpSatEvaluator<Analyzer> {
         }
 
         BDD generate_pi_switch_func(NodeId node_id, TransitionType trans) {
+
+            //A constant generator
+            if(const_gens_.count(node_id)) {
+                //Constant generator always satisifes any input combination
+                return g_cudd.bddOne();
+            }
+
+            //A generic input
             auto curr_iter = pi_curr_bdd_vars_.find(node_id);
             assert(curr_iter != pi_curr_bdd_vars_.end());
 
@@ -227,6 +181,7 @@ class SharpSatBddEvaluator : public SharpSatEvaluator<Analyzer> {
         //BDD variable information
         std::unordered_map<NodeId,BDD> pi_curr_bdd_vars_;
         std::unordered_map<NodeId,BDD> pi_next_bdd_vars_;
+        std::unordered_set<NodeId> const_gens_;
 
         BddCache bdd_cache_;
 };

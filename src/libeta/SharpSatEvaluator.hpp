@@ -12,7 +12,7 @@ class SharpSatEvaluator {
             , nvars_(nvars) {}
         virtual ~SharpSatEvaluator() {}
 
-        virtual double count_sat_fraction(const ExtTimingTag* tag, NodeId node_id) = 0;
+        virtual double count_sat_fraction(const ExtTimingTag* tag) = 0;
         virtual void reset() {}
 
     protected:
