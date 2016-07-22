@@ -57,6 +57,7 @@ EtaStats g_eta_stats;
 optparse::Values parse_args(int argc, char** argv);
 void print_node_tags(const TimingGraph& tg, std::shared_ptr<AnalyzerType> analyzer, std::shared_ptr<SharpSatType> sharp_sat_eval, NodeId node_id, size_t nvars, float progress);
 void print_node_histogram(const TimingGraph& tg, std::shared_ptr<AnalyzerType> analyzer, std::shared_ptr<SharpSatType> sharp_sat_eval, std::shared_ptr<TimingGraphNameResolver> name_resolver, NodeId node_id, float progress);
+void print_max_node_histogram(const TimingGraph& tg, std::shared_ptr<AnalyzerType> analyzer, std::shared_ptr<SharpSatType> sharp_sat_eval, double delay_bin_size);
 void dump_exhaustive_csv(std::ostream& os, const TimingGraph& tg, std::shared_ptr<AnalyzerType> analyzer, std::shared_ptr<SharpSatType> sharp_sat_eval, std::shared_ptr<TimingGraphNameResolver> name_resolver, NodeId node_id, size_t nvars);
 void dump_max_exhaustive_csv(std::ostream& os, const TimingGraph& tg, std::shared_ptr<AnalyzerType> analyzer, std::shared_ptr<SharpSatType> sharp_sat_eval, std::shared_ptr<TimingGraphNameResolver> name_resolver, size_t nvars, double delay_bin_size);
 std::string print_tag_debug(const ExtTimingTag* tag, BDD f, size_t nvars);
@@ -330,7 +331,10 @@ int main(int argc, char** argv) {
         g_action_timer.push_timer("Output tag histograms");
 
         float node_count = 0;
-        if(options.get_as<string>("print_histograms") == "pi") {
+        if(options.get_as<string>("print_histograms") == "max") {
+                print_max_node_histogram(timing_graph, analyzer, sharp_sat_eval, options.get_as<double>("delay_bin_size"));
+
+        } else if(options.get_as<string>("print_histograms") == "pi") {
             for(auto node_id : timing_graph.primary_inputs()) {
                 print_node_histogram(timing_graph, analyzer, sharp_sat_eval, name_resolver, node_id, node_count / timing_graph.primary_inputs().size());
                 node_count += 1;
@@ -543,6 +547,60 @@ void print_node_histogram(const TimingGraph& tg, std::shared_ptr<AnalyzerType> a
     g_action_timer.pop_timer("Node " + std::to_string(node_id) + " histogram"); 
 }
 
+void print_max_node_histogram(const TimingGraph& tg, std::shared_ptr<AnalyzerType> analyzer, std::shared_ptr<SharpSatType> sharp_sat_eval, double delay_bin_size) {
+    g_action_timer.push_timer("Max histogram"); 
+
+    auto max_delays = circuit_max_delays(tg, analyzer, sharp_sat_eval, delay_bin_size);
+
+    std::map<double,double> delay_prob_histo;
+    for(auto tag_bdd_tuple : max_delays) {
+        auto tag = std::get<0>(tag_bdd_tuple);
+        auto bdd = std::get<1>(tag_bdd_tuple);
+        
+        delay_prob_histo[tag->arr_time().value()] = CountMintermFraction(bdd.getNode());
+    }
+
+    double total_prob = 0.;
+
+    //Print to stdou
+    cout << "\tDelay Prob\n";
+    cout << "\t----- ----\n";
+    for(auto kv : delay_prob_histo) {
+
+        auto delay = kv.first;
+        auto switch_prob = kv.second;
+
+        std::cout << "\t" << std::setw(5) << delay << " " << switch_prob << "\n";
+
+        total_prob += switch_prob;
+    }
+
+    //Sanity check, total probability should be equal to 1.0 (accounting for FP round-off)
+    double epsilon = 1e-9;
+    assert(total_prob >= 1. - epsilon && total_prob <= 1. + epsilon);
+
+    //Print to a csv
+    std::string filename = "esta.max_hist.csv";
+    std::ofstream os(filename);
+
+    //Header
+    os << "delay,probability\n"; 
+    //Rows
+    for(auto kv : delay_prob_histo) {
+
+        auto delay = kv.first;
+        auto switch_prob = kv.second;
+
+        os << delay << "," << switch_prob << "\n"; 
+
+        total_prob += switch_prob;
+    }
+
+    sharp_sat_eval->reset();
+
+    g_action_timer.pop_timer("Max histogram"); 
+}
+
 void dump_exhaustive_csv(std::ostream& os, const TimingGraph& tg, std::shared_ptr<AnalyzerType> analyzer, std::shared_ptr<SharpSatType> sharp_sat_eval, std::shared_ptr<TimingGraphNameResolver> name_resolver, NodeId node_id, size_t nvars) {
     auto& data_tags = analyzer->setup_data_tags(node_id);
 
@@ -637,7 +695,7 @@ std::vector<std::tuple<const ExtTimingTag*,BDD>> circuit_max_delays(const Timing
     //been covered.  These covered minterms are then used to exclude any repeated minterms with delay
     //lower than the maximum.
 
-    //TODO: Sort
+    //Sort into ascending order
     std::sort(max_tags.begin(), max_tags.end(),
                 [](const ExtTimingTag* lhs, const ExtTimingTag* rhs) {
                     return lhs->arr_time().value() > rhs->arr_time().value();
