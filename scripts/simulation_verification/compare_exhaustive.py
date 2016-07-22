@@ -129,6 +129,8 @@ def compare_exhaustive_csv(ref_data, cmp_data, show_pessimistic):
             pass #Agree on final output high
         elif ref_output_trans in ["F", "L"] and cmp_output_trans in ["F", "L"]:
             pass #Agree on final output low
+        elif ref_output_trans == "-" and cmp_output_trans == "-":
+            pass #No specified transition (e.g. max delay)
         else:
             #Error!
             mismatch_output_trans_count += 1
