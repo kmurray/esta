@@ -104,6 +104,7 @@ def compare_exhaustive_csv(ref_data, cmp_data, show_pessimistic):
     reduced_cmp_col_names = map(lambda x: x.split(":")[0], cmp_input_col_names) #Name is part before ':'
     assert ref_input_col_names == reduced_cmp_col_names, "CSV input columns not in the same order"
 
+    print "Sorting cases"
     #Sort the two data frames so the input transitions are in the same order
     ref_data = ref_data.sort_values(ref_input_col_names)
     cmp_data = cmp_data.sort_values(cmp_input_col_names)
@@ -112,34 +113,45 @@ def compare_exhaustive_csv(ref_data, cmp_data, show_pessimistic):
     ref_data.index = range(0,len(ref_data))
     cmp_data.index = range(0,len(cmp_data))
 
+    print "Comparing Input Values"
     if not np.array_equal(ref_data.loc[:,ref_input_col_names].values, cmp_data.loc[:,cmp_input_col_names].values):
         assert False, "Mismtached input transitions"
 
+    print "Comparing Output Transitions"
     #We check that the output transitions agree on the final stable logic value
     # Note that we do not check for precise correspondance (e.g. L <-> L) since
     # the ESTA tool may (pessimistically) report a F (with some delay) where the
     # simulator might produce a L (with zero delay). So long as they agree on the
     # final value everything is still correct, so that is what we check here
-    mismatch_output_trans_count = 0
-    for row_idx in xrange(ref_data.shape[0]):
-        ref_output_trans = ref_data.loc[row_idx,ref_output_col_name]
-        cmp_output_trans = cmp_data.loc[row_idx,cmp_output_col_name]
+    #
+    #We do the comparisons in a vectorized manner for speed
 
-        if ref_output_trans in ["R", "H"] and cmp_output_trans in ["R", "H"]:
-            pass #Agree on final output high
-        elif ref_output_trans in ["F", "L"] and cmp_output_trans in ["F", "L"]:
-            pass #Agree on final output low
-        elif ref_output_trans == "-" and cmp_output_trans == "-":
-            pass #No specified transition (e.g. max delay)
-        else:
-            #Error!
-            mismatch_output_trans_count += 1
-            print "Mismatched stable output value! ", ref_data.loc[row_idx,ref_input_col_names].values, "->", ref_data.loc[row_idx,ref_output_col_name], "(expected", cmp_data.loc[row_idx,cmp_output_col_name], ")"
+    #Build up the boolean selectors for the different cases
+    ref_final_high_select = (ref_data[ref_output_col_name] == "R") | (ref_data[ref_output_col_name] == "H")
+    ref_final_low_select = (ref_data[ref_output_col_name] == "F") | (ref_data[ref_output_col_name] == "L")
+    ref_na_select = (ref_data[ref_output_col_name] == "-")
 
-            if mismatch_output_trans_count > 1000:
-                print "Giving up after 1000 mismatchs"
-                break
-    if mismatch_output_trans_count > 0:
+    cmp_final_high_select = (cmp_data[cmp_output_col_name] == "R") | (cmp_data[cmp_output_col_name] == "H")
+    cmp_final_low_select = (cmp_data[cmp_output_col_name] == "F") | (cmp_data[cmp_output_col_name] == "L")
+    cmp_na_select = (cmp_data[cmp_output_col_name] == "-")
+
+    #Generate selectors for differences and report errors if any differences are found
+    high_mismtach_select = (ref_final_high_select != cmp_final_high_select)
+    if high_mismtach_select.any():
+        #Not all final 'high' values match
+        debug_output_trans_diff(ref_data[high_mismtach_select], cmp_data[high_mismtach_select], ref_input_col_names, ref_output_col_name, cmp_input_col_names, cmp_output_col_name)
+        sys.exit(1)
+
+    low_mismtach_select = (ref_final_low_select != cmp_final_low_select)
+    if low_mismtach_select.any():
+        #Not all final 'low' values match
+        debug_output_trans_diff(ref_data[low_mismtach_select], cmp_data[low_mismtach_select], ref_input_col_names, ref_output_col_name, cmp_input_col_names, cmp_output_col_name)
+        sys.exit(1)
+
+    na_mismtach_select = (ref_na_select != cmp_na_select)
+    if na_mismtach_select.any():
+        #Not all final '-' values match
+        debug_output_trans_diff(ref_data[na_mismtach_select], cmp_data[na_mismtach_select], ref_input_col_names, ref_output_col_name, cmp_input_col_names, cmp_output_col_name)
         sys.exit(1)
 
     print "Comparing delays"
@@ -177,6 +189,18 @@ def compare_exhaustive_csv(ref_data, cmp_data, show_pessimistic):
         return False
     else:
         return True
+
+def debug_output_trans_diff(ref_mismatches, cmp_mismatches, ref_input_col_names, ref_output_col_name, cmp_input_col_names, cmp_output_col_name, mismatch_limit=100):
+    rows_to_print = min(ref_mismatches.shape[0], mismatch_limit)
+    if ref_mismatches.shape[0] != rows_to_print:
+        print "First", rows_to_print, "mismatches shown"
+    else:
+        print "All", rows_to_print, "mismatches shown"
+
+    for row_idx in ref_mismatches.index:
+
+        #Error!
+        print "Mismatched stable output value! ", ref_mismatches.loc[row_idx,ref_input_col_names].values, "->", cmp_mismatches.loc[row_idx,cmp_output_col_name], "(expected", ref_mismatches.loc[row_idx,ref_output_col_name], ")"
 
 def print_delay_histogram(transition_data):
     print "delay prob  count"
