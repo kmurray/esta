@@ -125,13 +125,13 @@ optparse::Values parse_args(int argc, char** argv) {
     parser.add_option("--max_histogram")
           .action("store_true")
           .set_default("true")
-          .help("Output the maximum delay histogram")
+          .help("Output the maximum delay histogram to console and esta.max_hist.csv")
           ;
 
     parser.add_option("--max_exhaustive")
           .action("store_true")
           .set_default("false")
-          .help("Output the maximum delay exhaustively to a CSV file")
+          .help("Output the maximum delay exhaustively to esta.max_trans.csv")
           ;
 
     //Sets of possible node choices
@@ -141,7 +141,7 @@ optparse::Values parse_args(int argc, char** argv) {
           .dest("print_histograms")
           .choices(node_choices.begin(), node_choices.end())
           .metavar("VALUE")
-          .set_default("po")
+          .set_default("none")
           .help("What node delay histograms to print. Must be one of {'po', 'pi', 'all', 'none'} (primary inputs, primary outputs, all nodes). Default: %default")
           ;
 
@@ -341,7 +341,7 @@ int main(int argc, char** argv) {
         print_max_node_histogram(timing_graph, analyzer, sharp_sat_eval, options.get_as<double>("delay_bin_size"));
     }
 
-    if(options.get_as<string>("print_histogram") != "none") {
+    if(options.get_as<string>("print_histograms") != "none") {
         g_action_timer.push_timer("Output tag histograms");
 
         float node_count = 0;

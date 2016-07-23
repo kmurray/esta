@@ -475,9 +475,10 @@ def run_esta(args, design_info, sdf_file):
             "-d", args.delay_bin_size,
             "-m", args.max_permutations]
 
-    if args.sim_mode == "exhaustive" and len(dump_outputs) > 0:
-        cmd += ["--dump_exhaustive_csv", ",".join(dump_outputs)]
+    if args.sim_mode == "exhaustive":
         cmd += ["--max_exhaustive"]
+        if len(dump_outputs) > 0 and not (len(dump_outputs) == 1 and dump_outputs[0] == ""):
+            cmd += ["--dump_exhaustive_csv", ",".join(dump_outputs)]
 
     run_command(cmd, verbose=args.verbose)
 
