@@ -123,14 +123,13 @@ optparse::Values parse_args(int argc, char** argv) {
           ;
 
     parser.add_option("--max_histogram")
-          .action("store_true")
-          .set_default("true")
+          .set_default(true)
           .help("Output the maximum delay histogram to console and esta.max_hist.csv")
           ;
 
     parser.add_option("--max_exhaustive")
+          .set_default(false)
           .action("store_true")
-          .set_default("false")
           .help("Output the maximum delay exhaustively to esta.max_trans.csv")
           ;
 
@@ -337,7 +336,9 @@ int main(int argc, char** argv) {
         g_action_timer.pop_timer("Output tags"); 
     }
 
-    if(options.is_set("max_histogram")) {
+    bool do_max_hist = options.get_as<bool>("max_histogram");
+
+    if(do_max_hist) {
         print_max_node_histogram(timing_graph, analyzer, sharp_sat_eval, options.get_as<double>("delay_bin_size"));
     }
 
@@ -368,13 +369,17 @@ int main(int argc, char** argv) {
         g_action_timer.pop_timer("Output tag histograms"); 
     }
 
-    if(options.is_set("max_exhaustive")) {
+    bool do_max_exhaustive = options.get_as<bool>("max_exhaustive");
+
+    if(do_max_exhaustive) {
+        g_action_timer.push_timer("Exhaustive Max CSV");
         std::string csv_filename = "esta.max_trans.csv";
         std::ofstream csv_os(csv_filename);
 
         std::cout << "Writing " << csv_filename << " for circuit max delay\n";
 
         dump_max_exhaustive_csv(csv_os, timing_graph, analyzer, sharp_sat_eval, name_resolver, nvars, options.get_as<double>("delay_bin_size"));
+        g_action_timer.pop_timer("Exhaustive Max CSV");
     }
 
     if(options.is_set("dump_exhaustive_csv")) {
