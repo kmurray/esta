@@ -16,7 +16,7 @@ import pyverilog.vparser.parser as verilog_parser
 import pyverilog.vparser.ast as vast
 from pyverilog.ast_code_generator.codegen import ASTCodeGenerator
 
-from esta_exhaustive_to_histogram import exhaustive_csv_to_histogram_csv
+from esta_trans_to_hist import exhaustive_csv_to_histogram_csv
 
 SIM_CLOCK="sim_clk"
 
@@ -40,7 +40,7 @@ class CommandRunner(object):
 
     def __init__(self, timeout_sec=None, max_memory_mb=None, track_memory=True, verbose=False, echo_cmd=False, indent="\t"):
         """
-        An object for running system commands with timeouts, memory limits and varying verbose-ness 
+        An object for running system commands with timeouts, memory limits and varying verbose-ness
 
         Arguments
         =========
@@ -119,7 +119,7 @@ class CommandRunner(object):
             # Read the output line-by-line and log it
             # to a file.
             #
-            # We do this rather than use proc.communicate() 
+            # We do this rather than use proc.communicate()
             # to get interactive output
             with open(os.path.join(work_dir, log_filename), 'w') as log_f:
                 #Print the command at the top of the log
@@ -130,7 +130,7 @@ class CommandRunner(object):
 
                     #Send to log file
                     print >> log_f, line,
-		    log_f.flush()
+                    log_f.flush()
 
                     #Save the output
                     cmd_output.append(line)
@@ -138,7 +138,7 @@ class CommandRunner(object):
                     #Send to stdout
                     if self._verbose:
                         print indent_depth*self._indent + line,
-			sys.stdout.flush()
+                        sys.stdout.flush()
 
                     #Abort if over time limit
                     elapsed_time = time.time() - start_time
@@ -159,7 +159,7 @@ class CommandRunner(object):
                 cmd_returncode = proc.returncode
 
         if exepcted_return_code != None and cmd_returncode != exepcted_return_code:
-            raise CommandError(msg="Executable {exec_name} failed".format(exec_name=os.path.basename(orig_cmd[0])), 
+            raise CommandError(msg="Executable {exec_name} failed".format(exec_name=os.path.basename(orig_cmd[0])),
                                cmd=cmd,
                                log=os.path.join(work_dir, log_filename),
                                returncode=cmd_returncode)
@@ -259,7 +259,6 @@ def parse_args():
     vtr_arguments.add_argument("--vpr_exec",
                                default="vpr",
                                help="VTR root directory")
-    
     #
     # ESTA related arguments
     #
@@ -383,7 +382,7 @@ def esta_flow(args):
 
         print
         print "Running Modelsim"
-        modelsim_results = run_modelsim(args, 
+        modelsim_results = run_modelsim(args,
                                         sdf_file=post_synth_sdf,
                                         cpd_ps=vpr_cpd_ps,
                                         verilog_info=design_info,
@@ -396,19 +395,19 @@ def esta_flow(args):
         transition_results = run_transition_extraction(args, vcd_file, design_info)
 
     if args.run_compare and args.sim_mode == "exhaustive":
-        print 
+        print
         print "Comparing ESTA and Simulation Exhaustive Results"
         run_comparison(args, design_info)
 
     if args.run_plot:
-        print 
+        print
         print "Loading STA Endpoint Timing"
         endpoint_timing = load_endpoint_timing()
 
         if vpr_cpd_ps != None:
             assert np.isclose(vpr_cpd_ps, max(endpoint_timing.values()))
 
-        print 
+        print
         print "Plotting ESTA and Simulation Results"
         run_plot(args, design_info, endpoint_timing)
 
@@ -421,7 +420,6 @@ def run_vtr(args, vpr_log_filename):
         shutil.copy(orig_blif_location, new_blif_location)
 
     args.blif = new_blif_location
-    
     cmd = [
             args.vpr_exec,
             args.arch,
@@ -497,21 +495,21 @@ def run_modelsim(args, sdf_file, cpd_ps, verilog_info, vcd_file):
 
     #Write out the test bench
     with open(tb_verilog, "w") as f:
-        for line in create_testbench(args, 
+        for line in create_testbench(args,
                                      sdf_file=sdf_file,
-                                     critical_path_delay_ps=cpd_ps, 
-                                     top_module=verilog_info['module'], 
-                                     dut_inputs=verilog_info['inputs'], 
+                                     critical_path_delay_ps=cpd_ps,
+                                     top_module=verilog_info['module'],
+                                     dut_inputs=verilog_info['inputs'],
                                      dut_outputs=verilog_info['outputs'],
                                      dut_clocks=verilog_info['clocks']):
             print >>f, line
 
     #Write out the modelsim .do file
     with open(sim_do_file, "w") as f:
-        for line in create_modelsim_do(args, 
-                                       vcd_file, 
+        for line in create_modelsim_do(args,
+                                       vcd_file,
                                        [modelsim_top_verilog, tb_verilog] + args.link_verilog,
-                                       dut_inputs=verilog_info['inputs'], 
+                                       dut_inputs=verilog_info['inputs'],
                                        dut_outputs=verilog_info['outputs'],
                                        dut_clocks=verilog_info['clocks']):
             print >>f, line
@@ -922,7 +920,7 @@ def create_modelsim_do(args, vcd_file, verilog_files, dut_inputs, dut_outputs, d
     return do_lines
 
 def create_testbench(args, top_module, sdf_file, critical_path_delay_ps, dut_inputs, dut_outputs, dut_clocks):
-    sim_clock_period = 2*args.cpd_scale*critical_path_delay_ps 
+    sim_clock_period = 2*args.cpd_scale*critical_path_delay_ps
 
     tb_lines = []
     tb_lines.append("`timescale 1ps/1ps")
@@ -955,13 +953,13 @@ def create_testbench(args, top_module, sdf_file, critical_path_delay_ps, dut_inp
         tb_lines.append("//DUT clocks")
         for clock in dut_clocks:
             tb_lines.append("logic {sig};".format(sig=clock))
-        
+
     tb_lines.append("")
 
     tb_lines.append("//DUT inputs")
     for input in dut_inputs:
         tb_lines.append("logic {sig};".format(sig=input))
-        
+
     tb_lines.append("")
 
     tb_lines.append("//DUT outputs")
@@ -1037,8 +1035,6 @@ def create_testbench(args, top_module, sdf_file, critical_path_delay_ps, dut_inp
         tb_lines.append("")
         #tb_lines.append("    if(count >= {finish_count}) finished <= 1'b1;".format(finish_count=finish_count))
         tb_lines.append("end")
-        
-        
 
     tb_lines.append("")
     if len(dut_clocks) > 0:
@@ -1066,7 +1062,6 @@ def run_command(cmd, log_filename=None, verbose=False):
         base_cmd = os.path.basename(cmd[0])
         log_filename = base_cmd + ".log"
 
-    
     output, exitcode = cmd_runner.run_system_command(cmd, log_filename=log_filename, indent_depth=1)
 
     return output
