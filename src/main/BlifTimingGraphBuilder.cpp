@@ -641,7 +641,7 @@ void BlifTimingGraphBuilder::check_logical_output_dependancies(const TimingGraph
 }
 
 std::string BlifTimingGraphBuilder::sdf_name(std::string name) {
-    std::vector<char> chars_to_replace = {'$', ':', '.', '[', ']'};
+    std::vector<char> chars_to_replace = {};
     for(char val : chars_to_replace) {
         std::replace(name.begin(), name.end(), val, '_');
     }
