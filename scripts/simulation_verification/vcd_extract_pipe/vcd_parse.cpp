@@ -3,6 +3,8 @@
 #include <cassert>
 #include <vector>
 
+#include "gzstream.h"
+
 #include "vcd_parse.hpp"
 #include "util.hpp"
 
@@ -16,11 +18,23 @@ void parse_definitions(string line, VcdCallback& callback);
 void parse_timevalues(string line, VcdCallback& callback);
 
 void parse_vcd(string filename, VcdCallback& callback) {
-    std::ifstream is(filename);
+    
+    if(filename.size() > 3 &&
+       filename[filename.size()-3] == '.' &&
+       filename[filename.size()-2] == 'g' &&
+       filename[filename.size()-1] == 'z') {
+        //The file appears gzipped
+        igzstream is(filename.c_str());
+        assert(is.good());
 
-    assert(is.good());
+        parse_vcd(is, callback);
+    } else {
+        //Regular file
+        std::ifstream is(filename);
+        assert(is.good());
 
-    parse_vcd(is, callback);
+        parse_vcd(is, callback);
+    }
 }
 
 enum class ParseState {
