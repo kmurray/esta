@@ -80,7 +80,7 @@ def main():
 
     num_exhaustive_cases = 4**num_inputs
 
-    reader = pd.read_csv(args.simulation_csv, 
+    reader = pd.read_csv(args.simulation_csv,
                          usecols=['delay'],  #Read in only the delay to save time and memory
                          iterator=True)
 
@@ -116,7 +116,7 @@ def main():
     if args.search == 'mean':
         num_samples_within_confidence = 0
         for k, df in all_data_sets.iteritems():
-            sample_mean = (df['delay']*df['probability']).sum() 
+            sample_mean = (df['delay']*df['probability']).sum()
             if sample_mean < confidence_interval[0] or sample_mean > confidence_interval[1]:
                 print "Warning: sample {} has mean {} outside of confidence interval {}".format(k, sample_mean, confidence_interval)
             else:
@@ -162,7 +162,7 @@ def main():
 def search_mean(filename, num_sim_cases, search_confidence, search_mean_interval_len, search_mean_interval_tol, chunk_size):
     """
     Searches various samples sizes to find the smallest size which results in convergence,
-    where convergence is defined as having the length of the mean's confidence interval less 
+    where convergence is defined as having the length of the mean's confidence interval less
     a target for a given confidence level.
 
     A binary search on the sample size is used
@@ -175,7 +175,7 @@ def search_mean(filename, num_sim_cases, search_confidence, search_mean_interval
         search_mean_interval_len: Maximum allowed length for mean confidence interval
     """
 
-    reader = pd.read_csv(filename, 
+    reader = pd.read_csv(filename,
                          usecols=['delay'],  #Read in only the delay to save time and memory
                          iterator=True)
     #Initial Guess
@@ -189,7 +189,7 @@ def search_mean(filename, num_sim_cases, search_confidence, search_mean_interval
 
     interval_len = confidence_interval[1] - confidence_interval[0]
 
-    print "Sample Size: {size}, Interval Length Lower Bound: {lb}".format(size=sample_size, 
+    print "Sample Size: {size}, Interval Length Lower Bound: {lb}".format(size=sample_size,
                                                                           lb=interval_len)
 
     scale = 2
@@ -203,7 +203,7 @@ def search_mean(filename, num_sim_cases, search_confidence, search_mean_interval
     #Shrink the interval length with binary search until it is close to target
     i = 0
     while abs(interval_len - search_mean_interval_len) > search_mean_interval_tol and sample_size > 2 and i < 10000:
-        reader = pd.read_csv(filename, 
+        reader = pd.read_csv(filename,
                              usecols=['delay'],  #Read in only the delay to save time and memory
                              iterator=True)
 
@@ -230,7 +230,7 @@ def search_mean(filename, num_sim_cases, search_confidence, search_mean_interval
 
         interval_len = confidence_interval[1] - confidence_interval[0]
 
-        print "Sample Size: {size}, Interval Length: {len}".format(size=sample_size, 
+        print "Sample Size: {size}, Interval Length: {len}".format(size=sample_size,
                                                                  len=interval_len)
         if prev_shrink != curr_shrink:
             meta_scale *= 0.75
