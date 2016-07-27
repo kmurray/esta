@@ -536,14 +536,14 @@ def run_transition_extraction(args, raw_vcd_file, top_verilog_info):
     chunk's results being appended to the output CSVs.
     """
 
-    vcd_size = os.path.getsize(raw_vcd_file)
-
-    vcd_files = []
-    if args.vcd_size_limit != None and vcd_size > args.vcd_size_limit:
-        vcd_files += run_vcd_split(args, raw_vcd_file, args.vcd_size_limit)
+    if not os.path.isfile(raw_vcd_file):
+        if os.path.isfile(raw_vcd_file + ".gz"):
+            vcd_file = raw_vcd_file + ".gz"
+        else:
+            assert false, "Could not find VCD file {}".format(vcd_file)
     else:
-        vcd_files.append(raw_vcd_file)
-
+        vcd_file = raw_vcd_file
+    
     if args.outputs is None:
         outputs = top_verilog_info['outputs']
     else:
@@ -556,27 +556,21 @@ def run_transition_extraction(args, raw_vcd_file, top_verilog_info):
     if args.vcd_output_dir:
         base_args += ["--output_dir", args.vcd_output_dir]
 
-    for i, vcd_file in enumerate(vcd_files):
-        cmd = [args.vcd_extract_exec, vcd_file] + base_args
+    cmd = [args.vcd_extract_exec, vcd_file] + base_args
 
-        if i != 0:
-            #Not first, so append
-            cmd += ["--append"]
+    run_command(cmd, verbose=args.verbose)
 
-        run_command(cmd, verbose=args.verbose)
+    # #Find all the produced transition CSVs
+    # output_path = args.vcd_output_dir if args.vcd_output_dir != None else "."
+    # trans_csvs = []
+    # for exhaustive_csv in os.listdir(output_path):
+        # if fnmatch.fnmatch(exhaustive_csv, "sim.trans.*.csv"):
+            # trans_csvs.append(exhaustive_csv)
 
-
-    #Find all the produced transition CSVs
-    output_path = args.vcd_output_dir if args.vcd_output_dir != None else "."
-    trans_csvs = []
-    for exhaustive_csv in os.listdir(output_path):
-        if fnmatch.fnmatch(exhaustive_csv, "sim.trans.*.csv"):
-            trans_csvs.append(exhaustive_csv)
-
-    #Convert them to histograms
-    for in_csv in trans_csvs:
-        histogram_csv = ".".join(['sim', 'hist'] + exhaustive_csv.split('.')[1:])
-        exhaustive_csv_to_histogram_csv(in_csv, histogram_csv)
+    # #Convert them to histograms
+    # for in_csv in trans_csvs:
+        # histogram_csv = ".".join(['sim', 'hist'] + exhaustive_csv.split('.')[1:])
+        # exhaustive_csv_to_histogram_csv(in_csv, histogram_csv)
 
     return {}
 
@@ -867,9 +861,13 @@ def find_post_synth():
     sdf_matches = glob.glob("*post_synthesis.sdf")
     verilog_matches = glob.glob("*post_synthesis.v")
 
+    if len(blif_matches) == 0:
+        blif_matches.append(None)
+
     assert len(blif_matches) == 1, "Found multiple post synthesis BLIF files"
     assert len(sdf_matches) == 1, "Found multiple post synthesis SDF files"
     assert len(verilog_matches) == 1, "Found multiple post synthesis Verilog files"
+
 
     return (blif_matches[0], verilog_matches[0], sdf_matches[0])
 
