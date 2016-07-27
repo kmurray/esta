@@ -1,9 +1,10 @@
 #!/usr/bin/env python
 
+import sys
 import math
 import subprocess
 import argparse
-from collections import OrderedDict
+from collections import OrderedDict, deque
 
 import pandas as pd
 import numpy as np
@@ -64,6 +65,11 @@ def parse_args():
                         type=float,
                         help="Error Tolerance in search for mean interval")
 
+    parser.add_argument("--search_max_confidence_tol",
+                        default=0.005,
+                        type=float,
+                        help="Error Tolerance in search for mean interval")
+
     args = parser.parse_args()
 
     return args
@@ -101,14 +107,24 @@ def main():
 
         args.num_samples = int(math.floor(num_sim_cases / float(sample_size)))
 
+        print "Num Samples: ", args.num_samples
+
 
     elif args.search == 'max':
-        assert False
+        df = pd.read_csv(args.simulation_csv, usecols=['delay'])
+
+        max_delay = args.true_max
+        if max_delay is None:
+            max_delay = max(df['delay'])
+
+        sample_size = search_max(df, num_sim_cases, args.search_confidence, args.search_max_confidence_tol, args.num_samples, max_delay)
     else:
         assert False
 
     sample_frac = sample_size / float(num_exhaustive_cases)
-    print "Sample Frac (exhaustive): ", sample_frac
+    print "Final Sample Size: ", sample_size
+    print "Final Sample Frac (simulation): ", sample_size / float(num_sim_cases)
+    print "Final Sample Frac (exhaustive): ", sample_frac
 
     sampled_data_sets = generate_samples(args.num_samples, sample_size, reader, args.chunk_size)
     all_data_sets.update(sampled_data_sets)
@@ -123,7 +139,9 @@ def main():
                 num_samples_within_confidence += 1
 
         print "Fraction of samples within confidence interval: {} (target confidence level {})".format(float(num_samples_within_confidence) / args.num_samples, args.search_confidence)
-
+    elif args.search == 'max':
+        # for k, df in all_data_sets.iteritems():
+        pass
 
     print "Plotting..."
 
@@ -187,6 +205,12 @@ def search_mean(filename, num_sim_cases, search_confidence, search_mean_interval
     #Calculate the interval
     mean, confidence_interval = mean_confidence_interval(sample, search_confidence)
 
+    if math.isnan(confidence_interval[0]) or math.isnan(confidence_interval[1]):
+        if mean == 0.:
+            return float("nan"), confidence_interval
+        else:
+            raise ValueError("Unexepect NAN confidence interval with non-zero mean")
+
     interval_len = confidence_interval[1] - confidence_interval[0]
 
     print "Sample Size: {size}, Interval Length Lower Bound: {lb}".format(size=sample_size,
@@ -244,11 +268,127 @@ def search_mean(filename, num_sim_cases, search_confidence, search_mean_interval
                                                                       len=interval_len)
     return sample_size, confidence_interval
 
+def search_max(df, num_sim_cases, search_confidence, search_confidence_tol, num_samples, max_delay=None):
+
+    if max_delay is None:
+        #Take the max from simulation
+        max_delay = max(df['delay'])
+
+    print "Max delay: {}".format(max_delay)
+
+    if max_delay not in df['delay'].values:
+        print "Max delay not found in simulation: NOT CONVERGED"
+        sys.exit(1)
+
+    sample_size = num_sim_cases / 10
+    num_samples = int(math.floor(num_sim_cases / float(sample_size)))
+
+    scale = 2
+    meta_scale = 1
+
+    last_scaled_down = False
+
+    avg_len = 2
+
+
+    p_est_avg = 0
+    p_est_avg_diff = p_est_avg - search_confidence
+
+    i = 0
+    while p_est_avg_diff < 0 or p_est_avg_diff > search_confidence_tol:
+        if p_est_avg < search_confidence:
+            #Increase sample size
+            if last_scaled_down:
+                meta_scale *= 0.75
+                scale = 1 + meta_scale
+
+            sample_size = int(sample_size * scale)
+            
+            last_scaled_down = False
+        else:
+            #Decrease sample size
+            if not last_scaled_down:
+                meta_scale *= 0.75
+                scale = 1 + meta_scale
+
+            sample_size = int(sample_size / scale)
+
+
+            last_scaled_down = True
+
+        sample_size = min(sample_size, num_sim_cases)
+
+        num_samples = int(math.floor(num_sim_cases / float(sample_size)))
+
+        assert sample_size <= num_sim_cases
+
+        print "Sample Size: {} Num Samples: {}".format(sample_size, num_samples)
+
+        #Draw samples
+        #See how many contain the max delay to estimate p
+        p_est_prev = deque([], maxlen=avg_len)
+
+        for i in xrange(avg_len): #Repeat the experiment several times due to noise in the sampling
+            num_samples_have_max = 0
+
+            #Run a bernoilli experiment where we define success as the sample containing the maximum delay
+            for i in xrange(num_samples):
+                sample = df.sample(sample_size)
+
+                if max_delay in sample['delay'].values:
+                    num_samples_have_max += 1
+
+            #Estimate p from the experiment
+            p_est = num_samples_have_max / float(num_samples)
+
+            print "\tEstimated P: {}".format(p_est)
+
+            p_est_prev.append(p_est)
+
+        p_est_avg = deque_avg(p_est_prev)
+        p_est_avg_diff = p_est_avg - search_confidence
+
+        print "  Estimated P_avg: {}".format(p_est_avg)
+
+
+        i += 1
+
+    return sample_size
+
+
+def deque_avg(deque_obj):
+    if len(deque_obj) == 0:
+        return 0
+
+    avg = 0
+    for item in deque_obj:
+        avg += item
+
+    return avg / len(deque_obj)
+
 def mean_confidence_interval(sample, confidence):
     sample_mean = sample['delay'].mean()
     std_error_mean = sp.stats.sem(sample['delay'])
     dof = len(sample) - 1
     return sample_mean, sp.stats.t.interval(confidence, dof, loc=sample_mean, scale=std_error_mean)
+
+def generate_samples_df(num_samples, sample_size, df):
+    sampled_data_sets = OrderedDict()
+
+    for i in xrange(num_samples):
+        print "Generating Sample", i, "..."
+
+        sample = df.sample(sample_size)
+
+        #Convert data sample to histogram
+        sample_hist = transitions_to_histogram(sample)
+
+        sampled_data_sets["S" + str(i)] = sample_hist
+
+        #Reset the sample
+        sample = pd.DataFrame()
+
+    return sampled_data_sets
 
 
 def generate_samples(num_samples, sample_size, reader, max_chunk_size):
@@ -345,7 +485,7 @@ def inspect_sim_file(filename):
         extract_cmd = "pigz -dc {} 2>/dev/null |".format(filename)
 
     else:
-        extract_cmd = "cat {} | ".format(filename)
+        extract_cmd = "cat {} 2>/dev/null | ".format(filename)
 
 
     #Determine the number of inputs in this benchmark
