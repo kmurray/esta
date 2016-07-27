@@ -117,7 +117,7 @@ def main():
         if max_delay is None:
             max_delay = max(df['delay'])
 
-        sample_size = search_max(df, num_sim_cases, args.search_confidence, args.search_max_confidence_tol, args.num_samples, max_delay)
+        sample_size = search_max2(df, num_sim_cases, args.search_confidence, args.search_max_confidence_tol, args.num_samples, max_delay)
     else:
         assert False
 
@@ -268,11 +268,82 @@ def search_mean(filename, num_sim_cases, search_confidence, search_mean_interval
                                                                       len=interval_len)
     return sample_size, confidence_interval
 
-def search_max(df, num_sim_cases, search_confidence, search_confidence_tol, num_samples, max_delay=None):
+def search_max2(df, num_sim_cases, search_confidence, search_confidence_tol, num_samples, max_delay):
+    print "Max delay: {}".format(max_delay)
 
-    if max_delay is None:
-        #Take the max from simulation
-        max_delay = max(df['delay'])
+    if max_delay not in df['delay'].values:
+        print "Max delay not found in simulation: NOT CONVERGED"
+        sys.exit(1)
+
+    lower_bound_sample_size = -1
+    upper_bound_sample_size = -1 
+
+    sample_size = 1000
+    num_samples = int(math.floor(num_sim_cases / float(sample_size)))
+
+    max_num_samples = 30
+
+    #Binary search for the minimum sample size
+    while True:
+        used_samples = min(num_samples, max_num_samples)
+        print "Sample Size: {} Num Samples: {}/{} (Size Bounds: [{},{}])".format(sample_size, used_samples, num_samples, 
+                                                                              lower_bound_sample_size, 
+                                                                              upper_bound_sample_size)
+        #Evaluate the current sample size
+        # We conduct a bernoulli succuess/fail experiment by drawing num_samples
+        # samples and defining success as whether a sample contais the max delay
+        used_samples_have_max = 0
+        for i in xrange(used_samples):
+            sample = df.sample(sample_size)
+
+            assert sample.shape[0] == sample_size
+
+            if max_delay in sample['delay'].values:
+                used_samples_have_max += 1
+
+        #Estimate probablity of success (i.e. of a sample containing the max delay)
+        p_est = float(used_samples_have_max) / used_samples
+
+        print "\tP_est: {}".format(p_est)
+
+        step = None
+        if p_est < search_confidence:
+            #Below target confidence
+            lower_bound_sample_size = sample_size
+
+            #Increase sample size
+            if upper_bound_sample_size == -1:
+                step = (num_sim_cases - sample_size) / 2
+            else:
+                step = (upper_bound_sample_size - sample_size) / 2
+
+        elif p_est >= search_confidence:
+            #Above target confidence
+            upper_bound_sample_size = sample_size
+
+            #Decrease sample size
+            if lower_bound_sample_size == -1:
+                step = -(sample_size / 2)
+            else:
+                step = -(sample_size - lower_bound_sample_size) / 2
+
+        if step == 0:
+            break
+
+        sample_size += step
+        num_samples = int(math.floor(num_sim_cases / float(sample_size)))
+
+    assert upper_bound_sample_size != -1
+    assert lower_bound_sample_size != -1
+    assert upper_bound_sample_size == lower_bound_sample_size + 1
+
+    print "Minimal Sample Size: {} (@ {} confidence)".format(upper_bound_sample_size, search_confidence)
+
+    return upper_bound_sample_size
+
+
+
+def search_max(df, num_sim_cases, search_confidence, search_confidence_tol, num_samples, max_delay=None):
 
     print "Max delay: {}".format(max_delay)
 
