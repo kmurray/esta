@@ -65,10 +65,10 @@ def parse_args():
                         type=float,
                         help="Error Tolerance in search for mean interval")
 
-    parser.add_argument("--search_max_confidence_tol",
-                        default=0.005,
+    parser.add_argument("--converged_p_threshold",
+                        default=0.075,
                         type=float,
-                        help="Error Tolerance in search for mean interval")
+                        help="Fractional error tolerance when sub-sampling to determin if p converged")
 
     args = parser.parse_args()
 
@@ -117,7 +117,7 @@ def main():
         if max_delay is None:
             max_delay = max(df['delay'])
 
-        sample_size = search_max2(df, num_sim_cases, args.search_confidence, args.search_max_confidence_tol, args.num_samples, max_delay)
+        sample_size = search_max3(df, num_sim_cases, args.search_confidence, args.converged_p_threshold, args.num_samples, max_delay)
     else:
         assert False
 
@@ -267,6 +267,104 @@ def search_mean(filename, num_sim_cases, search_confidence, search_mean_interval
                                                                       inter=confidence_interval,
                                                                       len=interval_len)
     return sample_size, confidence_interval
+
+def search_max3(df, num_sim_cases, search_confidence, converged_p_threshold, num_samples, max_delay):
+    """
+    Determines the minimal sample size for which the Monte-Carlo simulation maximum delay has converged.
+
+    We determine this by conducting a series of bernoulli (success/fail) experiments, where at different sample
+    sizes
+    """
+    print "Max delay: {}".format(max_delay)
+
+    if max_delay not in df['delay'].values:
+        print "Max delay not found in simulation: NOT CONVERGED"
+        sys.exit(1)
+
+    p_est = determine_p_est(df, num_sim_cases, max_delay)
+
+    #Binary Search for the minimum sample size with sufficient confidence
+    sample_size = num_sim_cases
+    lower_bound_sample_size = -1
+    upper_bound_sample_size = -1
+    while True:
+
+        binom = sp.stats.binom(n=sample_size, p=p_est)
+        #Probability of getting no max delay in the given sample size
+        p_no_max = binom.pmf(0)
+
+        #Probabiliyt of getting one or more max delay in a sample
+        p_got_a_max = 1. - p_no_max
+
+        print "Sample Size: {} (Size Bounds: [{},{}])".format(sample_size, 
+                                                              lower_bound_sample_size, 
+                                                              upper_bound_sample_size)
+        print "\tP_got_max: {}".format(p_got_a_max)
+        step = None
+        if p_got_a_max < search_confidence:
+            #Below target confidence
+            lower_bound_sample_size = sample_size
+
+            #Increase sample size
+            if upper_bound_sample_size == -1:
+                step = (num_sim_cases - sample_size) / 2
+            else:
+                step = (upper_bound_sample_size - sample_size) / 2
+
+        elif p_got_a_max >= search_confidence:
+            #Above target confidence
+            upper_bound_sample_size = sample_size
+
+            #Decrease sample size
+            if lower_bound_sample_size == -1:
+                step = -(sample_size / 2)
+            else:
+                step = -(sample_size - lower_bound_sample_size) / 2
+
+        if step == 0:
+            break
+
+        sample_size += step
+
+    assert upper_bound_sample_size != -1
+    assert lower_bound_sample_size != -1
+    assert upper_bound_sample_size == lower_bound_sample_size + 1
+
+    print "Minimal Sample Size: {} (@ {} confidence)".format(upper_bound_sample_size, search_confidence)
+
+    return upper_bound_sample_size
+
+def determine_p_est(df, num_sim_cases, max_delay):
+
+    #Estimate probability of getting a max delay path from the entire MC sim
+    num_max_delay_cases = df['delay'].value_counts()[max_delay]
+
+    p_est = num_max_delay_cases / float(num_sim_cases)
+
+    print "P_est: {}".format(p_est)
+
+    #Now verify that the p_est is reasonablly converged by sub-sampling
+    num_sub_samples = 100
+    sub_sample_size = num_sim_cases / num_sub_samples
+    sub_samples = [df.sample(sub_sample_size, replace=False) for i in xrange(num_sub_samples)]
+
+    #Calculate the sub sample p_est
+    p_est_sub = [sub_samples[i]['delay'].value_counts()[max_delay] / float(sub_sample_size) for i in xrange(num_sub_samples)]
+    min_p_est_sub = min(p_est_sub)
+    max_p_est_sub = max(p_est_sub)
+    range_p_est_sub = max_p_est_sub - min_p_est_sub
+    avg_p_est_sub = sum(p_est_sub)/len(p_est_sub)
+    print "Sub Samples {}: p_est avg: {} p_est range: [{},{}] ({}) p_est ratio: {:g}".format(num_sub_samples, avg_p_est_sub, min_p_est_sub, max_p_est_sub, range_p_est_sub, range_p_est_sub / p_est)
+
+    p_est_df = pd.DataFrame({"p": p_est_sub})
+
+    p_est_df.hist()
+    plt.show()
+
+    if(range_p_est_sub / p_est > 0.10):
+        print "Sub sample probabilty differs from full sample: NOT CONVERGED"
+        sys.exit(1)
+
 
 def search_max2(df, num_sim_cases, search_confidence, search_confidence_tol, num_samples, max_delay):
     print "Max delay: {}".format(max_delay)
