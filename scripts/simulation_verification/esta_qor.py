@@ -30,30 +30,31 @@ def main():
 
     reference_hist = pd.read_csv(args.reference_csv)
 
-    #TODO: for now just do one comparison
-    compare_hist = pd.read_csv(args.compare_csvs[0])
+    for compare_csv in args.compare_csvs:
+        #TODO: for now just do one comparison
+        compare_hist = pd.read_csv(compare_csv)
 
-    #compare_hist['delay'] = compare_hist['delay'].round(0).astype(int)
+        #compare_hist['delay'] = compare_hist['delay'].round(0).astype(int)
 
-    #print reference_hist
-    #print compare_hist
+        #print reference_hist
+        #print compare_hist
 
-    #Merge the two columns on the union of delays
-    merged_df = pd.merge(reference_hist, compare_hist, how='outer', on=['delay'])
+        #Merge the two columns on the union of delays
+        merged_df = pd.merge(reference_hist, compare_hist, how='outer', on=['delay'])
 
-    #Treat missing values as zero
-    merged_df = merged_df.fillna(0)
+        #Treat missing values as zero
+        merged_df = merged_df.fillna(0)
 
-    distance_matrix = np.zeros(shape=(merged_df.shape[0], merged_df.shape[0]))
+        distance_matrix = np.zeros(shape=(merged_df.shape[0], merged_df.shape[0]))
 
-    for i, ival in enumerate(merged_df['delay'].values):
-        for j, jval in enumerate(merged_df['delay'].values):
-            distance_matrix[i][j] = abs(ival - jval)
-            #print i, j, ival - jval
+        for i, ival in enumerate(merged_df['delay'].values):
+            for j, jval in enumerate(merged_df['delay'].values):
+                distance_matrix[i][j] = abs(ival - jval)
+                #print i, j, ival - jval
 
-    #print distance_matrix
+        #print distance_matrix
 
-    print "EMD: ", emd(merged_df['probability_x'].values, merged_df['probability_y'].values, distance_matrix)
+        print "EMD {}: ".format(compare_csv), emd(merged_df['probability_x'].values, merged_df['probability_y'].values, distance_matrix)
 
 
 if __name__ == "__main__":
