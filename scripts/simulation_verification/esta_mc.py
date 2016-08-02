@@ -66,7 +66,7 @@ def parse_args():
                         help="Error Tolerance in search for mean interval")
 
     parser.add_argument("--converged_p_threshold",
-                        default=0.075,
+                        default=0.05,
                         type=float,
                         help="Fractional error tolerance when sub-sampling to determin if p converged")
 
@@ -203,7 +203,7 @@ def search_mean(filename, num_sim_cases, search_confidence, search_mean_interval
     sample = generate_sample(sample_size, reader, chunk_size)
 
     #Calculate the interval
-    mean, confidence_interval = mean_confidence_interval(sample, search_confidence)
+    mean, confidence_interval = mean_confidence_interval(sample['delay'], search_confidence)
 
     if math.isnan(confidence_interval[0]) or math.isnan(confidence_interval[1]):
         if mean == 0.:
@@ -268,7 +268,7 @@ def search_mean(filename, num_sim_cases, search_confidence, search_mean_interval
                                                                       len=interval_len)
     return sample_size, confidence_interval
 
-def search_max3(df, num_sim_cases, search_confidence, converged_p_threshold, num_samples, max_delay):
+def search_max3(df, num_sim_cases, search_confidence, converged_p_threshold_frac, num_samples, max_delay):
     """
     Determines the minimal sample size for which the Monte-Carlo simulation maximum delay has converged.
 
@@ -281,7 +281,7 @@ def search_max3(df, num_sim_cases, search_confidence, converged_p_threshold, num
         print "Max delay not found in simulation: NOT CONVERGED"
         sys.exit(1)
 
-    p_est = determine_p_est(df, num_sim_cases, max_delay)
+    p_est = determine_p_est(df, num_sim_cases, max_delay, search_confidence, converged_p_threshold_frac)
 
     #Binary Search for the minimum sample size with sufficient confidence
     sample_size = num_sim_cases
@@ -334,7 +334,7 @@ def search_max3(df, num_sim_cases, search_confidence, converged_p_threshold, num
 
     return upper_bound_sample_size
 
-def determine_p_est(df, num_sim_cases, max_delay):
+def determine_p_est(df, num_sim_cases, max_delay, search_confidence, converged_p_threshold_frac):
 
     #Estimate probability of getting a max delay path from the entire MC sim
     num_max_delay_cases = df['delay'].value_counts()[max_delay]
@@ -354,16 +354,27 @@ def determine_p_est(df, num_sim_cases, max_delay):
     max_p_est_sub = max(p_est_sub)
     range_p_est_sub = max_p_est_sub - min_p_est_sub
     avg_p_est_sub = sum(p_est_sub)/len(p_est_sub)
-    print "Sub Samples {}: p_est avg: {} p_est range: [{},{}] ({}) p_est ratio: {:g}".format(num_sub_samples, avg_p_est_sub, min_p_est_sub, max_p_est_sub, range_p_est_sub, range_p_est_sub / p_est)
 
     p_est_df = pd.DataFrame({"p": p_est_sub})
 
-    p_est_df.hist()
-    plt.show()
+    # p_est_df.hist()
+    # plt.show()
 
-    if(range_p_est_sub / p_est > 0.10):
-        print "Sub sample probabilty differs from full sample: NOT CONVERGED"
+    mean, confidence_interval = mean_confidence_interval(p_est_df['p'], search_confidence)
+
+    ratio = (confidence_interval[1] - confidence_interval[0]) / p_est
+
+    print "Sub Samples {}: p_est interval @ {} conf.: [{},{}] interval_length/p_est ratio: {:g}".format(num_sub_samples, 
+                                                                                                 search_confidence, 
+                                                                                                 confidence_interval[0],
+                                                                                                 confidence_interval[1],
+                                                                                                 ratio)
+
+    if(ratio > converged_p_threshold_frac):
+        print "Sub sample probabilty differs from full sample (ratio {} > {}): NOT CONVERGED".format(ratio, converged_p_threshold_frac)
         sys.exit(1)
+
+    return p_est
 
 
 def search_max2(df, num_sim_cases, search_confidence, search_confidence_tol, num_samples, max_delay):
@@ -536,8 +547,8 @@ def deque_avg(deque_obj):
     return avg / len(deque_obj)
 
 def mean_confidence_interval(sample, confidence):
-    sample_mean = sample['delay'].mean()
-    std_error_mean = sp.stats.sem(sample['delay'])
+    sample_mean = sample.mean()
+    std_error_mean = sp.stats.sem(sample)
     dof = len(sample) - 1
     return sample_mean, sp.stats.t.interval(confidence, dof, loc=sample_mean, scale=std_error_mean)
 
