@@ -294,7 +294,7 @@ def parse_args():
     #
     transition_extraction_arguments = parser.add_argument_group("Transition Extraction", "Options for processing simulation VCD")
     transition_extraction_arguments.add_argument("--vcd_extract_exec",
-                                                 default="vcd_extract_pipe",
+                                                 default="vcd_extract",
                                                  help="Tool used to post-process VCD to extract transitions and delays.")
     transition_extraction_arguments.add_argument("--vcd_split_exec",
                                                  default="vcd_split",
