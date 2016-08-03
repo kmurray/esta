@@ -25,7 +25,7 @@ target_include_directories(run_unit_tests PRIVATE
                            ${ETA_INCLUDE_DIRS})
 
 target_link_libraries(run_unit_tests 
-                      libeta
+                      libesta
                       ${CUDD_LIBS}
                       gtest
                       gtest_main
