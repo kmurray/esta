@@ -550,13 +550,23 @@ def run_transition_extraction(args, raw_vcd_file, top_verilog_info):
         outputs = args.outputs
 
     base_args = ['-c', SIM_CLOCK]
-    base_args += ["-i"] + [x for x in top_verilog_info['inputs']]
-    base_args += ["-o"] + [x for x in outputs]
+
+    #Write out the inputs/outputs to a text file (avoids arguments too long)
+    with open("inputs.txt", "w") as f:
+        for input in top_verilog_info['inputs']:
+            print >>f, input
+
+    with open("outputs.txt", "w") as f:
+        for output in outputs:
+            print >>f, output
+
+    base_args += ["-i", "inputs.txt"]
+    base_args += ["-o", "outputs.txt"]
 
     if args.vcd_output_dir:
         base_args += ["--output_dir", args.vcd_output_dir]
 
-    cmd = [args.vcd_extract_exec, vcd_file] + base_args
+    cmd = [args.vcd_extract_exec, "-v", vcd_file] + base_args
 
     run_command(cmd, verbose=args.verbose)
 

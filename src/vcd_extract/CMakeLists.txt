@@ -6,4 +6,6 @@ file(GLOB_RECURSE EXEC_VCD_EXTRACT_HEADERS *.hpp)
 
 add_executable(vcd_extract ${EXEC_VCD_EXTRACT_SOURCES} ${EXEC_VCD_EXTRACT_HEADERS})
 
-target_link_libraries(vcd_extract gzstream)
+target_link_libraries(vcd_extract 
+                        gzstream
+                        cpp-argparse)
