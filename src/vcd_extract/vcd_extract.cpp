@@ -19,20 +19,14 @@ VcdExtractor::VcdExtractor(std::string clock_name, std::vector<std::string> inpu
     , transition_count_(0) 
     , state_(State::INITIAL)
 {
-    //cout << "State: INITIAL" << endl;
+    outputs_os_ = std::make_shared<ogzstream>(get_trans_filename().c_str());  
+    *outputs_os_ << std::setprecision(std::numeric_limits<double>::digits10);
 
-    for(const auto& output_name : outputs_) {
-        auto fp = std::make_shared<ogzstream>(get_filename(output_name).c_str());  
-        *fp << std::setprecision(std::numeric_limits<double>::digits10);
-        output_files_[output_name] = fp;
-    }
     max_os_ = std::make_shared<ogzstream>(get_max_filename().c_str());  
     *max_os_ << std::setprecision(std::numeric_limits<double>::digits10);
 
-    for(const auto& output_name : outputs_) {
-        write_header(output_files_[output_name], output_name);
-    }
-    write_header(max_os_, "MAX");
+    write_trans_header();
+    write_max_header();
 }
 
 void VcdExtractor::start() {
@@ -126,35 +120,48 @@ void VcdExtractor::finalize_measure() {
     id_to_measure_final_value_ = id_to_previous_value_;
 
 
-    for(const auto& output_name : outputs_) {
-        write_transition(output_name);
-    }
+    write_transition();
     write_max_transition();
 }
 
-std::string VcdExtractor::get_filename(const std::string& output_name) {
-    return output_dir_ + "/sim.trans." + output_name + ".csv.gz";
+std::string VcdExtractor::get_trans_filename() {
+    return output_dir_ + "/sim.trans.csv.gz";
 }
 
 std::string VcdExtractor::get_max_filename() {
     return output_dir_ + "/sim.max_trans.csv.gz";
 }
 
-void VcdExtractor::write_header(std::shared_ptr<std::ostream> os_ptr, const std::string& output_name) {
+void VcdExtractor::write_trans_header() {
 
     for(const auto& input_name : inputs_) {
-        *os_ptr << input_name << ",";
+        *outputs_os_ << input_name << ",";
     }
-    *os_ptr << output_name << ",";
-    *os_ptr << "delay" << ",";
-    *os_ptr << "sim_time";
-    *os_ptr << "\n";
+    for(size_t i = 0; i < outputs_.size(); ++i) {
+        *outputs_os_ << outputs_[i] << ",";
+        *outputs_os_ << "delay" << ":" << outputs_[i] << ",";
+        *outputs_os_ << "sim_time" << ":" << outputs_[i];
+        if(i != outputs_.size() - 1) {
+            *outputs_os_ << ",";
+        }
+    }
+    *outputs_os_ << "\n";
 }
 
-void VcdExtractor::write_transition(const std::string& output_name) {
+void VcdExtractor::write_max_header() {
+
+    for(const auto& input_name : inputs_) {
+        *max_os_ << input_name << ",";
+    }
+    *max_os_ << "MAX" << ",";
+    *max_os_ << "delay:MAX" << ",";
+    *max_os_ << "sim_time:MAX";
+    *max_os_ << "\n";
+}
+
+void VcdExtractor::write_transition() {
 
     //Write the row to the CSV
-    auto& os_ptr = output_files_[output_name];
 
     //Inputs
     for(const auto& input_name : inputs_) {
@@ -164,25 +171,34 @@ void VcdExtractor::write_transition(const std::string& output_name) {
         char final_value = std::get<0>(id_to_measure_final_value_[id]);
 
         char input_trans = transition(initial_value, final_value);
-        *os_ptr << input_trans << ",";
+        *outputs_os_ << input_trans << ",";
     }
 
-    //Output transition
-    std::string id = name_to_id_[output_name];
-    char initial_value = std::get<0>(id_to_measure_initial_value_[id]);
-    char final_value = std::get<0>(id_to_measure_final_value_[id]);
+    //Outputs
+    for(size_t i = 0; i < outputs_.size(); ++i) {
 
-    *os_ptr << transition(initial_value, final_value) << ",";
+        //Output transition
+        std::string id = name_to_id_[outputs_[i]];
+        char initial_value = std::get<0>(id_to_measure_initial_value_[id]);
+        char final_value = std::get<0>(id_to_measure_final_value_[id]);
 
-    //Delay
-    size_t delay;
-    size_t sim_time;
-    std::tie(delay, sim_time) = output_delay(id);
+        *outputs_os_ << transition(initial_value, final_value) << ",";
 
-    *os_ptr << delay << ",";
+        //Delay
+        size_t delay;
+        size_t sim_time;
+        std::tie(delay, sim_time) = output_delay(id);
 
-    //Sim time (launch clock)
-    *os_ptr << sim_time << "\n";
+        *outputs_os_ << delay << ",";
+
+        //Sim time (launch clock)
+        *outputs_os_ << sim_time;
+
+        if(i != outputs_.size() - 1) {
+            *outputs_os_ << ",";
+        }
+    }
+    *outputs_os_ << "\n";
 }
 
 void VcdExtractor::write_max_transition() {
@@ -235,6 +251,7 @@ char VcdExtractor::transition(char initial_value, char final_value) {
     } else if(initial_value == '0' && final_value == '0') {
         return 'L';
     } else {
+        throw std::runtime_error("Unrecognized_transition");
         assert(false && "Unrecognized transition");
     }
 }
