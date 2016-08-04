@@ -29,6 +29,7 @@ int main(int argc, char** argv) {
     auto output_dir = options.get_as<string>("output_dir");
 
     VcdExtractor vcd_extractor_callback(clock_name, input_names, output_names, output_dir);
+    //VcdCallback vcd_extractor_callback;
 
     if(vcd_file == "-") {
         //Read from stdin

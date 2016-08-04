@@ -49,11 +49,10 @@ class VcdExtractor : public VcdCallback {
         std::unordered_map<std::string,std::string> id_to_name_;
         std::unordered_map<std::string,std::string> name_to_id_;
 
-        //We use a sorted vector implementation of a map for speed
-        Loki::AssocVector<std::string,std::tuple<char,size_t>> id_to_current_value_;
-        Loki::AssocVector<std::string,std::tuple<char,size_t>> id_to_previous_value_;
-        Loki::AssocVector<std::string,std::tuple<char,size_t>> id_to_measure_initial_value_;
-        Loki::AssocVector<std::string,std::tuple<char,size_t>> id_to_measure_final_value_;
+        std::unordered_map<std::string,std::tuple<char,size_t>> id_to_current_value_;
+        std::unordered_map<std::string,std::tuple<char,size_t>> id_to_previous_value_;
+        std::unordered_map<std::string,std::tuple<char,size_t>> id_to_measure_initial_value_;
+        std::unordered_map<std::string,std::tuple<char,size_t>> id_to_measure_final_value_;
 
         size_t current_time_;
         size_t clock_rise_time_;

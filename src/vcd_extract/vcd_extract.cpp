@@ -44,7 +44,6 @@ void VcdExtractor::add_var(std::string type, size_t width, std::string id, std::
     name_to_id_[name] = id;
 
     //Initialize variable states
-    id_to_current_value_[id] = std::make_tuple('x', 0);
     id_to_previous_value_[id] = std::make_tuple('x', 0);
 }
 
@@ -67,7 +66,11 @@ void VcdExtractor::set_time(size_t time) {
     current_time_ = time;
 
     //Save the values from the previous timestep
-    id_to_previous_value_ = id_to_current_value_;
+    //for(auto& kv : id_to_current_value_) {
+        //id_to_previous_value_[kv.first] = kv.second;
+    //}
+    id_to_previous_value_.insert(id_to_current_value_.begin(), id_to_current_value_.end());
+    id_to_current_value_.clear();
 }
 
 void VcdExtractor::add_transition(std::string id, char val) {
