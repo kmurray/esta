@@ -28,12 +28,9 @@ class VcdExtractor : public VcdCallback {
         void finalize_measure();
 
         std::string get_trans_filename();
-        std::string get_max_filename();
 
         void write_trans_header();
-        void write_max_header();
         void write_transition();
-        void write_max_transition();
 
         char transition(char initial_value, char final_value);
         std::pair<size_t,size_t> output_delay(const std::string& output_name);
@@ -43,7 +40,6 @@ class VcdExtractor : public VcdCallback {
         std::vector<std::string> outputs_;
         std::string output_dir_;
 
-        std::shared_ptr<std::ostream> max_os_;
         std::shared_ptr<std::ostream> outputs_os_;
 
         std::unordered_map<std::string,std::string> id_to_name_;
