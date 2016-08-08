@@ -1,4 +1,8 @@
+import sys
+import subprocess
 import gzip
+import time
+import os
 import pandas as pd
 
 class CommandError(Exception):
