@@ -5,6 +5,7 @@ import math
 import subprocess
 import argparse
 from collections import OrderedDict, deque
+from decimal import Decimal
 
 import pandas as pd
 import numpy as np
@@ -84,14 +85,17 @@ def main():
     num_sim_cases, num_inputs, output_name = inspect_sim_file(args.simulation_csv)
     print "Data file contains:", num_sim_cases, "cases"
 
-    num_exhaustive_cases = 4**num_inputs
+    num_exhaustive_cases = Decimal(4)**Decimal(num_inputs)
 
-    reader = pd.read_csv(args.simulation_csv,
-                         usecols=['delay'],  #Read in only the delay to save time and memory
-                         iterator=True)
+    # reader = pd.read_csv(args.simulation_csv,
+                         # usecols=['delay:MAX'])  #Read in only the delay to save time and memory
+                         # iterator=True)
 
     print "Inputs: ", num_inputs
     print "Exhaustive cases: {:g}".format(num_exhaustive_cases)
+
+    print "Loading delay values"
+    df = pd.read_csv(args.simulation_csv, usecols=['delay:MAX'])
 
     if args.search is None:
         print "Num Samples: ", args.num_samples
@@ -101,21 +105,18 @@ def main():
 
         print "Sample Frac (sim): ", sample_size / num_sim_cases
 
-
     elif args.search == 'mean':
-        sample_size, confidence_interval = search_mean(args.simulation_csv, num_sim_cases, args.search_confidence, args.search_mean_interval_length, args.search_mean_interval_tol, args.chunk_size)
+        sample_size, confidence_interval = search_mean(df, num_sim_cases, args.search_confidence, args.search_mean_interval_length, args.search_mean_interval_tol, args.chunk_size)
 
         args.num_samples = int(math.floor(num_sim_cases / float(sample_size)))
 
         print "Num Samples: ", args.num_samples
 
-
     elif args.search == 'max':
-        df = pd.read_csv(args.simulation_csv, usecols=['delay'])
 
         max_delay = args.true_max
         if max_delay is None:
-            max_delay = max(df['delay'])
+            max_delay = max(df['delay:MAX'])
 
         sample_size = search_max3(df, num_sim_cases, args.search_confidence, args.converged_p_threshold, args.num_samples, max_delay)
     else:
@@ -126,13 +127,13 @@ def main():
     print "Final Sample Frac (simulation): ", sample_size / float(num_sim_cases)
     print "Final Sample Frac (exhaustive): ", sample_frac
 
-    sampled_data_sets = generate_samples(args.num_samples, sample_size, reader, args.chunk_size)
+    sampled_data_sets = generate_samples(args.num_samples, sample_size, df, args.chunk_size)
     all_data_sets.update(sampled_data_sets)
 
     if args.search == 'mean':
         num_samples_within_confidence = 0
         for k, df in all_data_sets.iteritems():
-            sample_mean = (df['delay']*df['probability']).sum()
+            sample_mean = (df['delay:MAX']*df['probability']).sum()
             if sample_mean < confidence_interval[0] or sample_mean > confidence_interval[1]:
                 print "Warning: sample {} has mean {} outside of confidence interval {}".format(k, sample_mean, confidence_interval)
             else:
@@ -177,7 +178,7 @@ def main():
     else:
         plt.show()
 
-def search_mean(filename, num_sim_cases, search_confidence, search_mean_interval_len, search_mean_interval_tol, chunk_size):
+def search_mean(df, num_sim_cases, search_confidence, search_mean_interval_len, search_mean_interval_tol, chunk_size):
     """
     Searches various samples sizes to find the smallest size which results in convergence,
     where convergence is defined as having the length of the mean's confidence interval less
@@ -193,80 +194,55 @@ def search_mean(filename, num_sim_cases, search_confidence, search_mean_interval
         search_mean_interval_len: Maximum allowed length for mean confidence interval
     """
 
-    reader = pd.read_csv(filename,
-                         usecols=['delay'],  #Read in only the delay to save time and memory
-                         iterator=True)
-    #Initial Guess
+    #Binary Search for the minimum sample size with sufficient confidence
     sample_size = num_sim_cases
+    lower_bound_sample_size = -1
+    upper_bound_sample_size = -1
+    interval_len = None
+    while True:
+        print "Sample Size: {} (Size Bounds: [{},{}])".format(sample_size,
+                                                              lower_bound_sample_size,
+                                                              upper_bound_sample_size)
 
-    #Sample
-    sample = generate_sample(sample_size, reader, chunk_size)
+        sample = df.sample(sample_size)
 
-    #Calculate the interval
-    mean, confidence_interval = mean_confidence_interval(sample['delay'], search_confidence)
-
-    if math.isnan(confidence_interval[0]) or math.isnan(confidence_interval[1]):
-        if mean == 0.:
-            return float("nan"), confidence_interval
-        else:
-            raise ValueError("Unexepect NAN confidence interval with non-zero mean")
-
-    interval_len = confidence_interval[1] - confidence_interval[0]
-
-    print "Sample Size: {size}, Interval Length Lower Bound: {lb}".format(size=sample_size,
-                                                                          lb=interval_len)
-
-    scale = 2
-    meta_scale = 1
-
-    if interval_len > search_mean_interval_len:
-        raise ValueError("Insufficient samples for target interval length {len} at confidence {conf}".format(len=search_mean_interval_len, conf=search_confidence))
-
-    prev_shrink = True
-
-    #Shrink the interval length with binary search until it is close to target
-    i = 0
-    while abs(interval_len - search_mean_interval_len) > search_mean_interval_tol and sample_size > 2 and i < 10000:
-        reader = pd.read_csv(filename,
-                             usecols=['delay'],  #Read in only the delay to save time and memory
-                             iterator=True)
-
-        #Increase the sample size
-        if interval_len < search_mean_interval_len:
-            curr_shrink = True
-            sample_size = int(sample_size / scale)
-            # print "Shrink Sample Size to: ", sample_size
-        else:
-            assert interval_len > search_mean_interval_len
-
-            curr_shrink = False
-            sample_size = int(sample_size * scale)
-            # print "Increase Sample Size to: ", sample_size
-
-
-        assert sample_size <= num_sim_cases
-
-        #Sample
-        sample = generate_sample(sample_size, reader, chunk_size)
-
-        #Calculate the interval
-        mean, confidence_interval = mean_confidence_interval(sample, search_confidence)
+        mean, confidence_interval = mean_confidence_interval(sample['delay:MAX'], search_confidence)
 
         interval_len = confidence_interval[1] - confidence_interval[0]
 
-        print "Sample Size: {size}, Interval Length: {len}".format(size=sample_size,
-                                                                 len=interval_len)
-        if prev_shrink != curr_shrink:
-            meta_scale *= 0.75
-            scale = 1 + meta_scale
-            # print "Next Scale: {}".format(scale)
+        step = None
+        if interval_len < search_mean_interval_len:
+            #Below target
+            upper_bound_sample_size = sample_size
 
-        i += 1
+            #Decrease sample size
+            if lower_bound_sample_size == -1:
+                step = -(sample_size / 2)
+            else:
+                step = -(sample_size - lower_bound_sample_size) / 2
 
-    print "Sample Size: {size}, Interval: {inter}, Len: {len}".format(size=sample_size,
-                                                                      inter=confidence_interval,
-                                                                      len=interval_len)
-    return sample_size, confidence_interval
+        elif interval_len >= search_mean_interval_len:
+            #Above target
+            lower_bound_sample_size = sample_size
+
+            #Increase sample size
+            if upper_bound_sample_size == -1:
+                step = (num_sim_cases - sample_size) / 2
+            else:
+                step = (upper_bound_sample_size - sample_size) / 2
+
+        if step == 0:
+            break
+
+        sample_size += step
+
+    assert upper_bound_sample_size != -1
+    assert lower_bound_sample_size != -1
+    assert upper_bound_sample_size == lower_bound_sample_size + 1
+
+    print "Minimal Sample Size: {}, Interval Len: {} (@ {} confidence)".format(upper_bound_sample_size, interval_len, search_confidence)
+
+    return upper_bound_sample_size, confidence_interval
 
 def search_max3(df, num_sim_cases, search_confidence, converged_p_threshold_frac, num_samples, max_delay):
     """
@@ -277,7 +253,7 @@ def search_max3(df, num_sim_cases, search_confidence, converged_p_threshold_frac
     """
     print "Max delay: {}".format(max_delay)
 
-    if max_delay not in df['delay'].values:
+    if max_delay not in df['delay:MAX'].values:
         print "Max delay not found in simulation: NOT CONVERGED"
         sys.exit(1)
 
@@ -296,8 +272,8 @@ def search_max3(df, num_sim_cases, search_confidence, converged_p_threshold_frac
         #Probabiliyt of getting one or more max delay in a sample
         p_got_a_max = 1. - p_no_max
 
-        print "Sample Size: {} (Size Bounds: [{},{}])".format(sample_size, 
-                                                              lower_bound_sample_size, 
+        print "Sample Size: {} (Size Bounds: [{},{}])".format(sample_size,
+                                                              lower_bound_sample_size,
                                                               upper_bound_sample_size)
         print "\tP_got_max: {}".format(p_got_a_max)
         step = None
@@ -337,7 +313,7 @@ def search_max3(df, num_sim_cases, search_confidence, converged_p_threshold_frac
 def determine_p_est(df, num_sim_cases, max_delay, search_confidence, converged_p_threshold_frac):
 
     #Estimate probability of getting a max delay path from the entire MC sim
-    num_max_delay_cases = df['delay'].value_counts()[max_delay]
+    num_max_delay_cases = df['delay:MAX'].value_counts()[max_delay]
 
     p_est = num_max_delay_cases / float(num_sim_cases)
 
@@ -349,7 +325,16 @@ def determine_p_est(df, num_sim_cases, max_delay, search_confidence, converged_p
     sub_samples = [df.sample(sub_sample_size, replace=False) for i in xrange(num_sub_samples)]
 
     #Calculate the sub sample p_est
-    p_est_sub = [sub_samples[i]['delay'].value_counts()[max_delay] / float(sub_sample_size) for i in xrange(num_sub_samples)]
+    p_est_sub = []
+    for i in xrange(num_sub_samples):
+        value_counts = sub_samples[i]['delay:MAX'].value_counts()
+        if max_delay not in value_counts:
+            sub_sample_pest = 0
+        else:
+            sub_sample_pest = value_counts[max_delay] / float(sub_sample_size)
+
+        p_est_sub.append(sub_sample_pest)
+
     min_p_est_sub = min(p_est_sub)
     max_p_est_sub = max(p_est_sub)
     range_p_est_sub = max_p_est_sub - min_p_est_sub
@@ -364,8 +349,8 @@ def determine_p_est(df, num_sim_cases, max_delay, search_confidence, converged_p
 
     ratio = (confidence_interval[1] - confidence_interval[0]) / p_est
 
-    print "Sub Samples {}: p_est interval @ {} conf.: [{},{}] interval_length/p_est ratio: {:g}".format(num_sub_samples, 
-                                                                                                 search_confidence, 
+    print "Sub Samples {}: p_est interval @ {} conf.: [{},{}] interval_length/p_est ratio: {:g}".format(num_sub_samples,
+                                                                                                 search_confidence,
                                                                                                  confidence_interval[0],
                                                                                                  confidence_interval[1],
                                                                                                  ratio)
@@ -380,12 +365,12 @@ def determine_p_est(df, num_sim_cases, max_delay, search_confidence, converged_p
 def search_max2(df, num_sim_cases, search_confidence, search_confidence_tol, num_samples, max_delay):
     print "Max delay: {}".format(max_delay)
 
-    if max_delay not in df['delay'].values:
+    if max_delay not in df['delay:MAX'].values:
         print "Max delay not found in simulation: NOT CONVERGED"
         sys.exit(1)
 
     lower_bound_sample_size = -1
-    upper_bound_sample_size = -1 
+    upper_bound_sample_size = -1
 
     sample_size = 1000
     num_samples = int(math.floor(num_sim_cases / float(sample_size)))
@@ -395,8 +380,8 @@ def search_max2(df, num_sim_cases, search_confidence, search_confidence_tol, num
     #Binary search for the minimum sample size
     while True:
         used_samples = min(num_samples, max_num_samples)
-        print "Sample Size: {} Num Samples: {}/{} (Size Bounds: [{},{}])".format(sample_size, used_samples, num_samples, 
-                                                                              lower_bound_sample_size, 
+        print "Sample Size: {} Num Samples: {}/{} (Size Bounds: [{},{}])".format(sample_size, used_samples, num_samples,
+                                                                              lower_bound_sample_size,
                                                                               upper_bound_sample_size)
         #Evaluate the current sample size
         # We conduct a bernoulli succuess/fail experiment by drawing num_samples
@@ -407,7 +392,7 @@ def search_max2(df, num_sim_cases, search_confidence, search_confidence_tol, num
 
             assert sample.shape[0] == sample_size
 
-            if max_delay in sample['delay'].values:
+            if max_delay in sample['delay:MAX'].values:
                 used_samples_have_max += 1
 
         #Estimate probablity of success (i.e. of a sample containing the max delay)
@@ -456,7 +441,7 @@ def search_max(df, num_sim_cases, search_confidence, search_confidence_tol, num_
 
     print "Max delay: {}".format(max_delay)
 
-    if max_delay not in df['delay'].values:
+    if max_delay not in df['delay:MAX'].values:
         print "Max delay not found in simulation: NOT CONVERGED"
         sys.exit(1)
 
@@ -483,7 +468,6 @@ def search_max(df, num_sim_cases, search_confidence, search_confidence_tol, num_
                 scale = 1 + meta_scale
 
             sample_size = int(sample_size * scale)
-            
             last_scaled_down = False
         else:
             #Decrease sample size
@@ -515,7 +499,7 @@ def search_max(df, num_sim_cases, search_confidence, search_confidence_tol, num_
             for i in xrange(num_samples):
                 sample = df.sample(sample_size)
 
-                if max_delay in sample['delay'].values:
+                if max_delay in sample['delay:MAX'].values:
                     num_samples_have_max += 1
 
             #Estimate p from the experiment
@@ -571,16 +555,16 @@ def generate_samples_df(num_samples, sample_size, df):
     return sampled_data_sets
 
 
-def generate_samples(num_samples, sample_size, reader, max_chunk_size):
+def generate_samples(num_samples, sample_size, df, max_chunk_size):
     sampled_data_sets = OrderedDict()
 
     for i in xrange(num_samples):
         print "Generating Sample", i, "..."
 
-        sample = generate_sample(sample_size, reader, max_chunk_size)
+        sample_df = df.sample(sample_size)
 
         #Convert data sample to histogram
-        sample_hist = transitions_to_histogram(sample)
+        sample_hist = transitions_to_histogram(sample_df)
 
         sampled_data_sets["S" + str(i)] = sample_hist
 
@@ -589,29 +573,29 @@ def generate_samples(num_samples, sample_size, reader, max_chunk_size):
 
     return sampled_data_sets
 
-def generate_sample(sample_size, reader, max_chunk_size, repeat=False):
-    sample = pd.DataFrame()
+# def generate_sample(sample_size, reader, max_chunk_size, repeat=False):
+    # sample = pd.DataFrame()
 
-    while sample.shape[0] != sample_size:
-        #Read a chunk
-        chunk_size = min(max_chunk_size, sample_size - sample.shape[0])
+    # while sample.shape[0] != sample_size:
+        # #Read a chunk
+        # chunk_size = min(max_chunk_size, sample_size - sample.shape[0])
 
-        chunk = reader.get_chunk(chunk_size)
+        # chunk = reader.get_chunk(chunk_size)
 
 
-        #Concatenate it together
-        sample = pd.concat([sample, chunk])
+        # #Concatenate it together
+        # sample = pd.concat([sample, chunk])
 
-    assert sample.shape[0] == sample_size
+    # assert sample.shape[0] == sample_size
 
-    return sample
+    # return sample
 
 
 def plot_mean(ax, data_sets):
     means = []
 
     for label, data in data_sets.iteritems():
-        means.append( (data['delay'] * data['probability']).sum() )
+        means.append( (data['delay:MAX'] * data['probability']).sum() )
 
     df = pd.DataFrame({'mean_delay': means}).sort_values(by='mean_delay')
 
@@ -630,20 +614,20 @@ def plot_max(ax, sampled_data_sets, true_max):
     maxes = []
 
     for label, data in sampled_data_sets.iteritems():
-        maxes.append( data['delay'].values.max() )
+        maxes.append( data['delay:MAX'].values.max() )
 
     df = pd.DataFrame({'max_delay': maxes}).sort_values(by='max_delay')
 
     value_counts = df['max_delay'].value_counts()
 
-    max_stats = pd.DataFrame({'delay': value_counts.index, 'probability': value_counts.values / float(value_counts.sum())})
+    max_stats = pd.DataFrame({'delay:MAX': value_counts.index, 'probability': value_counts.values / float(value_counts.sum())})
 
-    max_stats = max_stats.sort_values(by='delay')
+    max_stats = max_stats.sort_values(by='delay:MAX')
 
     max_stats['cumulative_probability'] = max_stats['probability'].cumsum()
 
 
-    ax.stem(max_stats['delay'], max_stats['probability'], label="Sample Max Delays (pdf)", basefmt="")
+    ax.stem(max_stats['delay:MAX'], max_stats['probability'], label="Sample Max Delays (pdf)", basefmt="")
 
     if true_max:
         ax.axvline(float(true_max), color="red", label="True Max Delay")
@@ -677,7 +661,7 @@ def inspect_sim_file(filename):
 
     num_inputs = None
     for i, col_name in enumerate(cols):
-        if col_name == 'delay':
+        if col_name.startswith("delay"):
             num_inputs = i - 1 #-1 since column before delay is the output
 
     output_name = cols[num_inputs]

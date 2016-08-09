@@ -65,7 +65,7 @@ def main():
     data_sets = OrderedDict()
 
     if args.sta_cpd:
-        data_sets['STA'] = pd.DataFrame({'delay': [0., args.sta_cpd], 'probability': [0., 1.]})
+        data_sets['STA'] = pd.DataFrame({'delay:MAX': [0., args.sta_cpd], 'probability': [0., 1.]})
 
     for i in xrange(len(args.exhaustive_csvs)):
         label = args.exhaustive_csvs[i] #Default the file name
@@ -101,7 +101,7 @@ def main():
 
 def load_histogram_csv(filename):
     print "Loading " + filename + "..."
-    return pd.read_csv(filename).sort_values(by="delay")
+    return pd.read_csv(filename).sort_values(by="delay:MAX")
 
 def map_to_bins(delay_prob_data, bins, histogram_range):
 
@@ -131,20 +131,20 @@ def plot_ax(ax, data_sets, plot_style="cdf",  plot_title=None, labelx=True, labe
 
         color = color_cycle.next()
 
-        max_delay = delay_prob_data['delay'].values.max()
+        max_delay = delay_prob_data['delay:MAX'].values.max()
 
 
         if "stem" in plot_style:
 
-            #ax.stem(delay_prob_data['delay'], delay_prob_data['probability'], label=label + " (pdf)", linefmt=color+'-', markerfmt=color+"o", basefmt=color+'-', alpha=alpha)
-            ax.stem(delay_prob_data['delay'], delay_prob_data['probability'], label=label + " (pdf)")
+            #ax.stem(delay_prob_data['delay:MAX'], delay_prob_data['probability'], label=label + " (pdf)", linefmt=color+'-', markerfmt=color+"o", basefmt=color+'-', alpha=alpha)
+            ax.stem(delay_prob_data['delay:MAX'], delay_prob_data['probability'], label=label + " (pdf)")
 
         if "cdf" in plot_style:
             #Calculate the CDF
             delay_prob_data['cumulative_probability'] = delay_prob_data['probability'].cumsum()
 
-            #ax.step(x=delay_prob_data['delay'], y=delay_prob_data['cumulative_probability'], where='post', label=label + " (cdf)", color=color)
-            ax.step(x=delay_prob_data['delay'], y=delay_prob_data['cumulative_probability'], where='post', label=label + " (cdf)")
+            #ax.step(x=delay_prob_data['delay:MAX'], y=delay_prob_data['cumulative_probability'], where='post', label=label + " (cdf)", color=color)
+            ax.step(x=delay_prob_data['delay:MAX'], y=delay_prob_data['cumulative_probability'], where='post', label=label + " (cdf)")
 
     ax.set_ylim(ymin=0., ymax=1.)
     #ax.grid()
