@@ -199,7 +199,7 @@ def search_mean(df, num_sim_cases, search_confidence, search_mean_interval_len, 
     lower_bound_sample_size = -1
     upper_bound_sample_size = -1
     interval_len = None
-    while True:
+    while lower_bound_sample_size == -1 or upper_bound_sample_size == -1 or (upper_bound_sample_size - lower_bound_sample_size > 1):
         print "Sample Size: {} (Size Bounds: [{},{}])".format(sample_size,
                                                               lower_bound_sample_size,
                                                               upper_bound_sample_size)
@@ -231,6 +231,8 @@ def search_mean(df, num_sim_cases, search_confidence, search_mean_interval_len, 
             else:
                 step = (upper_bound_sample_size - sample_size) / 2
 
+        assert upper_bound_sample_size >= lower_bound_sample_size
+
         if step == 0:
             break
 
@@ -238,7 +240,7 @@ def search_mean(df, num_sim_cases, search_confidence, search_mean_interval_len, 
 
     assert upper_bound_sample_size != -1
     assert lower_bound_sample_size != -1
-    assert upper_bound_sample_size == lower_bound_sample_size + 1
+    assert upper_bound_sample_size - lower_bound_sample_size <= 1
 
     print "Minimal Sample Size: {}, Interval Len: {} (@ {} confidence)".format(upper_bound_sample_size, interval_len, search_confidence)
 
@@ -263,7 +265,7 @@ def search_max3(df, num_sim_cases, search_confidence, converged_p_threshold_frac
     sample_size = num_sim_cases
     lower_bound_sample_size = -1
     upper_bound_sample_size = -1
-    while True:
+    while lower_bound_sample_size == -1 or upper_bound_sample_size == -1 or (upper_bound_sample_size - lower_bound_sample_size > 1):
 
         binom = sp.stats.binom(n=sample_size, p=p_est)
         #Probability of getting no max delay in the given sample size
@@ -297,6 +299,8 @@ def search_max3(df, num_sim_cases, search_confidence, converged_p_threshold_frac
             else:
                 step = -(sample_size - lower_bound_sample_size) / 2
 
+        assert upper_bound_sample_size >= lower_bound_sample_size
+
         if step == 0:
             break
 
@@ -304,7 +308,7 @@ def search_max3(df, num_sim_cases, search_confidence, converged_p_threshold_frac
 
     assert upper_bound_sample_size != -1
     assert lower_bound_sample_size != -1
-    assert upper_bound_sample_size == lower_bound_sample_size + 1
+    assert upper_bound_sample_size - lower_bound_sample_size <= 1
 
     print "Minimal Sample Size: {} (@ {} confidence)".format(upper_bound_sample_size, search_confidence)
 
