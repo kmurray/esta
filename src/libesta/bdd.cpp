@@ -31,7 +31,7 @@ std::istream& operator>>(std::istream& is, Cudd_ReorderingType& type) {
     else if(s == "CUDD_REORDER_WINDOW4")            type = CUDD_REORDER_WINDOW4;
     else if(s == "CUDD_REORDER_WINDOW2_CONV")       type = CUDD_REORDER_WINDOW2_CONV;
     else if(s == "CUDD_REORDER_WINDOW3_CONV")       type = CUDD_REORDER_WINDOW3_CONV;
-    else if(s == "CUDD_REORDER_WINDOW4")            type = CUDD_REORDER_WINDOW4_CONV;
+    else if(s == "CUDD_REORDER_WINDOW4_CONV")       type = CUDD_REORDER_WINDOW4_CONV;
     else if(s == "CUDD_REORDER_GROUP_SIFT")         type = CUDD_REORDER_GROUP_SIFT;
     else if(s == "CUDD_REORDER_GROUP_SIFT_CONV")    type = CUDD_REORDER_GROUP_SIFT_CONV;
     else if(s == "CUDD_REORDER_ANNEALING")          type = CUDD_REORDER_ANNEALING;
