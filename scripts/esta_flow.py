@@ -17,7 +17,7 @@ import pyverilog.vparser.ast as vast
 from pyverilog.ast_code_generator.codegen import ASTCodeGenerator
 
 from esta_util import CommandError, CommandRunner
-from esta_trans_to_hist import exhaustive_csv_to_histogram_csv
+from esta_trans_to_hist import transitions_to_histogram as exhaustive_csv_to_histogram_csv
 
 SIM_CLOCK="sim_clk"
 
@@ -111,6 +111,9 @@ def parse_args():
     # ESTA related arguments
     #
     esta_arguments = parser.add_argument_group("ESTA", "ESTA related options")
+    esta_arguments.add_argument("--reorder_method",
+                                default=None,
+                                help="BDD reordering method.")
     esta_arguments.add_argument("--esta_exec",
                                 default="esta",
                                 help="ESTA executable.")
@@ -320,6 +323,9 @@ def run_esta(args, design_info, sdf_file):
             "-s", sdf_file,
             "-d", args.delay_bin_size,
             "-m", args.max_permutations]
+
+    if args.reorder_method is not None:
+        cmd += ["--reorder_method", args.reorder_method]
 
     if args.sim_mode == "exhaustive":
         cmd += ["--max_exhaustive"]
