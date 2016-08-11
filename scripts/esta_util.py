@@ -170,19 +170,15 @@ def load_exhaustive_csv(filename):
 
     return transitions_to_histogram(raw_data)
 
-def load_trans_csv(filename):
+def load_trans_csv(filename, delay_only=False):
     base, ext = os.path.splitext(filename)
 
-    if ext == "gz":
-        with gzip.open(filename, 'rb') as f:
-            return pd.read_csv(f)
-    else:
-        return pd.read_csv(filename)
+    return pd.read_csv(filename, usecols=['delay:MAX'])
 
 def transitions_to_histogram(raw_data):
     #Counts of how often all delay values occur
     raw_counts = raw_data['delay:MAX'].value_counts(sort=False)
-    
+
     #Normalize by total combinations (i.e. number of rows)
     #to get probability
     normed_counts = raw_counts / raw_data.shape[0]
@@ -194,7 +190,11 @@ def transitions_to_histogram(raw_data):
         #If not, add a zero delay @ probability zero if none is recorded
         #this ensures matplotlib draws the CDF correctly
         zero_delay_df = pd.DataFrame({"delay:MAX": [0.], "probability": [0.]})
-        
+
         df = df.append(zero_delay_df)
 
     return df.sort_values(by="delay:MAX")
+
+
+def create_sta_hist(sta_cpd):
+    return pd.DataFrame({"delay:MAX": [0., sta_cpd], "probability": [0., 1.]})
