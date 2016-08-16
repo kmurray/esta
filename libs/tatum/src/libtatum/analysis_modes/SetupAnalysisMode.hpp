@@ -4,6 +4,7 @@
 #include "TimingConstraints.hpp"
 #include "TimingTags.hpp"
 #include "BaseAnalysisMode.hpp"
+class TagReducer;
 
 /** \file
  * The 'SetupAnalysisMode' class defines the operators needed by a timing analyzer class
@@ -122,7 +123,7 @@ class SetupAnalysisMode : public BaseAnalysisMode {
         void forward_traverse_edge(const TimingGraph& tg, const TimingConstraints& tc, const DelayCalc& dc, const NodeId node_id, const EdgeId edge_id);
 
         template<class DelayCalc>
-        void forward_traverse_finalize_node(const TimingGraph& tg, const TimingConstraints& tc, const DelayCalc& dc, const NodeId node_id, double delay_bin_size, size_t max_permutations);
+        void forward_traverse_finalize_node(const TimingGraph& tg, const TimingConstraints& tc, const DelayCalc& dc, const NodeId node_id, const TagReducer& /*unused*/, size_t max_permutations);
 
         template<class DelayCalc>
         void backward_traverse_edge(const TimingGraph& tg, const TimingConstraints& tc, const DelayCalc& dc, const NodeId node_id, const EdgeId edge_id);

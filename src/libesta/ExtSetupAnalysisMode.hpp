@@ -35,7 +35,7 @@ class ExtSetupAnalysisMode : public BaseAnalysisMode {
          */
 
         template<class DelayCalc>
-        void forward_traverse_finalize_node(const TimingGraph& tg, const TimingConstraints& tc, const DelayCalc& dc, const NodeId node_id, const double delay_bin_size, size_t max_output_tags);
+        void forward_traverse_finalize_node(const TimingGraph& tg, const TimingConstraints& tc, const DelayCalc& dc, const NodeId node_id, const TagReducer& tag_reducer, size_t max_output_tags);
 
         /*
          *template<class DelayCalc>

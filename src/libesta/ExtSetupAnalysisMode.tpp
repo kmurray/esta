@@ -111,7 +111,7 @@ void ExtSetupAnalysisMode<BaseAnalysisMode,Tags>::pre_traverse_node(const Timing
 
 template<class BaseAnalysisMode, class Tags>
 template<class DelayCalcType>
-void ExtSetupAnalysisMode<BaseAnalysisMode,Tags>::forward_traverse_finalize_node(const TimingGraph& tg, const TimingConstraints& tc, const DelayCalcType& dc, const NodeId node_id, double delay_bin_size, size_t max_permutations) {
+void ExtSetupAnalysisMode<BaseAnalysisMode,Tags>::forward_traverse_finalize_node(const TimingGraph& tg, const TimingConstraints& tc, const DelayCalcType& dc, const NodeId node_id, const TagReducer& tag_reducer, size_t max_permutations) {
     //Chain to base class
     BaseAnalysisMode::forward_traverse_finalize_node(tg, tc, dc, node_id);
 
@@ -191,7 +191,7 @@ void ExtSetupAnalysisMode<BaseAnalysisMode,Tags>::forward_traverse_finalize_node
         const double delay_bin_size_scale_fac = 1.2;
 
         //Generate all tag transition permutations
-        TagPermutationGenerator tag_permutation_generator = reduce_permutations(node_id, src_data_tag_sets, max_permutations, delay_bin_size, delay_bin_size_scale_fac);
+        TagPermutationGenerator tag_permutation_generator = reduce_permutations(node_id, src_data_tag_sets, max_permutations, 0., delay_bin_size_scale_fac);
 
         while(!tag_permutation_generator.done()) {
             std::vector<std::shared_ptr<const Tag>> src_tags = tag_permutation_generator.next();
@@ -361,11 +361,27 @@ void ExtSetupAnalysisMode<BaseAnalysisMode,Tags>::forward_traverse_finalize_node
 
 #ifdef TAG_DEBUG
         //The output tags from this node
-        std::cout << "\tOutput Tags:\n";
-        int i_out_tag = 0;
-        for(auto sink_tag : sink_tags) {
-            std::cout << "\t\t" << sink_tag->trans_type() << "@" << sink_tag->arr_time().value() << " cases: " << sink_tag->input_tags().size() << std::endl;
-            i_out_tag++;
+        {
+            std::cout << "\tOutput Tags (unreduced):\n";
+            int i_out_tag = 0;
+            for(auto sink_tag : sink_tags) {
+                std::cout << "\t\t" << sink_tag->trans_type() << "@" << sink_tag->arr_time().value() << " cases: " << sink_tag->input_tags().size() << std::endl;
+                i_out_tag++;
+            }
+        }
+#endif
+
+        sink_tags = tag_reducer.merge_tags(node_id, sink_tags);
+
+#ifdef TAG_DEBUG
+        //The output tags from this node
+        {
+            std::cout << "\tOutput Tags (reduced):\n";
+            int i_out_tag = 0;
+            for(auto sink_tag : sink_tags) {
+                std::cout << "\t\t" << sink_tag->trans_type() << "@" << sink_tag->arr_time().value() << " cases: " << sink_tag->input_tags().size() << std::endl;
+                i_out_tag++;
+            }
         }
 #endif
     }
@@ -429,7 +445,7 @@ TagPermutationGenerator ExtSetupAnalysisMode<BaseAnalysisMode,Tags>::reduce_perm
     //      O(L^K)
     //where L is the maximum number of tags on any input and K is the number of inputs.
     //In practice this is a pessimistic bound (typically not all inputs have L tags), how ever the number
-    //of permutations can still grow large.
+    //of permutations can still grow very large.
     //
     //To handle this we 'reduce' the input tags to keep the number of permutations below a specified
     //threshold (max_permutations)

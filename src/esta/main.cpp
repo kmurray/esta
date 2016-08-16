@@ -34,6 +34,8 @@
 
 #include "cell_characterize.hpp"
 
+#include "TagReducer.hpp"
+
 using std::cout;
 using std::cerr;
 using std::endl;
@@ -298,8 +300,10 @@ int main(int argc, char** argv) {
 
     g_action_timer.push_timer("STA Analysis");
 
+    auto noop_reducer = NoOpTagReducer();
+
     //The actual analyzer
-    auto sta_analyzer = std::make_shared<StaAnalyzerType>(timing_graph, timing_constraints, delay_calc, options.get_as<double>("delay_bin_size"), options.get_as<double>("max_permutations"));
+    auto sta_analyzer = std::make_shared<StaAnalyzerType>(timing_graph, timing_constraints, delay_calc, noop_reducer, options.get_as<double>("max_permutations"));
 
     sta_analyzer->calculate_timing();
 
@@ -324,8 +328,10 @@ int main(int argc, char** argv) {
 
     g_action_timer.push_timer("ESTA Analysis");
 
+    auto tag_reducer = FixedBinTagReducer(options.get_as<double>("delay_bin_size"));
+
     //The actual analyzer
-    auto esta_analyzer = std::make_shared<EstaAnalyzerType>(timing_graph, timing_constraints, delay_calc, options.get_as<double>("delay_bin_size"), options.get_as<double>("max_permutations"));
+    auto esta_analyzer = std::make_shared<EstaAnalyzerType>(timing_graph, timing_constraints, delay_calc, tag_reducer, options.get_as<double>("max_permutations"));
 
 
     esta_analyzer->set_xfunc_cache_size(options.get_as<size_t>("xfunc_cache_nelem"));

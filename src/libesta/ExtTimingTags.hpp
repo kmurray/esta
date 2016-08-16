@@ -44,6 +44,7 @@ class ExtTimingTags {
         ///\param base_tag The associated metat-data for new_time
         ///\remark Finds (or creates) the tag with the same clock domain as base_tag and update the arrival time if new_time is larger
         void max_arr(std::shared_ptr<const Tag> base_tag);
+        void max_arr(iterator merge_tag_iter, std::shared_ptr<const Tag> base_tag);
 
         ///Updates the required time of this set of tags to be the minimum.
         ///\param new_time The new arrival time to compare against
@@ -85,19 +86,22 @@ inline void ExtTimingTags::max_arr(std::shared_ptr<const Tag> tag) {
         //First time we've seen this tag
         add_tag(std::make_shared<Tag>(*tag));
     } else {
-        assert(iter != end());
+        max_arr(iter, tag);    
+    }
+}
 
-        std::shared_ptr<Tag> matched_tag = *iter;
-        
-        matched_tag->max_arr(tag->arr_time(), tag);
+inline void ExtTimingTags::max_arr(iterator merge_tag_iter, std::shared_ptr<const Tag> tag) {
+    assert(merge_tag_iter != end());
 
+    std::shared_ptr<Tag> matched_tag = *merge_tag_iter;
+    
+    matched_tag->max_arr(tag->arr_time(), tag);
 
-        //'tag' has been merged, with 'iter', so we need to update 
-        //'iter's switching scenarios (i.e. input tags that generate
-        //the iter tag
-        for(auto scenario : tag->input_tags()) {
-            matched_tag->add_input_tags(scenario);
-        }
+    //'tag' has been merged, with 'merge_tag_iter', so we need to update 
+    //'merge_tag_iter's switching scenarios (i.e. input tags that generate
+    //the tag)
+    for(auto& scenario : tag->input_tags()) {
+        matched_tag->add_input_tags(scenario);
     }
 }
 

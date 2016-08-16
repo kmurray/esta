@@ -123,7 +123,7 @@ void SetupAnalysisMode<BaseAnalysisMode,Tags>::forward_traverse_edge(const Timin
 
 template<class BaseAnalysisMode, class Tags>
 template<class DelayCalc>
-void SetupAnalysisMode<BaseAnalysisMode,Tags>::forward_traverse_finalize_node(const TimingGraph& tg, const TimingConstraints& tc, const DelayCalc& dc, const NodeId node_id, double delay_bin_size, size_t max_permutations) {
+void SetupAnalysisMode<BaseAnalysisMode,Tags>::forward_traverse_finalize_node(const TimingGraph& tg, const TimingConstraints& tc, const DelayCalc& dc, const NodeId node_id, const TagReducer& /*unused*/, size_t max_permutations) {
     //Chain to base class
     BaseAnalysisMode::forward_traverse_finalize_node(tg, tc, dc, node_id);
 
