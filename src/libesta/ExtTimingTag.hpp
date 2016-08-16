@@ -3,6 +3,7 @@
  *
  */
 #include <cassert>
+#include <memory>
 #include <unordered_map>
 #include "bdd.hpp"
 #include "Time.hpp"
@@ -63,7 +64,7 @@ class ExtTimingTag {
         ///\returns This tag's associated transition type
         TransitionType trans_type() const { return trans_type_; }
 
-        const std::vector<std::vector<const ExtTimingTag*>>& input_tags() const { return input_tags_; }
+        const std::vector<std::vector<std::shared_ptr<const ExtTimingTag>>>& input_tags() const { return input_tags_; }
 
         /*
          * Setters
@@ -83,7 +84,7 @@ class ExtTimingTag {
         ///\param new_trans The new value to set as the tag's transition type
         void set_trans_type(const TransitionType& new_trans_type) { trans_type_ = new_trans_type; }
 
-        void add_input_tags(const std::vector<const ExtTimingTag*>& t) { input_tags_.push_back(t); }
+        void add_input_tags(const std::vector<std::shared_ptr<const ExtTimingTag>>& t) { input_tags_.push_back(t); }
 
         /*
          * Modification operations
@@ -96,7 +97,7 @@ class ExtTimingTag {
         ///If the arrival time is updated, meta-data is also updated from base_tag
         ///\param new_arr_time The arrival time to compare against
         ///\param base_tag The tag from which meta-data is copied
-        void max_arr(const Time new_arr, const ExtTimingTag* base_tag);
+        void max_arr(const Time new_arr, std::shared_ptr<const ExtTimingTag> base_tag);
 
         ///Updates the tag's arrival time if new_arr_time is smaller than the current arrival time.
         ///If the arrival time is updated, meta-data is also updated from base_tag
@@ -121,10 +122,10 @@ class ExtTimingTag {
          */
         ///\param other The tag to compare against
         ///\returns true if the meta-data of the current and other tag match
-        bool matches(const ExtTimingTag* other, double delay_bin_size) const;
+        bool matches(std::shared_ptr<const ExtTimingTag> other) const;
 
     private:
-        void update_arr(const Time new_arr, const ExtTimingTag* base_tag);
+        void update_arr(const Time new_arr, std::shared_ptr<const ExtTimingTag> base_tag);
         //void update_req(const Time& new_req_time, const ExtTimingTag& base_tag);
 
         /*
@@ -135,7 +136,7 @@ class ExtTimingTag {
         DomainId clock_domain_; //Clock domain for arr/req times
         NodeId launch_node_; //Node which launched this arrival time
         TransitionType trans_type_; //The transition type associated with this tag
-        std::vector<std::vector<const ExtTimingTag*>> input_tags_;
+        std::vector<std::vector<std::shared_ptr<const ExtTimingTag>>> input_tags_;
 };
 
 std::ostream& operator<<(std::ostream& os, const ExtTimingTag& tag);
@@ -164,7 +165,7 @@ inline ExtTimingTag::ExtTimingTag(const Time& arr_time_val, const Time& req_time
     , trans_type_(base_tag.trans_type())
     {}
 
-inline void ExtTimingTag::update_arr(const Time new_arr, const ExtTimingTag* base_tag) {
+inline void ExtTimingTag::update_arr(const Time new_arr, std::shared_ptr<const ExtTimingTag> base_tag) {
     if(base_tag->clock_domain() != INVALID_CLOCK_DOMAIN) {
         assert(clock_domain() == base_tag->clock_domain()); //Domain must be the same
         set_arr_time(new_arr);
@@ -172,7 +173,7 @@ inline void ExtTimingTag::update_arr(const Time new_arr, const ExtTimingTag* bas
     }
 }
 
-inline void ExtTimingTag::max_arr(const Time new_arr, const ExtTimingTag* base_tag) {
+inline void ExtTimingTag::max_arr(const Time new_arr, std::shared_ptr<const ExtTimingTag> base_tag) {
     //Need to min with existing value
     if(!arr_time().valid() || new_arr.value() > arr_time().value()) {
         //New value is smaller, or no previous valid value existed
@@ -181,7 +182,7 @@ inline void ExtTimingTag::max_arr(const Time new_arr, const ExtTimingTag* base_t
     }
 }
 
-inline bool ExtTimingTag::matches(const ExtTimingTag* other, double delay_bin_size) const {
+inline bool ExtTimingTag::matches(std::shared_ptr<const ExtTimingTag> other) const {
     //If a tag 'matches' it is typically collapsed into the matching tag.
 
     bool match = (clock_domain() == other->clock_domain());
@@ -191,19 +192,7 @@ inline bool ExtTimingTag::matches(const ExtTimingTag* other, double delay_bin_si
 #endif
 
 #ifdef TAG_MATCH_DELAY
-    //match &= (arr_time() == other->arr_time());
-
-    //We say that a delay 'matches' if it falls within the same delay bin
-    double this_bin = arr_time().value();
-    double other_bin = other->arr_time().value();
-    
-    if(delay_bin_size != 0.) {
-        //Map to the appropriate bin, we treat a bin size of zero as no binning
-        this_bin = std::floor(this_bin / delay_bin_size);
-        other_bin = std::floor(other_bin / delay_bin_size);
-    }
-
-    match &= (this_bin == other_bin);
+    match &= (arr_time() == other->arr_time());
 #endif
 
 #ifdef TAG_MATCH_SWITCH_FUNC
