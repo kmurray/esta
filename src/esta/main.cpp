@@ -288,12 +288,12 @@ int main(int argc, char** argv) {
     }
 
     //The actual analyzer
-    auto analyzer = std::make_shared<AnalyzerType>(timing_graph, timing_constraints, delay_calc, options.get_as<double>("delay_bin_size"), options.get_as<double>("max_permutations"));
+    auto esta_analyzer = std::make_shared<AnalyzerType>(timing_graph, timing_constraints, delay_calc, options.get_as<double>("delay_bin_size"), options.get_as<double>("max_permutations"));
 
     g_action_timer.push_timer("Analysis");
 
-    analyzer->set_xfunc_cache_size(options.get_as<size_t>("xfunc_cache_nelem"));
-    analyzer->calculate_timing();
+    esta_analyzer->set_xfunc_cache_size(options.get_as<size_t>("xfunc_cache_nelem"));
+    esta_analyzer->calculate_timing();
 
     g_action_timer.pop_timer("Analysis");
 
@@ -311,23 +311,23 @@ int main(int argc, char** argv) {
     cout << "Num Logical Inputs: " << timing_graph.logical_inputs().size() << " Num BDD Vars: " << nvars << " Num Possible Assignments: " << nassigns << endl;
     cout << endl;
 
-    auto sharp_sat_eval = std::make_shared<SharpSatType>(timing_graph, analyzer, nvars);
+    auto sharp_sat_eval = std::make_shared<SharpSatType>(timing_graph, esta_analyzer, nvars);
 
     if(options.get_as<string>("print_tags") != "none") {
         g_action_timer.push_timer("Output tags");
 
         if(options.get_as<string>("print_tags") == "pi") {
             for(auto node_id : timing_graph.primary_inputs()) {
-                print_node_tags(timing_graph, analyzer, sharp_sat_eval, node_id, nvars, 0);
+                print_node_tags(timing_graph, esta_analyzer, sharp_sat_eval, node_id, nvars, 0);
             }
         } else if(options.get_as<string>("print_tags") == "po") {
             for(auto node_id : timing_graph.primary_outputs()) {
-                print_node_tags(timing_graph, analyzer, sharp_sat_eval, node_id, nvars, 0);
+                print_node_tags(timing_graph, esta_analyzer, sharp_sat_eval, node_id, nvars, 0);
             }
         } else if(options.get_as<string>("print_tags") == "all") {
             for(LevelId level_id = 0; level_id < timing_graph.num_levels(); level_id++) {
                 for(auto node_id : timing_graph.level(level_id)) {
-                    print_node_tags(timing_graph, analyzer, sharp_sat_eval, node_id, nvars, 0);
+                    print_node_tags(timing_graph, esta_analyzer, sharp_sat_eval, node_id, nvars, 0);
                 }
             }
         } else {
@@ -339,7 +339,7 @@ int main(int argc, char** argv) {
     bool do_max_hist = options.get_as<bool>("max_histogram");
 
     if(do_max_hist) {
-        print_max_node_histogram(timing_graph, analyzer, sharp_sat_eval, options.get_as<double>("delay_bin_size"));
+        print_max_node_histogram(timing_graph, esta_analyzer, sharp_sat_eval, options.get_as<double>("delay_bin_size"));
     }
 
     if(options.get_as<string>("print_histograms") != "none") {
@@ -348,18 +348,18 @@ int main(int argc, char** argv) {
         float node_count = 0;
         if(options.get_as<string>("print_histograms") == "pi") {
             for(auto node_id : timing_graph.primary_inputs()) {
-                print_node_histogram(timing_graph, analyzer, sharp_sat_eval, name_resolver, node_id, node_count / timing_graph.primary_inputs().size());
+                print_node_histogram(timing_graph, esta_analyzer, sharp_sat_eval, name_resolver, node_id, node_count / timing_graph.primary_inputs().size());
                 node_count += 1;
             }
         } else if(options.get_as<string>("print_histograms") == "po") {
             for(auto node_id : timing_graph.primary_outputs()) {
-                print_node_histogram(timing_graph, analyzer, sharp_sat_eval, name_resolver, node_id, node_count / timing_graph.primary_outputs().size());
+                print_node_histogram(timing_graph, esta_analyzer, sharp_sat_eval, name_resolver, node_id, node_count / timing_graph.primary_outputs().size());
                 node_count += 1;
             }
         } else if(options.get_as<string>("print_histograms") == "all") {
             for(LevelId level_id = 0; level_id < timing_graph.num_levels(); level_id++) {
                 for(auto node_id : timing_graph.level(level_id)) {
-                    print_node_histogram(timing_graph, analyzer, sharp_sat_eval, name_resolver, node_id, node_count / timing_graph.num_nodes());
+                    print_node_histogram(timing_graph, esta_analyzer, sharp_sat_eval, name_resolver, node_id, node_count / timing_graph.num_nodes());
                     node_count += 1;
                 }
             }
@@ -378,7 +378,7 @@ int main(int argc, char** argv) {
 
         std::cout << "Writing " << csv_filename << " for circuit max delay\n";
 
-        dump_max_exhaustive_csv(csv_os, timing_graph, analyzer, sharp_sat_eval, name_resolver, nvars, options.get_as<double>("delay_bin_size"));
+        dump_max_exhaustive_csv(csv_os, timing_graph, esta_analyzer, sharp_sat_eval, name_resolver, nvars, options.get_as<double>("delay_bin_size"));
         g_action_timer.pop_timer("Exhaustive Max CSV");
     }
 
@@ -418,7 +418,7 @@ int main(int argc, char** argv) {
 
             std::cout << "Writing " << csv_filename << " for node " << node_id << "\n";
 
-            dump_exhaustive_csv(csv_os, timing_graph, analyzer, sharp_sat_eval, name_resolver, node_id, nvars);
+            dump_exhaustive_csv(csv_os, timing_graph, esta_analyzer, sharp_sat_eval, name_resolver, node_id, nvars);
         }
 
         g_action_timer.pop_timer("Exhaustive CSV");
