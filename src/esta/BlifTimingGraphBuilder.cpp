@@ -144,8 +144,8 @@ void BlifTimingGraphBuilder::create_output(TimingGraph& tg, const BlifPort* outp
     //An output becomes the following in the timing graph:
     //    OUTPAD_IPIN ---> OUTPAD_SINK
     
-    NodeId ipin = tg.add_node(TN_Type::OUTPAD_IPIN, INVALID_CLOCK_DOMAIN, false);
-    NodeId sink = tg.add_node(TN_Type::OUTPAD_SINK, INVALID_CLOCK_DOMAIN, false);
+    NodeId ipin = tg.add_node(TN_Type::OUTPAD_IPIN, 0, false);
+    NodeId sink = tg.add_node(TN_Type::OUTPAD_SINK, 0, false);
 
     //Add the edge between them
     tg.add_edge(ipin, sink);

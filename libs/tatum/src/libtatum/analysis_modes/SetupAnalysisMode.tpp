@@ -9,9 +9,10 @@ void SetupAnalysisMode<BaseAnalysisMode,Tags>::initialize_traversal(const Timing
 }
 
 template<class BaseAnalysisMode, class Tags>
-void SetupAnalysisMode<BaseAnalysisMode,Tags>::pre_traverse_node(const TimingGraph& tg, const TimingConstraints& tc, const NodeId node_id) {
+template<class DelayCalc>
+void SetupAnalysisMode<BaseAnalysisMode,Tags>::pre_traverse_node(const TimingGraph& tg, const TimingConstraints& tc, const DelayCalc& dc, const NodeId node_id) {
     //Chain to base class
-    BaseAnalysisMode::pre_traverse_node(tg, tc, node_id);
+    BaseAnalysisMode::pre_traverse_node(tg, tc, dc, node_id);
 
     //Primary Input
     ASSERT_MSG(tg.num_node_in_edges(node_id) == 0, "Primary input has input edges: timing graph not levelized.");
@@ -61,9 +62,9 @@ void SetupAnalysisMode<BaseAnalysisMode,Tags>::pre_traverse_node(const TimingGra
 
 template<class BaseAnalysisMode, class Tags>
 template<class DelayCalcType>
-void SetupAnalysisMode<BaseAnalysisMode,Tags>::forward_traverse_edge(const TimingGraph& tg, const DelayCalcType& dc, const NodeId node_id, const EdgeId edge_id) {
+void SetupAnalysisMode<BaseAnalysisMode,Tags>::forward_traverse_edge(const TimingGraph& tg, const TimingConstraints& tc, const DelayCalcType& dc, const NodeId node_id, const EdgeId edge_id) {
     //Chain to base class
-    BaseAnalysisMode::forward_traverse_edge(tg, dc, node_id, edge_id);
+    BaseAnalysisMode::forward_traverse_edge(tg, tc, dc, node_id, edge_id);
 
     //We must use the tags by reference so we don't accidentally wipe-out any
     //existing tags
@@ -121,9 +122,10 @@ void SetupAnalysisMode<BaseAnalysisMode,Tags>::forward_traverse_edge(const Timin
 }
 
 template<class BaseAnalysisMode, class Tags>
-void SetupAnalysisMode<BaseAnalysisMode,Tags>::forward_traverse_finalize_node(const TimingGraph& tg, const TimingConstraints& tc, const NodeId node_id) {
+template<class DelayCalc>
+void SetupAnalysisMode<BaseAnalysisMode,Tags>::forward_traverse_finalize_node(const TimingGraph& tg, const TimingConstraints& tc, const DelayCalc& dc, const NodeId node_id, double delay_bin_size, size_t max_permutations) {
     //Chain to base class
-    BaseAnalysisMode::forward_traverse_finalize_node(tg, tc, node_id);
+    BaseAnalysisMode::forward_traverse_finalize_node(tg, tc, dc, node_id);
 
     //Take tags by reference so they are updated in-place
     Tags& node_data_tags = setup_data_tags_[node_id];
@@ -146,7 +148,17 @@ void SetupAnalysisMode<BaseAnalysisMode,Tags>::forward_traverse_finalize_node(co
                 float clock_constraint = tc.setup_clock_constraint(data_tag.clock_domain(), node_domain);
 
                 //Set the required time on the sink.
-                node_data_tags.min_req(Time(clock_constraint), data_tag);
+                if(clock_constraint < 0.) {
+                    double max_delay = 0.;
+                    
+                    for(auto& tag : node_data_tags) {
+                        max_delay = std::max(max_delay, tag.arr_time().value());
+                    }
+
+                    node_data_tags.min_req(Time(max_delay), data_tag);
+                } else {
+                    node_data_tags.min_req(Time(clock_constraint), data_tag);
+                }
             }
         }
     } else if (tg.node_type(node_id) == TN_Type::FF_SINK) {
@@ -179,9 +191,9 @@ void SetupAnalysisMode<BaseAnalysisMode,Tags>::forward_traverse_finalize_node(co
 
 template<class BaseAnalysisMode, class Tags>
 template<class DelayCalcType>
-void SetupAnalysisMode<BaseAnalysisMode,Tags>::backward_traverse_edge(const TimingGraph& tg, const DelayCalcType& dc, const NodeId node_id, const EdgeId edge_id) {
+void SetupAnalysisMode<BaseAnalysisMode,Tags>::backward_traverse_edge(const TimingGraph& tg, const TimingConstraints& tc, const DelayCalcType& dc, const NodeId node_id, const EdgeId edge_id) {
     //Chain to base class
-    BaseAnalysisMode::backward_traverse_edge(tg, dc, node_id, edge_id);
+    BaseAnalysisMode::backward_traverse_edge(tg, tc, dc, node_id, edge_id);
 
     //We must use the tags by reference so we don't accidentally wipe-out any
     //existing tags

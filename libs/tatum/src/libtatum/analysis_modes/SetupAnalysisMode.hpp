@@ -115,15 +115,17 @@ class SetupAnalysisMode : public BaseAnalysisMode {
         //Internal operations for performing setup analysis to satisfy the BaseAnalysisMode interface
         void initialize_traversal(const TimingGraph& tg);
 
-        void pre_traverse_node(const TimingGraph& tg, const TimingConstraints& tc, const NodeId node_id);
+        template<class DelayCalc>
+        void pre_traverse_node(const TimingGraph& tg, const TimingConstraints& tc, const DelayCalc& dc, const NodeId node_id);
 
         template<class DelayCalc>
-        void forward_traverse_edge(const TimingGraph& tg, const DelayCalc& dc, const NodeId node_id, const EdgeId edge_id);
-
-        void forward_traverse_finalize_node(const TimingGraph& tg, const TimingConstraints& tc, const NodeId node_id);
+        void forward_traverse_edge(const TimingGraph& tg, const TimingConstraints& tc, const DelayCalc& dc, const NodeId node_id, const EdgeId edge_id);
 
         template<class DelayCalc>
-        void backward_traverse_edge(const TimingGraph& tg, const DelayCalc& dc, const NodeId node_id, const EdgeId edge_id);
+        void forward_traverse_finalize_node(const TimingGraph& tg, const TimingConstraints& tc, const DelayCalc& dc, const NodeId node_id, double delay_bin_size, size_t max_permutations);
+
+        template<class DelayCalc>
+        void backward_traverse_edge(const TimingGraph& tg, const TimingConstraints& tc, const DelayCalc& dc, const NodeId node_id, const EdgeId edge_id);
 
         //Setup tag data storage
         std::vector<Tags> setup_data_tags_; //Data tags for each node [0..timing_graph.num_nodes()-1]

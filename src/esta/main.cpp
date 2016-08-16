@@ -40,11 +40,16 @@ using std::endl;
 using std::string;
 using std::to_string;
 
-using AnalysisType = ExtSetupAnalysisMode<BaseAnalysisMode,ExtTimingTags>;
 using DelayCalcType = PreCalcTransDelayCalculator;
-using AnalyzerType = SerialTimingAnalyzer<AnalysisType,DelayCalcType>;
-using SharpSatType = SharpSatBddEvaluator<AnalyzerType>;
-//using SharpSatType = SharpSatDecompBddEvaluator<AnalyzerType>;
+
+//STA
+using StaAnalysisType = SetupAnalysisMode<BaseAnalysisMode>;
+using StaAnalyzerType = SerialTimingAnalyzer<StaAnalysisType,DelayCalcType>;
+
+//ESTA
+using EstaAnalysisType = ExtSetupAnalysisMode<BaseAnalysisMode,ExtTimingTags>;
+using EstaAnalyzerType = SerialTimingAnalyzer<EstaAnalysisType,DelayCalcType>;
+using SharpSatType = SharpSatBddEvaluator<EstaAnalyzerType>;
 
 template class std::vector<const ExtTimingTag*>; //Debuging visiblitity
 
@@ -55,13 +60,13 @@ ActionTimer g_action_timer;
 EtaStats g_eta_stats;
 
 optparse::Values parse_args(int argc, char** argv);
-void print_node_tags(const TimingGraph& tg, std::shared_ptr<AnalyzerType> analyzer, std::shared_ptr<SharpSatType> sharp_sat_eval, NodeId node_id, size_t nvars, float progress);
-void print_node_histogram(const TimingGraph& tg, std::shared_ptr<AnalyzerType> analyzer, std::shared_ptr<SharpSatType> sharp_sat_eval, std::shared_ptr<TimingGraphNameResolver> name_resolver, NodeId node_id, float progress);
-void print_max_node_histogram(const TimingGraph& tg, std::shared_ptr<AnalyzerType> analyzer, std::shared_ptr<SharpSatType> sharp_sat_eval, double delay_bin_size);
-void dump_exhaustive_csv(std::ostream& os, const TimingGraph& tg, std::shared_ptr<AnalyzerType> analyzer, std::shared_ptr<SharpSatType> sharp_sat_eval, std::shared_ptr<TimingGraphNameResolver> name_resolver, NodeId node_id, size_t nvars);
-void dump_max_exhaustive_csv(std::ostream& os, const TimingGraph& tg, std::shared_ptr<AnalyzerType> analyzer, std::shared_ptr<SharpSatType> sharp_sat_eval, std::shared_ptr<TimingGraphNameResolver> name_resolver, size_t nvars, double delay_bin_size);
+void print_node_tags(const TimingGraph& tg, std::shared_ptr<EstaAnalyzerType> analyzer, std::shared_ptr<SharpSatType> sharp_sat_eval, NodeId node_id, size_t nvars, float progress);
+void print_node_histogram(const TimingGraph& tg, std::shared_ptr<EstaAnalyzerType> analyzer, std::shared_ptr<SharpSatType> sharp_sat_eval, std::shared_ptr<TimingGraphNameResolver> name_resolver, NodeId node_id, float progress);
+void print_max_node_histogram(const TimingGraph& tg, std::shared_ptr<EstaAnalyzerType> analyzer, std::shared_ptr<SharpSatType> sharp_sat_eval, double delay_bin_size);
+void dump_exhaustive_csv(std::ostream& os, const TimingGraph& tg, std::shared_ptr<EstaAnalyzerType> analyzer, std::shared_ptr<SharpSatType> sharp_sat_eval, std::shared_ptr<TimingGraphNameResolver> name_resolver, NodeId node_id, size_t nvars);
+void dump_max_exhaustive_csv(std::ostream& os, const TimingGraph& tg, std::shared_ptr<EstaAnalyzerType> analyzer, std::shared_ptr<SharpSatType> sharp_sat_eval, std::shared_ptr<TimingGraphNameResolver> name_resolver, size_t nvars, double delay_bin_size);
 std::string print_tag_debug(const ExtTimingTag* tag, BDD f, size_t nvars);
-std::vector<std::tuple<const ExtTimingTag*,BDD>> circuit_max_delays(const TimingGraph& tg, std::shared_ptr<AnalyzerType> analyzer, std::shared_ptr<SharpSatType> sharp_sat_eval, double delay_bin_size);
+std::vector<std::tuple<const ExtTimingTag*,BDD>> circuit_max_delays(const TimingGraph& tg, std::shared_ptr<EstaAnalyzerType> analyzer, std::shared_ptr<SharpSatType> sharp_sat_eval, double delay_bin_size);
 std::vector<std::vector<int>> get_cubes(BDD f, size_t nvars);
 std::vector<std::vector<int>> get_minterms(BDD f, size_t nvars);
 std::vector<std::vector<int>> cube_to_minterms(std::vector<int> cube);
@@ -286,16 +291,47 @@ int main(int argc, char** argv) {
     for(NodeId id : timing_graph.primary_inputs()) {
         timing_constraints.add_input_constraint(id, 0.);
     }
+    for(NodeId id : timing_graph.primary_outputs()) {
+        timing_constraints.add_output_constraint(id, 0.);
+    }
+    timing_constraints.add_setup_clock_constraint(0, 0, -1.);
+
+    g_action_timer.push_timer("STA Analysis");
 
     //The actual analyzer
-    auto esta_analyzer = std::make_shared<AnalyzerType>(timing_graph, timing_constraints, delay_calc, options.get_as<double>("delay_bin_size"), options.get_as<double>("max_permutations"));
+    auto sta_analyzer = std::make_shared<StaAnalyzerType>(timing_graph, timing_constraints, delay_calc, options.get_as<double>("delay_bin_size"), options.get_as<double>("max_permutations"));
 
-    g_action_timer.push_timer("Analysis");
+    sta_analyzer->calculate_timing();
+
+    g_action_timer.pop_timer("STA Analysis");
+
+    g_action_timer.push_timer("STA Output");
+
+    for(LevelId level_id = 0; level_id < timing_graph.num_levels(); ++level_id) {
+        for(NodeId node_id : timing_graph.level(level_id)) {
+            std::cout << "\tNode: " << node_id << "\n"; 
+            for(auto tag : sta_analyzer->setup_data_tags(node_id)) {
+                double arr = tag.arr_time().value();
+                double req = tag.req_time().value();
+                double slack = req - arr;
+                std::cout << "\t\tArr: " << arr << " Req: " << req << " Slack: " << slack << "\n"; 
+            }
+        }
+        
+    }
+
+    g_action_timer.pop_timer("STA Output");
+
+    g_action_timer.push_timer("ESTA Analysis");
+
+    //The actual analyzer
+    auto esta_analyzer = std::make_shared<EstaAnalyzerType>(timing_graph, timing_constraints, delay_calc, options.get_as<double>("delay_bin_size"), options.get_as<double>("max_permutations"));
+
 
     esta_analyzer->set_xfunc_cache_size(options.get_as<size_t>("xfunc_cache_nelem"));
     esta_analyzer->calculate_timing();
 
-    g_action_timer.pop_timer("Analysis");
+    g_action_timer.pop_timer("ESTA Analysis");
 
 
     g_action_timer.push_timer("Output Results");
@@ -461,7 +497,7 @@ int main(int argc, char** argv) {
 }
 
 
-void print_node_tags(const TimingGraph& tg, std::shared_ptr<AnalyzerType> analyzer, std::shared_ptr<SharpSatType> sharp_sat_eval, NodeId node_id, size_t nvars, float progress) {
+void print_node_tags(const TimingGraph& tg, std::shared_ptr<EstaAnalyzerType> analyzer, std::shared_ptr<SharpSatType> sharp_sat_eval, NodeId node_id, size_t nvars, float progress) {
 
     cout << "Node: " << node_id << " " << tg.node_type(node_id) << " (" << progress*100 << "%)\n";
     cout << "   Clk Tags:\n";
@@ -488,7 +524,7 @@ void print_node_tags(const TimingGraph& tg, std::shared_ptr<AnalyzerType> analyz
     }
 }
 
-void print_node_histogram(const TimingGraph& tg, std::shared_ptr<AnalyzerType> analyzer, std::shared_ptr<SharpSatType> sharp_sat_eval, std::shared_ptr<TimingGraphNameResolver> name_resolver, NodeId node_id, float progress) {
+void print_node_histogram(const TimingGraph& tg, std::shared_ptr<EstaAnalyzerType> analyzer, std::shared_ptr<SharpSatType> sharp_sat_eval, std::shared_ptr<TimingGraphNameResolver> name_resolver, NodeId node_id, float progress) {
     g_action_timer.push_timer("Node " + std::to_string(node_id) + " histogram"); 
 
     std::string node_name;
@@ -562,7 +598,7 @@ void print_node_histogram(const TimingGraph& tg, std::shared_ptr<AnalyzerType> a
     g_action_timer.pop_timer("Node " + std::to_string(node_id) + " histogram"); 
 }
 
-void print_max_node_histogram(const TimingGraph& tg, std::shared_ptr<AnalyzerType> analyzer, std::shared_ptr<SharpSatType> sharp_sat_eval, double delay_bin_size) {
+void print_max_node_histogram(const TimingGraph& tg, std::shared_ptr<EstaAnalyzerType> analyzer, std::shared_ptr<SharpSatType> sharp_sat_eval, double delay_bin_size) {
     g_action_timer.push_timer("Max histogram"); 
 
     auto max_delays = circuit_max_delays(tg, analyzer, sharp_sat_eval, delay_bin_size);
@@ -616,7 +652,7 @@ void print_max_node_histogram(const TimingGraph& tg, std::shared_ptr<AnalyzerTyp
     g_action_timer.pop_timer("Max histogram"); 
 }
 
-void dump_exhaustive_csv(std::ostream& os, const TimingGraph& tg, std::shared_ptr<AnalyzerType> analyzer, std::shared_ptr<SharpSatType> sharp_sat_eval, std::shared_ptr<TimingGraphNameResolver> name_resolver, NodeId node_id, size_t nvars) {
+void dump_exhaustive_csv(std::ostream& os, const TimingGraph& tg, std::shared_ptr<EstaAnalyzerType> analyzer, std::shared_ptr<SharpSatType> sharp_sat_eval, std::shared_ptr<TimingGraphNameResolver> name_resolver, NodeId node_id, size_t nvars) {
     auto& data_tags = analyzer->setup_data_tags(node_id);
 
     using TupleVal = std::tuple<std::vector<TransitionType>,TransitionType,double>;
@@ -686,7 +722,7 @@ std::string print_tag_debug(const ExtTimingTag* tag, BDD f, size_t nvars) {
     return ss.str();
 }
 
-std::vector<std::tuple<const ExtTimingTag*,BDD>> circuit_max_delays(const TimingGraph& tg, std::shared_ptr<AnalyzerType> analyzer, std::shared_ptr<SharpSatType> sharp_sat_eval, double delay_bin_size) {
+std::vector<std::tuple<const ExtTimingTag*,BDD>> circuit_max_delays(const TimingGraph& tg, std::shared_ptr<EstaAnalyzerType> analyzer, std::shared_ptr<SharpSatType> sharp_sat_eval, double delay_bin_size) {
     ExtTimingTags max_tags;
 
     //Calculate the max tags
@@ -735,7 +771,7 @@ std::vector<std::tuple<const ExtTimingTag*,BDD>> circuit_max_delays(const Timing
     return max_delays;
 }
 
-void dump_max_exhaustive_csv(std::ostream& os, const TimingGraph& tg, std::shared_ptr<AnalyzerType> analyzer, std::shared_ptr<SharpSatType> sharp_sat_eval, std::shared_ptr<TimingGraphNameResolver> name_resolver, size_t nvars, double delay_bin_size) {
+void dump_max_exhaustive_csv(std::ostream& os, const TimingGraph& tg, std::shared_ptr<EstaAnalyzerType> analyzer, std::shared_ptr<SharpSatType> sharp_sat_eval, std::shared_ptr<TimingGraphNameResolver> name_resolver, size_t nvars, double delay_bin_size) {
     ExtTimingTags max_tags;
 
 
