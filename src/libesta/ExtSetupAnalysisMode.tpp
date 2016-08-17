@@ -464,52 +464,60 @@ TagPermutationGenerator ExtSetupAnalysisMode<BaseAnalysisMode,Tags>::reduce_perm
 
     size_t num_permutations = tag_permutation_generator.num_permutations();
 
-    if(num_permutations > max_permutations && max_permutations != 0) {
-        std::cout << "Node " << node_id << "(bin_size=" << tag_reducer.default_bin_size() << "): Orig Perms " << num_permutations << std::endl;
+    double max_tag_delay = 0.;
+    for(const auto& tags : src_data_tag_sets) {
+        for(const auto& tag : tags) {
+            max_tag_delay = std::max(max_tag_delay, tag->arr_time().value());
+        }
     }
 
-    //Iteratively reduce the number of tags (by increasing the delay bin size an input causeing tags to merge)
-    while(num_permutations > max_permutations && max_permutations != 0) {
+    if(num_permutations > max_permutations && max_permutations != 0) {
+        std::cout << "Node " << node_id << "(bin_size=" << tag_reducer.default_bin_size() << "): Orig Perms " << num_permutations << std::endl;
 
-        //Find the element with the most tags
-        auto cmp = [](const Tags& lhs, const Tags& rhs) {
-            return lhs.num_tags() < rhs.num_tags();
-        };
-        auto iter = std::max_element(src_data_tag_sets.begin(), src_data_tag_sets.end(), cmp);
+        //Iteratively reduce the number of tags (by increasing the delay bin size an input causeing tags to merge)
+        while(num_permutations > max_permutations) {
 
-        //Get it's index
-        size_t i = iter - src_data_tag_sets.begin();
+            //Find the element with the most tags
+            auto cmp = [](const Tags& lhs, const Tags& rhs) {
+                return lhs.num_tags() < rhs.num_tags();
+            };
+            auto iter = std::max_element(src_data_tag_sets.begin(), src_data_tag_sets.end(), cmp);
 
-        //Increase the bin size
-        double new_bin_size = tag_reducer.default_bin_size() * input_scale_factors[i];
+            //Get it's index
+            size_t i = iter - src_data_tag_sets.begin();
 
-        //TODO: handle this smarter, we do a lot of extra work since we could give up much earlier
-        if(std::isinf(new_bin_size)) {
-            std::cout << "Bin size too large giving up" << "\n";
-            break;
-        }
+            //Increase the bin size
+            double new_bin_size = tag_reducer.default_bin_size() * input_scale_factors[i];
 
-        //Reduce the tags on this input
-        // We must be careful to pass in the input's source node ID, so that we use the correct required
-        // time (since these are input, not output tags) when slack binning
-        EdgeId edge_id = tg.node_in_edge(node_id, i);
-        NodeId src_node_id = tg.edge_src_node(edge_id);
-        src_data_tag_sets[i] = tag_reducer.merge_tags(src_node_id, src_data_tag_sets[i], new_bin_size);
+            //If the bin size is larger than the maximum tag delay we will not get any more reductions, so give up
+            //TODO: we could handle this more intelligently by moving to another input (which might be reducable), for now leave as future work
+            if(new_bin_size > max_tag_delay) {
+                std::cout << "Bin size " << new_bin_size << " exceeded maximum tag delay " << max_tag_delay << " giving up on limiting permutations" << "\n";
+                break;
+            }
 
-        //Increase the scale factor (for the next time we reduce this input)
-        input_scale_factors[i] *= delay_bin_size_scale_fac;
+            //Reduce the tags on this input
+            // We must be careful to pass in the input's source node ID, so that we use the correct required
+            // time (since these are input, not output tags) when slack binning
+            EdgeId edge_id = tg.node_in_edge(node_id, i);
+            NodeId src_node_id = tg.edge_src_node(edge_id);
+            src_data_tag_sets[i] = tag_reducer.merge_tags(src_node_id, src_data_tag_sets[i], new_bin_size);
 
-        //Create the new generator
-        tag_permutation_generator = TagPermutationGenerator(src_data_tag_sets);
+            //Increase the scale factor (for the next time we reduce this input)
+            input_scale_factors[i] *= delay_bin_size_scale_fac;
 
-        std::cout << "Node " << node_id;
-        std::cout << " reduced tags on input " << i;
-        std::cout << " (new_bin_size=" << new_bin_size;
-        std::cout << ", tags=" << src_data_tag_sets[i].num_tags() << "):";
-        std::cout << " Perms " << tag_permutation_generator.num_permutations() << std::endl;
+            //Create the new generator
+            tag_permutation_generator = TagPermutationGenerator(src_data_tag_sets);
 
-        num_permutations = tag_permutation_generator.num_permutations();
-    } 
+            std::cout << "Node " << node_id;
+            std::cout << " reduced tags on input " << i;
+            std::cout << " (new_bin_size=" << new_bin_size;
+            std::cout << ", tags=" << src_data_tag_sets[i].num_tags() << "):";
+            std::cout << " Perms " << tag_permutation_generator.num_permutations() << std::endl;
+
+            num_permutations = tag_permutation_generator.num_permutations();
+        } 
+    }
 
     return tag_permutation_generator;
 }
