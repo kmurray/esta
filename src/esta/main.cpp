@@ -648,7 +648,7 @@ void print_max_node_histogram(const TimingGraph& tg, std::shared_ptr<EstaAnalyze
     std::ofstream os(filename);
 
     //Header
-    os << "delay,probability\n"; 
+    os << "delay:MAX,probability\n"; 
     //Rows
     for(auto kv : delay_prob_histo) {
 
