@@ -10,60 +10,66 @@ using Tags = ExtTimingTags;
 class TagReducer {
     public:
         virtual Tags merge_tags(NodeId node_id, const Tags& orig_tags) const = 0;
+        virtual Tags merge_tags(NodeId node_id, const Tags& orig_tags, double delay_bin_size) const = 0;
+        virtual double default_bin_size() const = 0;
 };
 
 class NoOpTagReducer : public TagReducer {
 
         Tags merge_tags(NodeId /*unused*/, const Tags& orig_tags) const override { return orig_tags; }
+        Tags merge_tags(NodeId /*unused*/, const Tags& orig_tags, double /*unused*/) const override { return orig_tags; }
+        virtual double default_bin_size() const { return 0.; }
 };
 
-class FixedBinTagReducer : public TagReducer {
-    public:
-
-        FixedBinTagReducer(double delay_bin_size)
-            : delay_bin_size_(delay_bin_size)
-        {}
-
-        Tags merge_tags(NodeId /*unused*/, const Tags& orig_tags) const override {
-            Tags merged_tags;
-
-            for(const auto& tag : orig_tags) {
-                //Predicate for finding an existing tag in the same bin
-                auto bin_tag_pred = [&](std::shared_ptr<const typename Tags::Tag> search_tag) {
-                    if(tag->trans_type() != search_tag->trans_type()) return false;
-                    
-                    //Map to the appropriate bin, we treat a bin size of zero as no binning
-                    double tag_bin = tag->arr_time().value();
-                    double search_tag_bin = search_tag->arr_time().value();
-
-                    if(delay_bin_size_ != 0.) {
-                        tag_bin = std::floor(tag_bin / delay_bin_size_);
-                        search_tag_bin = std::floor(search_tag_bin / delay_bin_size_);
-                    }
-
-                    if(tag_bin != search_tag_bin) return false;
-
-                    //Matched transition and delay bin
-                    return true;
-                };
-
-                //Get any tag in the same bin (if such a tag exists)
-                auto iter = std::find_if(merged_tags.begin(), merged_tags.end(), bin_tag_pred);
-
-                if(iter != merged_tags.end()) { //Found existing
-                    merged_tags.max_arr(iter, tag);
-
-                } else { //Start a new bin
-                    merged_tags.add_tag(tag);
-                }
-            }
-
-            return merged_tags;
-        }
-
-    private:
-        double delay_bin_size_;
-};
+/*
+ *class FixedBinTagReducer : public TagReducer {
+ *    public:
+ *
+ *        FixedBinTagReducer(double delay_bin_size)
+ *            : delay_bin_size_(delay_bin_size)
+ *        {}
+ *
+ *        Tags merge_tags(NodeId [>unused<], const Tags& orig_tags) const override {
+ *            Tags merged_tags;
+ *
+ *            for(const auto& tag : orig_tags) {
+ *                //Predicate for finding an existing tag in the same bin
+ *                auto bin_tag_pred = [&](std::shared_ptr<const typename Tags::Tag> search_tag) {
+ *                    if(tag->trans_type() != search_tag->trans_type()) return false;
+ *                    
+ *                    //Map to the appropriate bin, we treat a bin size of zero as no binning
+ *                    double tag_bin = tag->arr_time().value();
+ *                    double search_tag_bin = search_tag->arr_time().value();
+ *
+ *                    if(delay_bin_size_ != 0.) {
+ *                        tag_bin = std::floor(tag_bin / delay_bin_size_);
+ *                        search_tag_bin = std::floor(search_tag_bin / delay_bin_size_);
+ *                    }
+ *
+ *                    if(tag_bin != search_tag_bin) return false;
+ *
+ *                    //Matched transition and delay bin
+ *                    return true;
+ *                };
+ *
+ *                //Get any tag in the same bin (if such a tag exists)
+ *                auto iter = std::find_if(merged_tags.begin(), merged_tags.end(), bin_tag_pred);
+ *
+ *                if(iter != merged_tags.end()) { //Found existing
+ *                    merged_tags.max_arr(iter, tag);
+ *
+ *                } else { //Start a new bin
+ *                    merged_tags.add_tag(tag);
+ *                }
+ *            }
+ *
+ *            return merged_tags;
+ *        }
+ *
+ *    private:
+ *        double delay_bin_size_;
+ *};
+ */
 
 template<typename AnalyzerType>
 class StaSlackTagReducer : public TagReducer {
@@ -75,7 +81,13 @@ class StaSlackTagReducer : public TagReducer {
             , delay_bin_size_(delay_bin_size)
             {}
 
+        //Merge tags with the default bin size set at construction time
         Tags merge_tags(NodeId node_id, const Tags& orig_tags) const override {
+            return merge_tags(node_id, orig_tags, delay_bin_size_);
+        }
+
+        //Merge tags with a specific bin size
+        Tags merge_tags(NodeId node_id, const Tags& orig_tags, double delay_bin_size) const override {
             Tags merged_tags;
             
             //Calculate the slack from standard STA
@@ -102,9 +114,9 @@ class StaSlackTagReducer : public TagReducer {
                         double tag_bin = tag->arr_time().value();
                         double search_tag_bin = search_tag->arr_time().value();
 
-                        if(delay_bin_size_ != 0.) {
-                            tag_bin = std::floor(tag_bin / delay_bin_size_);
-                            search_tag_bin = std::floor(search_tag_bin / delay_bin_size_);
+                        if(delay_bin_size != 0.) {
+                            tag_bin = std::floor(tag_bin / delay_bin_size);
+                            search_tag_bin = std::floor(search_tag_bin / delay_bin_size);
                         }
 
                         if(tag_bin != search_tag_bin) return false;
@@ -117,7 +129,7 @@ class StaSlackTagReducer : public TagReducer {
                     if(iter != merged_tags.end()) { //Found existing
 #ifdef DEBUG_TAG_MERGE
                         auto matched_tag = *iter;
-                        std::cout << "Below ARR threshold match: merging new tag " << tag->trans_type() << "@" << tag->arr_time().value();
+                        std::cout << "Below ARR threshold (" << arr_threshold << ") match: merging new tag " << tag->trans_type() << "@" << tag->arr_time().value();
                         std::cout << " with existing " << matched_tag->trans_type() << "@" << matched_tag->arr_time().value() << "\n";
 #endif
                         merged_tags.max_arr(iter, tag);
@@ -133,6 +145,8 @@ class StaSlackTagReducer : public TagReducer {
             
             return merged_tags;
         }
+
+        double default_bin_size() const override { return delay_bin_size_; }
 
     private:
         std::shared_ptr<AnalyzerType> analyzer_;

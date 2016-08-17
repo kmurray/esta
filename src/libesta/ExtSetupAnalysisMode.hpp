@@ -51,7 +51,7 @@ class ExtSetupAnalysisMode : public BaseAnalysisMode {
 
         BDD apply_restriction(int var_idx, TransitionType input_trans, BDD f);
 
-        TagPermutationGenerator reduce_permutations(NodeId node_id, std::vector<Tags> src_data_tag_sets, size_t max_permutations, double delay_bin_size, double delay_bin_size_scale_fac);
+        TagPermutationGenerator reduce_permutations(const TimingGraph& tg, NodeId node_id, std::vector<Tags> src_data_tag_sets, size_t max_permutations, double delay_bin_size_scale_fac, const TagReducer& tag_reducer);
     protected:
 
         //Setup tag data storage
