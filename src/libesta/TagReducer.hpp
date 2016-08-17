@@ -63,7 +63,61 @@ class FixedBinTagReducer : public TagReducer {
         double delay_bin_size_;
 };
 
+template<typename AnalyzerType>
+class StaSlackTagReducer : public TagReducer {
 
+    public:
+        StaSlackTagReducer(std::shared_ptr<AnalyzerType> analyzer, double slack_threshold)
+            : analyzer_(analyzer)
+            , slack_threshold_(slack_threshold)
+            {}
+
+        Tags merge_tags(NodeId node_id, const Tags& orig_tags) const override {
+            Tags merged_tags;
+            
+            //Calculate the slack from standard STA
+            auto sta_tag = *(analyzer_->setup_data_tags(node_id).begin());
+            auto req = sta_tag.req_time().value();
+
+            auto arr_threshold = req - slack_threshold_;
+
+            for(const auto& tag : orig_tags) {
+
+                if(tag->arr_time().value() > arr_threshold) {
+                    //Above threshold do not merge
+                    merged_tags.add_tag(tag);
+                    std::cout << "Above ARR threshold (" << tag->arr_time().value() << " > " << arr_threshold << "): adding tag " << tag->trans_type() << "@" << tag->arr_time().value() << "\n";
+                } else {
+                    //Below threshold, merge if possible
+                    auto bin_tag_pred = [&](std::shared_ptr<const typename Tags::Tag> search_tag) {
+                        if(tag->trans_type() != search_tag->trans_type()) return false; //Require the same transition
+                        if(search_tag->arr_time().value() > arr_threshold) return false; //Don't merge with tags beyond threshold
+                        return true;
+                    };
+
+                    //Get any tag in the same bin (if such a tag exists)
+                    auto iter = std::find_if(merged_tags.begin(), merged_tags.end(), bin_tag_pred);
+
+                    if(iter != merged_tags.end()) { //Found existing
+                        auto matched_tag = *iter;
+                        std::cout << "Below ARR threshold match: merging new tag " << tag->trans_type() << "@" << tag->arr_time().value();
+                        std::cout << " with existing " << matched_tag->trans_type() << "@" << matched_tag->arr_time().value() << "\n";
+                        merged_tags.max_arr(iter, tag);
+
+                    } else { //Start a new bin
+                        std::cout << "Below ARR threshold no match: adding tag " << tag->trans_type() << "@" << tag->arr_time().value() << "\n";
+                        merged_tags.add_tag(tag);
+                    }
+                }
+            }
+            
+            return merged_tags;
+        }
+
+    private:
+        std::shared_ptr<AnalyzerType> analyzer_;
+        double slack_threshold_;
+};
 
 #if 0
 template<class Tags>
