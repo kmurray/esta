@@ -4,6 +4,7 @@
 #include <set>
 #include <queue>
 #include <algorithm>
+#include <cmath>
 #include "BlifTimingGraphBuilder.hpp"
 #include "cell_characterize.hpp"
 
@@ -691,13 +692,14 @@ void BlifTimingGraphBuilder::set_names_edge_delays_from_sdf(const TimingGraph& t
         std::map<TransitionType,Time> delays; //Delays for this specific edge
         for(auto output_trans : {TransitionType::RISE, TransitionType::FALL, TransitionType::HIGH, TransitionType::LOW}) {
             double delay = std::numeric_limits<double>::quiet_NaN();
+            //To match modelsim behaviour, we round delays to the nearest integer value
             if(output_trans == TransitionType::HIGH || output_trans == TransitionType::LOW) {
                 delay = 0.;
             } else if(output_trans == TransitionType::RISE) {
-                delay = rise_delay_val.max();
+                delay = std::round(rise_delay_val.max());
             } else {
                 assert(output_trans == TransitionType::FALL);
-                delay = fall_delay_val.max();
+                delay = std::round(fall_delay_val.max());
             }
 
             auto ret = delays.insert(std::make_pair(output_trans, Time(delay)));
@@ -768,13 +770,14 @@ void BlifTimingGraphBuilder::set_net_edge_delay_from_sdf(const TimingGraph& tg, 
     //on this edge
     for(auto output_trans : {TransitionType::RISE, TransitionType::FALL, TransitionType::HIGH, TransitionType::LOW}) {
         double delay = NAN;
+        //To match modelsim behaviour, we round delays to the nearest integer value
         if(output_trans == TransitionType::HIGH || output_trans == TransitionType::LOW) {
             delay = 0.;
         } else if(output_trans == TransitionType::RISE) {
-            delay = rise_delay_val.max();
+            delay = std::round(rise_delay_val.max());
         } else {
             assert(output_trans == TransitionType::FALL);
-            delay = fall_delay_val.max();
+            delay = std::round(fall_delay_val.max());
         }
 
         auto ret = delays.insert(std::make_pair(output_trans, Time(delay)));
@@ -808,13 +811,14 @@ void BlifTimingGraphBuilder::set_latch_edge_delays_from_sdf(const TimingGraph& t
     for(const auto& setup_check : sdf_cell.timing_check().setup()) {
         for(auto output_trans : {TransitionType::RISE, TransitionType::FALL, TransitionType::HIGH, TransitionType::LOW}) {
             double delay = NAN;
+            //To match modelsim behaviour, we round delays to the nearest integer value
             if(output_trans == TransitionType::HIGH || output_trans == TransitionType::LOW) {
                 delay = 0.;
             } else if(output_trans == TransitionType::RISE) {
-                delay = setup_check.tsu().max();
+                delay = std::round(setup_check.tsu().max());
             } else {
                 assert(output_trans == TransitionType::FALL);
-                delay = setup_check.tsu().max();
+                delay = std::round(setup_check.tsu().max());
             }
             auto ret1 = d_to_sink_delays.insert(std::make_pair(output_trans, Time(delay)));
             assert(ret1.second); //Was inserted
@@ -840,13 +844,14 @@ void BlifTimingGraphBuilder::set_latch_edge_delays_from_sdf(const TimingGraph& t
 
     for(auto output_trans : {TransitionType::RISE, TransitionType::FALL, TransitionType::HIGH, TransitionType::LOW}) {
         double delay = NAN;
+        //To match modelsim behaviour we round delays to the nearest integer
         if(output_trans == TransitionType::HIGH || output_trans == TransitionType::LOW) {
             delay = 0.;
         } else if(output_trans == TransitionType::RISE) {
-            delay = iopath.rise().max();
+            delay = std::round(iopath.rise().max());
         } else {
             assert(output_trans == TransitionType::FALL);
-            delay = iopath.fall().max();
+            delay = std::round(iopath.fall().max());
         }
         auto ret3 = src_to_q_delays.insert(std::make_pair(output_trans, Time(delay)));
         assert(ret3.second); //Was inserted
