@@ -100,12 +100,21 @@ optparse::Values parse_args(int argc, char** argv) {
     parser.add_option("-d", "--delay_bin_size")
           .dest("delay_bin_size")
           .metavar("DELAY_BIN_SIZE")
+          .set_default(0.)
+          .help("The delay bin size to apply during analysis.")
+          ;
+
+    parser.add_option("--slack_threshold")
+          .dest("slack_threshold_frac")
+          .set_default(0.)
+          .metavar("DELAY_BIN_SIZE")
           .help("The delay bin size to apply during analysis.")
           ;
 
     parser.add_option("-m", "--max_permutations")
           .dest("max_permutations")
           .metavar("MAX_PERMUTATIONS")
+          .set_default(0.)
           .help("The maximum number of permutations to be evaluated at a node in the timing graph during analysis. Zero implies no limit.")
           ;
 
@@ -333,12 +342,17 @@ int main(int argc, char** argv) {
     g_action_timer.push_timer("ESTA Analysis");
 
     //auto tag_reducer = FixedBinTagReducer(options.get_as<double>("delay_bin_size"));
-    double slack_threshold = 0.75*sta_cpd;
-    std::cout << "Slack Threshold: " << slack_threshold << "\n";
-    auto tag_reducer = StaSlackTagReducer<StaAnalyzerType>(sta_analyzer, slack_threshold);
+    double slack_threshold_frac = options.get_as<double>("slack_threshold_frac");
+    double slack_threshold = slack_threshold_frac*sta_cpd;
+    double delay_bin_size = options.get_as<double>("delay_bin_size");
+    double max_permutations = options.get_as<double>("max_permutations");
+    std::cout << "Slack Threshold : " << slack_threshold << " ps (" << slack_threshold_frac << ")" << "\n";
+    std::cout << "Delay Bin Size  : " << delay_bin_size << "\n";
+    std::cout << "Max Permutations: " << max_permutations << "\n";
+    auto tag_reducer = StaSlackTagReducer<StaAnalyzerType>(sta_analyzer, slack_threshold, delay_bin_size);
 
     //The actual analyzer
-    auto esta_analyzer = std::make_shared<EstaAnalyzerType>(timing_graph, timing_constraints, delay_calc, tag_reducer, options.get_as<double>("max_permutations"));
+    auto esta_analyzer = std::make_shared<EstaAnalyzerType>(timing_graph, timing_constraints, delay_calc, tag_reducer, max_permutations);
 
 
     esta_analyzer->set_xfunc_cache_size(options.get_as<size_t>("xfunc_cache_nelem"));
