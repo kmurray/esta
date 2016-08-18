@@ -4,14 +4,14 @@
 #include "ExtTimingTag.hpp"
 
 class NullTransitionFilter {
-    std::unordered_set<const ExtTimingTag*> identify_filtered_tags(std::vector<const ExtTimingTag*> input_tags, BDD node_func) {
-        return std::unordered_set<const ExtTimingTag*>();
+    std::unordered_set<std::shared_ptr<const ExtTimingTag>> identify_filtered_tags(std::vector<std::shared_ptr<const ExtTimingTag>> input_tags, BDD node_func) {
+        return std::unordered_set<std::shared_ptr<const ExtTimingTag>>();
     }
 };
 
 class NextStateTransitionFilter {
     public :
-        std::unordered_set<const ExtTimingTag*> identify_filtered_tags(std::vector<const ExtTimingTag*> input_tags, BDD node_func) {
+        std::unordered_set<std::shared_ptr<const ExtTimingTag>> identify_filtered_tags(std::vector<std::shared_ptr<const ExtTimingTag>> input_tags, BDD node_func) {
             //Make a copy of the input tags and sort them by ascending arrival time
             std::vector<size_t> sorted_input_tag_idxs;;
             for(size_t i = 0; i < input_tags.size(); ++i) {
@@ -30,7 +30,7 @@ class NextStateTransitionFilter {
             std::vector<TransitionType> input_transitions(input_tags.size(), TransitionType::UNKOWN);
 
             //Those tags which are filtered (i.e. have no effect on output timing)
-            std::unordered_set<const ExtTimingTag*> filtered_tags;
+            std::unordered_set<std::shared_ptr<const ExtTimingTag>> filtered_tags;
             
             //Walk through the tags in arrival order, determining if the current
             //input will be filtered based on the known stable inputs

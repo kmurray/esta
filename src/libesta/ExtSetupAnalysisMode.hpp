@@ -35,23 +35,23 @@ class ExtSetupAnalysisMode : public BaseAnalysisMode {
          */
 
         template<class DelayCalc>
-        void forward_traverse_finalize_node(const TimingGraph& tg, const TimingConstraints& tc, const DelayCalc& dc, const NodeId node_id, const double delay_bin_size, size_t max_output_tags);
+        void forward_traverse_finalize_node(const TimingGraph& tg, const TimingConstraints& tc, const DelayCalc& dc, const NodeId node_id, const TagReducer& tag_reducer, size_t max_output_tags);
 
         /*
          *template<class DelayCalc>
          *void backward_traverse_edge(const TimingGraph& tg, const DelayCalc& dc, const NodeId node_id, const EdgeId edge_id);
          */
-        std::unordered_set<const Tag*> identify_filtered_tags(const std::vector<const Tag*>& input_tags, BDD node_func);
+        std::unordered_set<std::shared_ptr<const Tag>> identify_filtered_tags(const std::vector<std::shared_ptr<const Tag>>& input_tags, BDD node_func);
         bool input_is_filtered(size_t input_idx, const std::vector<TransitionType>& input_transitions, BDD f);
 
-        std::vector<std::vector<const Tag*>> gen_tag_permutations(const std::vector<Tags>& input_tags);
-        void gen_tag_permutations_recurr(const std::vector<Tags>& input_tags, size_t var_idx, const std::vector<const Tag*>& partial_perm, std::vector<std::vector<const Tag*>>& permutations);
+        std::vector<std::vector<std::shared_ptr<const Tag>>> gen_tag_permutations(const std::vector<Tags>& input_tags);
+        void gen_tag_permutations_recurr(const std::vector<Tags>& input_tags, size_t var_idx, const std::vector<std::shared_ptr<const Tag>>& partial_perm, std::vector<std::vector<std::shared_ptr<const Tag>>>& permutations);
 
         Time map_to_delay_bin(Time delay, const double delay_bin_size);
 
         BDD apply_restriction(int var_idx, TransitionType input_trans, BDD f);
 
-        TagPermutationGenerator reduce_permutations(NodeId node_id, std::vector<Tags> src_data_tag_sets, size_t max_permutations, double delay_bin_size, double delay_bin_size_scale_fac);
+        TagPermutationGenerator reduce_permutations(const TimingGraph& tg, NodeId node_id, std::vector<Tags> src_data_tag_sets, size_t max_permutations, double delay_bin_size_scale_fac, const TagReducer& tag_reducer);
     protected:
 
         //Setup tag data storage

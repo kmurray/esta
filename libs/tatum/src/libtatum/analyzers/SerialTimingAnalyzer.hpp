@@ -3,6 +3,8 @@
 #include <string>
 
 #include "TimingAnalyzer.hpp"
+#include "TagReducer.hpp"
+
 
 /**
  * Overview
@@ -50,7 +52,7 @@ class SerialTimingAnalyzer : public TimingAnalyzer<AnalysisType, DelayCalcType> 
         /// \param timing_graph The timing graph to analyze
         /// \param timing_constraints The timing constraints to apply during analysis
         /// \param delay_calculator The delay calculator to use to determine edge delays
-        SerialTimingAnalyzer(const TimingGraph& timing_graph, const TimingConstraints& timing_constraints, const DelayCalcType& delay_calculator, double delay_bin_size=0., size_t max_permutations=0);
+        SerialTimingAnalyzer(const TimingGraph& timing_graph, const TimingConstraints& timing_constraints, const DelayCalcType& delay_calculator, const TagReducer& tag_reducer, size_t max_permutations=0);
         void calculate_timing() override;
         void reset_timing() override;
         const DelayCalcType& delay_calculator() override { return dc_; }
@@ -80,7 +82,7 @@ class SerialTimingAnalyzer : public TimingAnalyzer<AnalysisType, DelayCalcType> 
         const TimingGraph& tg_; //The timing graph to analyzer
         const TimingConstraints& tc_; //The timing constraints to evaluate
         const DelayCalcType& dc_; //The delay calculator to use
-        double delay_bin_size_;
+        const TagReducer& tag_reducer_;
         size_t max_permutations_;
 
         std::map<std::string, double> perf_data_; //Performance profiling info, assumes each data point has a unique string identifier

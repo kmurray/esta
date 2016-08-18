@@ -34,19 +34,29 @@
 
 #include "cell_characterize.hpp"
 
+#include "TagReducer.hpp"
+
+//Define to print out STA node arrival and required times
+//#define STA_DUMP_ARR_REQ
+
 using std::cout;
 using std::cerr;
 using std::endl;
 using std::string;
 using std::to_string;
 
-using AnalysisType = ExtSetupAnalysisMode<BaseAnalysisMode,ExtTimingTags>;
 using DelayCalcType = PreCalcTransDelayCalculator;
-using AnalyzerType = SerialTimingAnalyzer<AnalysisType,DelayCalcType>;
-using SharpSatType = SharpSatBddEvaluator<AnalyzerType>;
-//using SharpSatType = SharpSatDecompBddEvaluator<AnalyzerType>;
 
-template class std::vector<const ExtTimingTag*>; //Debuging visiblitity
+//STA
+using StaAnalysisType = SetupAnalysisMode<BaseAnalysisMode>;
+using StaAnalyzerType = SerialTimingAnalyzer<StaAnalysisType,DelayCalcType>;
+
+//ESTA
+using EstaAnalysisType = ExtSetupAnalysisMode<BaseAnalysisMode,ExtTimingTags>;
+using EstaAnalyzerType = SerialTimingAnalyzer<EstaAnalysisType,DelayCalcType>;
+using SharpSatType = SharpSatBddEvaluator<EstaAnalyzerType>;
+
+template class std::vector<std::shared_ptr<const ExtTimingTag>>; //Debuging visiblitity
 
 //XXX: global variable
 //TODO: Clean up and pass appropriately....
@@ -55,13 +65,13 @@ ActionTimer g_action_timer;
 EtaStats g_eta_stats;
 
 optparse::Values parse_args(int argc, char** argv);
-void print_node_tags(const TimingGraph& tg, std::shared_ptr<AnalyzerType> analyzer, std::shared_ptr<SharpSatType> sharp_sat_eval, NodeId node_id, size_t nvars, float progress);
-void print_node_histogram(const TimingGraph& tg, std::shared_ptr<AnalyzerType> analyzer, std::shared_ptr<SharpSatType> sharp_sat_eval, std::shared_ptr<TimingGraphNameResolver> name_resolver, NodeId node_id, float progress);
-void print_max_node_histogram(const TimingGraph& tg, std::shared_ptr<AnalyzerType> analyzer, std::shared_ptr<SharpSatType> sharp_sat_eval, double delay_bin_size);
-void dump_exhaustive_csv(std::ostream& os, const TimingGraph& tg, std::shared_ptr<AnalyzerType> analyzer, std::shared_ptr<SharpSatType> sharp_sat_eval, std::shared_ptr<TimingGraphNameResolver> name_resolver, NodeId node_id, size_t nvars);
-void dump_max_exhaustive_csv(std::ostream& os, const TimingGraph& tg, std::shared_ptr<AnalyzerType> analyzer, std::shared_ptr<SharpSatType> sharp_sat_eval, std::shared_ptr<TimingGraphNameResolver> name_resolver, size_t nvars, double delay_bin_size);
-std::string print_tag_debug(const ExtTimingTag* tag, BDD f, size_t nvars);
-std::vector<std::tuple<const ExtTimingTag*,BDD>> circuit_max_delays(const TimingGraph& tg, std::shared_ptr<AnalyzerType> analyzer, std::shared_ptr<SharpSatType> sharp_sat_eval, double delay_bin_size);
+void print_node_tags(const TimingGraph& tg, std::shared_ptr<EstaAnalyzerType> analyzer, std::shared_ptr<SharpSatType> sharp_sat_eval, NodeId node_id, size_t nvars, float progress);
+void print_node_histogram(const TimingGraph& tg, std::shared_ptr<EstaAnalyzerType> analyzer, std::shared_ptr<SharpSatType> sharp_sat_eval, std::shared_ptr<TimingGraphNameResolver> name_resolver, NodeId node_id, float progress);
+void print_max_node_histogram(const TimingGraph& tg, std::shared_ptr<EstaAnalyzerType> analyzer, std::shared_ptr<SharpSatType> sharp_sat_eval, const TagReducer& tag_reducer);
+void dump_exhaustive_csv(std::ostream& os, const TimingGraph& tg, std::shared_ptr<EstaAnalyzerType> analyzer, std::shared_ptr<SharpSatType> sharp_sat_eval, std::shared_ptr<TimingGraphNameResolver> name_resolver, NodeId node_id, size_t nvars);
+void dump_max_exhaustive_csv(std::ostream& os, const TimingGraph& tg, std::shared_ptr<EstaAnalyzerType> analyzer, std::shared_ptr<SharpSatType> sharp_sat_eval, std::shared_ptr<TimingGraphNameResolver> name_resolver, size_t nvars, const TagReducer& tag_reducer);
+std::string print_tag_debug(std::shared_ptr<const ExtTimingTag> tag, BDD f, size_t nvars);
+std::vector<std::tuple<std::shared_ptr<const ExtTimingTag>,std::shared_ptr<BDD>>> circuit_max_delays(const TimingGraph& tg, std::shared_ptr<EstaAnalyzerType> analyzer, std::shared_ptr<SharpSatType> sharp_sat_eval, const TagReducer& tag_reducer, bool calculate_smallest_max_bdd=true);
 std::vector<std::vector<int>> get_cubes(BDD f, size_t nvars);
 std::vector<std::vector<int>> get_minterms(BDD f, size_t nvars);
 std::vector<std::vector<int>> cube_to_minterms(std::vector<int> cube);
@@ -93,12 +103,21 @@ optparse::Values parse_args(int argc, char** argv) {
     parser.add_option("-d", "--delay_bin_size")
           .dest("delay_bin_size")
           .metavar("DELAY_BIN_SIZE")
+          .set_default(0.)
+          .help("The delay bin size to apply during analysis.")
+          ;
+
+    parser.add_option("--slack_threshold")
+          .dest("slack_threshold_frac")
+          .set_default(0.)
+          .metavar("DELAY_BIN_SIZE")
           .help("The delay bin size to apply during analysis.")
           ;
 
     parser.add_option("-m", "--max_permutations")
           .dest("max_permutations")
           .metavar("MAX_PERMUTATIONS")
+          .set_default(0.)
           .help("The maximum number of permutations to be evaluated at a node in the timing graph during analysis. Zero implies no limit.")
           ;
 
@@ -286,16 +305,67 @@ int main(int argc, char** argv) {
     for(NodeId id : timing_graph.primary_inputs()) {
         timing_constraints.add_input_constraint(id, 0.);
     }
+    for(NodeId id : timing_graph.primary_outputs()) {
+        timing_constraints.add_output_constraint(id, 0.);
+    }
+    timing_constraints.add_setup_clock_constraint(0, 0, -1.);
+
+    g_action_timer.push_timer("STA Analysis");
+
+    auto noop_reducer = NoOpTagReducer();
 
     //The actual analyzer
-    auto analyzer = std::make_shared<AnalyzerType>(timing_graph, timing_constraints, delay_calc, options.get_as<double>("delay_bin_size"), options.get_as<double>("max_permutations"));
+    auto sta_analyzer = std::make_shared<StaAnalyzerType>(timing_graph, timing_constraints, delay_calc, noop_reducer, options.get_as<double>("max_permutations"));
 
-    g_action_timer.push_timer("Analysis");
+    sta_analyzer->calculate_timing();
 
-    analyzer->set_xfunc_cache_size(options.get_as<size_t>("xfunc_cache_nelem"));
-    analyzer->calculate_timing();
+    g_action_timer.pop_timer("STA Analysis");
 
-    g_action_timer.pop_timer("Analysis");
+    g_action_timer.push_timer("STA Output");
+
+    double sta_cpd = 0.;
+
+    for(LevelId level_id = 0; level_id < timing_graph.num_levels(); ++level_id) {
+        for(NodeId node_id : timing_graph.level(level_id)) {
+#ifdef STA_DUMP_ARR_REQ
+            //std::cout << "\tNode: " << node_id << "\n"; 
+#endif
+            for(auto tag : sta_analyzer->setup_data_tags(node_id)) {
+                double arr = tag.arr_time().value();
+                sta_cpd = std::max(sta_cpd, arr);
+
+#ifdef STA_DUMP_ARR_REQ
+                //double req = tag.req_time().value();
+                //double slack = req - arr;
+                //std::cout << "\t\tArr: " << arr << " Req: " << req << " Slack: " << slack << "\n"; 
+#endif
+            }
+        }
+    }
+    std::cout << "STA CPD: " << sta_cpd << "\n";
+
+    g_action_timer.pop_timer("STA Output");
+
+    g_action_timer.push_timer("ESTA Analysis");
+
+    //auto tag_reducer = FixedBinTagReducer(options.get_as<double>("delay_bin_size"));
+    double slack_threshold_frac = options.get_as<double>("slack_threshold_frac");
+    double slack_threshold = slack_threshold_frac*sta_cpd;
+    double delay_bin_size = options.get_as<double>("delay_bin_size");
+    double max_permutations = options.get_as<double>("max_permutations");
+    std::cout << "Slack Threshold : " << slack_threshold << " ps (" << slack_threshold_frac << ")" << "\n";
+    std::cout << "Delay Bin Size  : " << delay_bin_size << "\n";
+    std::cout << "Max Permutations: " << max_permutations << "\n";
+    auto tag_reducer = StaSlackTagReducer<StaAnalyzerType>(sta_analyzer, slack_threshold, delay_bin_size);
+
+    //The actual analyzer
+    auto esta_analyzer = std::make_shared<EstaAnalyzerType>(timing_graph, timing_constraints, delay_calc, tag_reducer, max_permutations);
+
+
+    esta_analyzer->set_xfunc_cache_size(options.get_as<size_t>("xfunc_cache_nelem"));
+    esta_analyzer->calculate_timing();
+
+    g_action_timer.pop_timer("ESTA Analysis");
 
 
     g_action_timer.push_timer("Output Results");
@@ -311,23 +381,23 @@ int main(int argc, char** argv) {
     cout << "Num Logical Inputs: " << timing_graph.logical_inputs().size() << " Num BDD Vars: " << nvars << " Num Possible Assignments: " << nassigns << endl;
     cout << endl;
 
-    auto sharp_sat_eval = std::make_shared<SharpSatType>(timing_graph, analyzer, nvars);
+    auto sharp_sat_eval = std::make_shared<SharpSatType>(timing_graph, esta_analyzer, nvars);
 
     if(options.get_as<string>("print_tags") != "none") {
         g_action_timer.push_timer("Output tags");
 
         if(options.get_as<string>("print_tags") == "pi") {
             for(auto node_id : timing_graph.primary_inputs()) {
-                print_node_tags(timing_graph, analyzer, sharp_sat_eval, node_id, nvars, 0);
+                print_node_tags(timing_graph, esta_analyzer, sharp_sat_eval, node_id, nvars, 0);
             }
         } else if(options.get_as<string>("print_tags") == "po") {
             for(auto node_id : timing_graph.primary_outputs()) {
-                print_node_tags(timing_graph, analyzer, sharp_sat_eval, node_id, nvars, 0);
+                print_node_tags(timing_graph, esta_analyzer, sharp_sat_eval, node_id, nvars, 0);
             }
         } else if(options.get_as<string>("print_tags") == "all") {
             for(LevelId level_id = 0; level_id < timing_graph.num_levels(); level_id++) {
                 for(auto node_id : timing_graph.level(level_id)) {
-                    print_node_tags(timing_graph, analyzer, sharp_sat_eval, node_id, nvars, 0);
+                    print_node_tags(timing_graph, esta_analyzer, sharp_sat_eval, node_id, nvars, 0);
                 }
             }
         } else {
@@ -339,7 +409,7 @@ int main(int argc, char** argv) {
     bool do_max_hist = options.get_as<bool>("max_histogram");
 
     if(do_max_hist) {
-        print_max_node_histogram(timing_graph, analyzer, sharp_sat_eval, options.get_as<double>("delay_bin_size"));
+        print_max_node_histogram(timing_graph, esta_analyzer, sharp_sat_eval, tag_reducer);
     }
 
     if(options.get_as<string>("print_histograms") != "none") {
@@ -348,18 +418,18 @@ int main(int argc, char** argv) {
         float node_count = 0;
         if(options.get_as<string>("print_histograms") == "pi") {
             for(auto node_id : timing_graph.primary_inputs()) {
-                print_node_histogram(timing_graph, analyzer, sharp_sat_eval, name_resolver, node_id, node_count / timing_graph.primary_inputs().size());
+                print_node_histogram(timing_graph, esta_analyzer, sharp_sat_eval, name_resolver, node_id, node_count / timing_graph.primary_inputs().size());
                 node_count += 1;
             }
         } else if(options.get_as<string>("print_histograms") == "po") {
             for(auto node_id : timing_graph.primary_outputs()) {
-                print_node_histogram(timing_graph, analyzer, sharp_sat_eval, name_resolver, node_id, node_count / timing_graph.primary_outputs().size());
+                print_node_histogram(timing_graph, esta_analyzer, sharp_sat_eval, name_resolver, node_id, node_count / timing_graph.primary_outputs().size());
                 node_count += 1;
             }
         } else if(options.get_as<string>("print_histograms") == "all") {
             for(LevelId level_id = 0; level_id < timing_graph.num_levels(); level_id++) {
                 for(auto node_id : timing_graph.level(level_id)) {
-                    print_node_histogram(timing_graph, analyzer, sharp_sat_eval, name_resolver, node_id, node_count / timing_graph.num_nodes());
+                    print_node_histogram(timing_graph, esta_analyzer, sharp_sat_eval, name_resolver, node_id, node_count / timing_graph.num_nodes());
                     node_count += 1;
                 }
             }
@@ -378,7 +448,7 @@ int main(int argc, char** argv) {
 
         std::cout << "Writing " << csv_filename << " for circuit max delay\n";
 
-        dump_max_exhaustive_csv(csv_os, timing_graph, analyzer, sharp_sat_eval, name_resolver, nvars, options.get_as<double>("delay_bin_size"));
+        dump_max_exhaustive_csv(csv_os, timing_graph, esta_analyzer, sharp_sat_eval, name_resolver, nvars, tag_reducer);
         g_action_timer.pop_timer("Exhaustive Max CSV");
     }
 
@@ -418,7 +488,7 @@ int main(int argc, char** argv) {
 
             std::cout << "Writing " << csv_filename << " for node " << node_id << "\n";
 
-            dump_exhaustive_csv(csv_os, timing_graph, analyzer, sharp_sat_eval, name_resolver, node_id, nvars);
+            dump_exhaustive_csv(csv_os, timing_graph, esta_analyzer, sharp_sat_eval, name_resolver, node_id, nvars);
         }
 
         g_action_timer.pop_timer("Exhaustive CSV");
@@ -461,7 +531,7 @@ int main(int argc, char** argv) {
 }
 
 
-void print_node_tags(const TimingGraph& tg, std::shared_ptr<AnalyzerType> analyzer, std::shared_ptr<SharpSatType> sharp_sat_eval, NodeId node_id, size_t nvars, float progress) {
+void print_node_tags(const TimingGraph& tg, std::shared_ptr<EstaAnalyzerType> analyzer, std::shared_ptr<SharpSatType> sharp_sat_eval, NodeId node_id, size_t nvars, float progress) {
 
     cout << "Node: " << node_id << " " << tg.node_type(node_id) << " (" << progress*100 << "%)\n";
     cout << "   Clk Tags:\n";
@@ -488,7 +558,7 @@ void print_node_tags(const TimingGraph& tg, std::shared_ptr<AnalyzerType> analyz
     }
 }
 
-void print_node_histogram(const TimingGraph& tg, std::shared_ptr<AnalyzerType> analyzer, std::shared_ptr<SharpSatType> sharp_sat_eval, std::shared_ptr<TimingGraphNameResolver> name_resolver, NodeId node_id, float progress) {
+void print_node_histogram(const TimingGraph& tg, std::shared_ptr<EstaAnalyzerType> analyzer, std::shared_ptr<SharpSatType> sharp_sat_eval, std::shared_ptr<TimingGraphNameResolver> name_resolver, NodeId node_id, float progress) {
     g_action_timer.push_timer("Node " + std::to_string(node_id) + " histogram"); 
 
     std::string node_name;
@@ -506,8 +576,8 @@ void print_node_histogram(const TimingGraph& tg, std::shared_ptr<AnalyzerType> a
     auto& raw_data_tags = analyzer->setup_data_tags(node_id);
 
     //Sort the tags so they come out in order
-    std::vector<ExtTimingTag*> sorted_data_tags(raw_data_tags.begin(), raw_data_tags.end());
-    auto tag_sorter = [](const ExtTimingTag* lhs, const ExtTimingTag* rhs) {
+    std::vector<std::shared_ptr<const ExtTimingTag>> sorted_data_tags(raw_data_tags.begin(), raw_data_tags.end());
+    auto tag_sorter = [](std::shared_ptr<const ExtTimingTag> lhs, std::shared_ptr<const ExtTimingTag> rhs) {
         return lhs->arr_time().value() < rhs->arr_time().value();
     };
     std::sort(sorted_data_tags.begin(), sorted_data_tags.end(), tag_sorter);
@@ -562,17 +632,40 @@ void print_node_histogram(const TimingGraph& tg, std::shared_ptr<AnalyzerType> a
     g_action_timer.pop_timer("Node " + std::to_string(node_id) + " histogram"); 
 }
 
-void print_max_node_histogram(const TimingGraph& tg, std::shared_ptr<AnalyzerType> analyzer, std::shared_ptr<SharpSatType> sharp_sat_eval, double delay_bin_size) {
+void print_max_node_histogram(const TimingGraph& tg, std::shared_ptr<EstaAnalyzerType> analyzer, std::shared_ptr<SharpSatType> sharp_sat_eval, const TagReducer& tag_reducer) {
     g_action_timer.push_timer("Max histogram"); 
 
-    auto max_delays = circuit_max_delays(tg, analyzer, sharp_sat_eval, delay_bin_size);
+    auto max_delays = circuit_max_delays(tg, analyzer, sharp_sat_eval, tag_reducer, false);
 
+    bool inferred_probability = false;
     std::map<double,double> delay_prob_histo;
     for(auto tag_bdd_tuple : max_delays) {
+        assert(!inferred_probability); //Should only happen on the last iteration
         auto tag = std::get<0>(tag_bdd_tuple);
         auto bdd = std::get<1>(tag_bdd_tuple);
         
-        delay_prob_histo[tag->arr_time().value()] = CountMintermFraction(bdd.getNode());
+        if(bdd) {
+            delay_prob_histo[tag->arr_time().value()] += CountMintermFraction(bdd->getNode());
+        } else {
+            //Only the last tag should have a 'null' bdd ptr implying we can infer
+            //the probability
+
+            //Sum up all the pre-calculated probabilities
+            double other_prob = 0;
+            for(auto kv : delay_prob_histo) {
+                other_prob += kv.second;
+            }
+
+            delay_prob_histo[tag->arr_time().value()] += 1. - other_prob;
+
+            inferred_probability = true; //We can only infer one probability
+        }
+    }
+
+    //To ensure correct histogram drawing, we insert a zero delay probability if none
+    //already exists
+    if(delay_prob_histo.find(0.) == delay_prob_histo.end()) {
+        delay_prob_histo[0.] = 0.;
     }
 
     double total_prob = 0.;
@@ -599,7 +692,8 @@ void print_max_node_histogram(const TimingGraph& tg, std::shared_ptr<AnalyzerTyp
     std::ofstream os(filename);
 
     //Header
-    os << "delay,probability\n"; 
+    os << "delay:MAX,probability\n"; 
+
     //Rows
     for(auto kv : delay_prob_histo) {
 
@@ -616,7 +710,7 @@ void print_max_node_histogram(const TimingGraph& tg, std::shared_ptr<AnalyzerTyp
     g_action_timer.pop_timer("Max histogram"); 
 }
 
-void dump_exhaustive_csv(std::ostream& os, const TimingGraph& tg, std::shared_ptr<AnalyzerType> analyzer, std::shared_ptr<SharpSatType> sharp_sat_eval, std::shared_ptr<TimingGraphNameResolver> name_resolver, NodeId node_id, size_t nvars) {
+void dump_exhaustive_csv(std::ostream& os, const TimingGraph& tg, std::shared_ptr<EstaAnalyzerType> analyzer, std::shared_ptr<SharpSatType> sharp_sat_eval, std::shared_ptr<TimingGraphNameResolver> name_resolver, NodeId node_id, size_t nvars) {
     auto& data_tags = analyzer->setup_data_tags(node_id);
 
     using TupleVal = std::tuple<std::vector<TransitionType>,TransitionType,double>;
@@ -677,7 +771,7 @@ void dump_exhaustive_csv(std::ostream& os, const TimingGraph& tg, std::shared_pt
     }
 }
 
-std::string print_tag_debug(const ExtTimingTag* tag, BDD f, size_t nvars) {
+std::string print_tag_debug(std::shared_ptr<const ExtTimingTag> tag, BDD f, size_t nvars) {
     double sat_frac = CountMintermFraction(f.getNode());
 
     std::stringstream ss;
@@ -686,7 +780,32 @@ std::string print_tag_debug(const ExtTimingTag* tag, BDD f, size_t nvars) {
     return ss.str();
 }
 
-std::vector<std::tuple<const ExtTimingTag*,BDD>> circuit_max_delays(const TimingGraph& tg, std::shared_ptr<AnalyzerType> analyzer, std::shared_ptr<SharpSatType> sharp_sat_eval, double delay_bin_size) {
+//Returns a vector of tags and their associated BDD's representing the maximum delay of the circuit.
+//  If calculate_smallest_max_bdd is false, then the smallest-delay tag will not have it's BDD 
+//  calculated (a null shared_ptr is returned instead), and it is assumed that the caller will infer the
+//  probability based on the probability of the other tags.
+std::vector<std::tuple<std::shared_ptr<const ExtTimingTag>,std::shared_ptr<BDD>>> circuit_max_delays(const TimingGraph& tg, 
+        std::shared_ptr<EstaAnalyzerType> analyzer, 
+        std::shared_ptr<SharpSatType> sharp_sat_eval, 
+        const TagReducer& tag_reducer,
+        bool calculate_smallest_max_bdd) {
+    //We intially calculate the the maximum tags by iterating over all the Primary output tags,
+    //then we sort the resulting max tags by delay and calculate the BDD for each tag.
+    //We are careful to avoid double-counting transition cases accross multiple primary outputs by tracking
+    //which minterms have already been covered
+    //
+    //We make several run-time optimizations:
+    //
+    //  1) We don't need to update covered_minterms on the last while-loop iteration, since it won't be
+    //     used again -- since covered_minterms is a complex function the update could be expensive
+    //
+    //  2) Since the probability over all tags must be one, we can infer the probability of one tag
+    //     as 1. - sum(all_other_tag_probs).  This is controlled by the calculate_smallest_max_bdd parameter,
+    //     which when false causes a null bdd to be passed back for the last (lowest max delay) tag.
+    //     The caller can then inferr the probability from the other tags.  This avoids calculating one
+    //     tag's BDD.  If we have done a very coarse binning then the lowest delay tag may cover a large part
+    //     of the output space and may save run-time by avoiding the calculation of such a BDD.
+
     ExtTimingTags max_tags;
 
     //Calculate the max tags
@@ -694,13 +813,16 @@ std::vector<std::tuple<const ExtTimingTag*,BDD>> circuit_max_delays(const Timing
         const ExtTimingTags& node_tags = analyzer->setup_data_tags(po_node_id);
 
         //std::cout << "Max Input Tags (Node " << po_node_id << "):" << std::endl;
-        for(const ExtTimingTag* tag : node_tags) {
+        for(const auto tag : node_tags) {
             //std::cout << "\t" << *tag << std::endl;
-            ExtTimingTag* new_tag = new ExtTimingTag(*tag);
+            auto new_tag = std::make_shared<ExtTimingTag>(*tag);
             new_tag->set_trans_type(TransitionType::MAX);
-            max_tags.max_arr(new_tag, delay_bin_size);
+            max_tags.max_arr(new_tag);
         }
     }
+
+    //Reduce the tags to simplify BDD calculation
+    max_tags = tag_reducer.merge_max_tags(max_tags, tg.num_nodes());
 
     //When we calculate the max tags above, we may end up with the same set of input transitions
     //appearing multiple times in different tags (i.e. different delays to the primary outputs).
@@ -710,32 +832,55 @@ std::vector<std::tuple<const ExtTimingTag*,BDD>> circuit_max_delays(const Timing
     //been covered.  These covered minterms are then used to exclude any repeated minterms with delay
     //lower than the maximum.
 
-    //Sort into ascending order
+    //Sort into descending order
     std::sort(max_tags.begin(), max_tags.end(),
-                [](const ExtTimingTag* lhs, const ExtTimingTag* rhs) {
+                [](std::shared_ptr<const ExtTimingTag> lhs, std::shared_ptr<const ExtTimingTag> rhs) {
                     return lhs->arr_time().value() > rhs->arr_time().value();
                 }
              );
 
-    std::vector<std::tuple<const ExtTimingTag*,BDD>> max_delays;
+    std::vector<std::tuple<std::shared_ptr<const ExtTimingTag>,std::shared_ptr<BDD>>> max_delays;
 
     BDD covered_terms = g_cudd.bddZero();
-    for(const auto tag : max_tags) {
-        auto bdd = sharp_sat_eval->build_bdd_xfunc(tag);
+
+    auto tag_end = (calculate_smallest_max_bdd) ? max_tags.end() : max_tags.end() - 1;
+    auto tag_iter = max_tags.begin();
+    while(tag_iter != tag_end) {
+        auto bdd = sharp_sat_eval->build_bdd_xfunc(*tag_iter);
 
         //Remove any terms already covered
         bdd = bdd.And(!covered_terms);
 
         //Save the result
-        max_delays.emplace_back(tag, bdd);
+        max_delays.emplace_back(*tag_iter, std::make_shared<BDD>(bdd));
 
-        covered_terms |= bdd;
+        //Update already covered terms
+        // Note not needed after the last iteration,
+        // so don't update since it could be very expensive
+        if(tag_iter != tag_end - 1) {
+            covered_terms |= bdd;
+        }
+
+        ++tag_iter;
     }
+    if(tag_iter != max_tags.end()) {
+        assert(!calculate_smallest_max_bdd);
+
+        //We are not directly calculating the final tag
+        //
+        //We mark the last tag as null to inform the caller that they should
+        //infer the probability as 1. - sum(other_tag_probabilities)
+        max_delays.emplace_back(*tag_iter, std::shared_ptr<BDD>(nullptr));
+
+        ++tag_iter;
+    }
+
+    assert(tag_iter == max_tags.end());
 
     return max_delays;
 }
 
-void dump_max_exhaustive_csv(std::ostream& os, const TimingGraph& tg, std::shared_ptr<AnalyzerType> analyzer, std::shared_ptr<SharpSatType> sharp_sat_eval, std::shared_ptr<TimingGraphNameResolver> name_resolver, size_t nvars, double delay_bin_size) {
+void dump_max_exhaustive_csv(std::ostream& os, const TimingGraph& tg, std::shared_ptr<EstaAnalyzerType> analyzer, std::shared_ptr<SharpSatType> sharp_sat_eval, std::shared_ptr<TimingGraphNameResolver> name_resolver, size_t nvars, const TagReducer& tag_reducer) {
     ExtTimingTags max_tags;
 
 
@@ -743,10 +888,10 @@ void dump_max_exhaustive_csv(std::ostream& os, const TimingGraph& tg, std::share
     using TupleVal = std::tuple<std::vector<TransitionType>,TransitionType,double>;
     std::vector<TupleVal> exhaustive_values;
 
-    auto max_delays = circuit_max_delays(tg, analyzer, sharp_sat_eval, delay_bin_size);
+    auto max_delays = circuit_max_delays(tg, analyzer, sharp_sat_eval, tag_reducer, false);
     for(auto tag_bdd_tuple : max_delays) {
         auto tag = std::get<0>(tag_bdd_tuple);
-        auto bdd = std::get<1>(tag_bdd_tuple);
+        auto bdd = *(std::get<1>(tag_bdd_tuple));
 
         auto input_transitions = get_transitions(bdd, nvars);
 

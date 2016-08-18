@@ -82,7 +82,7 @@ TransitionType evaluate_output_transition(const std::vector<TransitionType>& inp
     }
 }
 
-TransitionType evaluate_output_transition(const std::vector<const ExtTimingTag*>& input_tags_scenario, BDD f) {
+TransitionType evaluate_output_transition(const std::vector<std::shared_ptr<const ExtTimingTag>>& input_tags_scenario, BDD f) {
     std::vector<TransitionType> input_transitions;
     for(auto tag : input_tags_scenario) {
         input_transitions.push_back(tag->trans_type());

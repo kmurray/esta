@@ -1,12 +1,13 @@
 #pragma once
 #include <algorithm>
+#include <memory>
 #include "ExtTimingTag.hpp"
 
 class ExtTimingTags {
     public:
         typedef ExtTimingTag Tag;
-        typedef std::vector<Tag*>::iterator iterator;
-        typedef std::vector<Tag*>::const_iterator const_iterator;
+        typedef std::vector<std::shared_ptr<Tag>>::iterator iterator;
+        typedef std::vector<std::shared_ptr<Tag>>::const_iterator const_iterator;
 
         /*
          * Getters
@@ -17,8 +18,8 @@ class ExtTimingTags {
         ///Finds a TimingTag in the current set that has clock domain id matching domain_id
         ///\param base_tag The tag to match meta-data against
         ///\returns An iterator to the tag if found, or end() if not found
-        iterator find_matching_tag(const Tag* base_tag, double delay_bin_size);
-        const_iterator find_matching_tag(const Tag* base_Tag, double delay_bin_size) const;
+        iterator find_matching_tag(std::shared_ptr<const Tag> base_tag);
+        const_iterator find_matching_tag(std::shared_ptr<const Tag> base_Tag) const;
 
         ///\returns An iterator to the first tag in the current set
         iterator begin() { return tags_.begin(); }
@@ -33,7 +34,7 @@ class ExtTimingTags {
          */
         ///Adds a TimingTag to the current set provided it has a valid clock domain
         ///\param src_tag The source tag who is inserted. Note that the src_tag is copied when inserted (the original is unchanged)
-        iterator add_tag(Tag* src_tag);
+        iterator add_tag(std::shared_ptr<Tag> src_tag);
 
         /*
          * Setup operations
@@ -42,7 +43,8 @@ class ExtTimingTags {
         ///\param new_time The new arrival time to compare against
         ///\param base_tag The associated metat-data for new_time
         ///\remark Finds (or creates) the tag with the same clock domain as base_tag and update the arrival time if new_time is larger
-        void max_arr(const Tag* base_tag, double delay_bin_size);
+        void max_arr(std::shared_ptr<const Tag> base_tag);
+        void max_arr(iterator merge_tag_iter, std::shared_ptr<const Tag> base_tag);
 
         ///Updates the required time of this set of tags to be the minimum.
         ///\param new_time The new arrival time to compare against
@@ -57,7 +59,7 @@ class ExtTimingTags {
 
 
     private:
-        std::vector<Tag*> tags_;
+        std::vector<std::shared_ptr<Tag>> tags_;
 };
 
 /*
@@ -65,7 +67,7 @@ class ExtTimingTags {
  */
 
 //Modifiers
-inline ExtTimingTags::iterator ExtTimingTags::add_tag(Tag* tag) {
+inline ExtTimingTags::iterator ExtTimingTags::add_tag(std::shared_ptr<Tag> tag) {
     //Don't add invalid clock domains
     //Some sources like constant generators may yeild illegal clock domains
     //if(tag->clock_domain() == INVALID_CLOCK_DOMAIN) {
@@ -77,26 +79,29 @@ inline ExtTimingTags::iterator ExtTimingTags::add_tag(Tag* tag) {
     return tags_.end() - 1;
 }
 
-inline void ExtTimingTags::max_arr(const Tag* tag, double delay_bin_size) {
-    auto iter = find_matching_tag(tag, delay_bin_size);
+inline void ExtTimingTags::max_arr(std::shared_ptr<const Tag> tag) {
+    auto iter = find_matching_tag(tag);
 
     if(iter == end()) {
         //First time we've seen this tag
-        add_tag(new Tag(*tag));
+        add_tag(std::make_shared<Tag>(*tag));
     } else {
-        assert(iter != end());
+        max_arr(iter, tag);    
+    }
+}
 
-        Tag* matched_tag = *iter;
-        
-        matched_tag->max_arr(tag->arr_time(), tag);
+inline void ExtTimingTags::max_arr(iterator merge_tag_iter, std::shared_ptr<const Tag> tag) {
+    assert(merge_tag_iter != end());
 
+    std::shared_ptr<Tag> matched_tag = *merge_tag_iter;
+    
+    matched_tag->max_arr(tag->arr_time(), tag);
 
-        //'tag' has been merged, with 'iter', so we need to update 
-        //'iter's switching scenarios (i.e. input tags that generate
-        //the iter tag
-        for(auto scenario : tag->input_tags()) {
-            matched_tag->add_input_tags(scenario);
-        }
+    //'tag' has been merged, with 'merge_tag_iter', so we need to update 
+    //'merge_tag_iter's switching scenarios (i.e. input tags that generate
+    //the tag)
+    for(auto& scenario : tag->input_tags()) {
+        matched_tag->add_input_tags(scenario);
     }
 }
 
@@ -106,16 +111,16 @@ inline void ExtTimingTags::clear() {
     tags_.clear();
 }
 
-inline ExtTimingTags::iterator ExtTimingTags::find_matching_tag(const Tag* base_tag, double delay_bin_size) {
-    auto pred = [&](const Tag* tag) {
-        return tag->matches(base_tag, delay_bin_size);
+inline ExtTimingTags::iterator ExtTimingTags::find_matching_tag(std::shared_ptr<const Tag> base_tag) {
+    auto pred = [&](std::shared_ptr<const Tag> tag) {
+        return tag->matches(base_tag);
     };
     return std::find_if(begin(), end(), pred);
 }
 
-inline ExtTimingTags::const_iterator ExtTimingTags::find_matching_tag(const Tag* base_tag, double delay_bin_size) const {
-    auto pred = [&](const Tag* tag) {
-        return tag->matches(base_tag, delay_bin_size);
+inline ExtTimingTags::const_iterator ExtTimingTags::find_matching_tag(std::shared_ptr<const Tag> base_tag) const {
+    auto pred = [&](std::shared_ptr<const Tag> tag) {
+        return tag->matches(base_tag);
     };
     return std::find_if(begin(), end(), pred);
 }

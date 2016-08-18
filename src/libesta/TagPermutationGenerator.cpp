@@ -36,8 +36,8 @@ void TagPermutationGenerator::advance() {
     }
 }
 
-std::vector<const ExtTimingTag*> TagPermutationGenerator::next() {
-    std::vector<const ExtTimingTag*> input_tag_perm(input_tag_sets_.size(), nullptr);
+std::vector<std::shared_ptr<const ExtTimingTag>> TagPermutationGenerator::next() {
+    std::vector<std::shared_ptr<const ExtTimingTag>> input_tag_perm(input_tag_sets_.size(), nullptr);
 
     for(size_t i = 0; i < input_tag_sets_.size(); i++) {
         input_tag_perm[i] = (*iterators_[i]);

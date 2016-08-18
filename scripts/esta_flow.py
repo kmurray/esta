@@ -85,6 +85,10 @@ def parse_args():
                         default=1e7,
                         help="Maximum number of permutations (per node) for ESTA. Smaller values reduce runtime at the cost of lower accuracy. A value of 0 causes no limit to be enforced.")
 
+    parser.add_argument("-s", "--slack_ratio",
+                        default=0.05,
+                        help="Percentile slack to never reduce")
+
     parser.add_argument("--sim_mode",
                         choices=["exhaustive", "monte_carlo"],
                         default="exhaustive",
@@ -322,7 +326,9 @@ def run_esta(args, design_info, sdf_file):
             "-b", args.blif,
             "-s", sdf_file,
             "-d", args.delay_bin_size,
-            "-m", args.max_permutations]
+            "-m", args.max_permutations,
+            "--slack_threshold", args.slack_ratio
+            ]
 
     if args.reorder_method is not None:
         cmd += ["--reorder_method", args.reorder_method]

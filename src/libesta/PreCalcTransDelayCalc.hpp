@@ -19,6 +19,10 @@ class PreCalcTransDelayCalculator {
             : edge_delays_(edge_delays) 
         {}
 
+        Time max_edge_delay(const TimingGraph& tg, EdgeId edge_id) const {
+            return max_edge_delay(tg, edge_id, TransitionType::UNKOWN, TransitionType::RISE);
+        }
+
         Time max_edge_delay(const TimingGraph& tg, EdgeId edge_id, TransitionType input_trans, TransitionType output_trans) const {
             Time delay;
             if(input_trans == TransitionType::CLOCK || output_trans == TransitionType::CLOCK) {
