@@ -655,6 +655,12 @@ void print_max_node_histogram(const TimingGraph& tg, std::shared_ptr<EstaAnalyze
         }
     }
 
+    //To ensure correct histogram drawing, we insert a zero delay probability if none
+    //already exists
+    if(delay_prob_histo.find(0.) == delay_prob_histo.end()) {
+        delay_prob_histo[0.] = 0.;
+    }
+
     double total_prob = 0.;
 
     //Print to stdou
@@ -680,6 +686,7 @@ void print_max_node_histogram(const TimingGraph& tg, std::shared_ptr<EstaAnalyze
 
     //Header
     os << "delay:MAX,probability\n"; 
+
     //Rows
     for(auto kv : delay_prob_histo) {
 
@@ -839,7 +846,6 @@ std::vector<std::tuple<std::shared_ptr<const ExtTimingTag>,std::shared_ptr<BDD>>
 
         //Save the result
         max_delays.emplace_back(*tag_iter, std::make_shared<BDD>(bdd));
-        std::cout << (*tag_iter)->arr_time().value() << "\n";
 
         //Update already covered terms
         // Note not needed after the last iteration,
