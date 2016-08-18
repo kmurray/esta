@@ -45,22 +45,32 @@ class StaSlackTagReducer : public TagReducer {
         //Merge tags with a specific bin size
         Tags merge_tags(NodeId node_id, const Tags& orig_tags, const double delay_bin_size) const override {
             //Calculate the slack from standard STA
-            auto sta_tag = *(analyzer_->setup_data_tags(node_id).begin());
-            auto req = sta_tag.req_time().value();
+            auto sta_tags = analyzer_->setup_data_tags(node_id);
+            if(sta_tags.num_tags() > 0) {
+                assert(sta_tags.num_tags() == 1);
 
-            auto arr_threshold = req - slack_threshold_;
+                auto sta_tag = *(sta_tags.begin());
+                auto req = sta_tag.req_time().value();
 
-            return merge_tags(orig_tags, delay_bin_size, arr_threshold);
+                auto arr_threshold = req - slack_threshold_;
+                return merge_tags(orig_tags, delay_bin_size, arr_threshold);
+            } else {
+                return orig_tags;
+            }
         }
 
         Tags merge_max_tags(const Tags& orig_tags, int num_nodes) const override {
             auto max_req = 0.;
 
             for(NodeId node_id = 0; node_id < num_nodes; ++node_id) {
-                auto sta_tag = *(analyzer_->setup_data_tags(node_id).begin());
-                auto req = sta_tag.req_time().value();
+                auto sta_tags = analyzer_->setup_data_tags(node_id);
+                if(sta_tags.num_tags() > 0) {
+                    assert(sta_tags.num_tags() == 1);
+                    auto sta_tag = *(analyzer_->setup_data_tags(node_id).begin());
+                    auto req = sta_tag.req_time().value();
 
-                max_req = std::max(max_req, req);
+                    max_req = std::max(max_req, req);
+                }
             }
 
             auto arr_threshold = max_req - slack_threshold_;
