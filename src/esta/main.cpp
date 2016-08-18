@@ -36,6 +36,9 @@
 
 #include "TagReducer.hpp"
 
+//Define to print out STA node arrival and required times
+//#define STA_DUMP_ARR_REQ
+
 using std::cout;
 using std::cerr;
 using std::endl;
@@ -324,14 +327,18 @@ int main(int argc, char** argv) {
 
     for(LevelId level_id = 0; level_id < timing_graph.num_levels(); ++level_id) {
         for(NodeId node_id : timing_graph.level(level_id)) {
-            std::cout << "\tNode: " << node_id << "\n"; 
+#ifdef STA_DUMP_ARR_REQ
+            //std::cout << "\tNode: " << node_id << "\n"; 
+#endif
             for(auto tag : sta_analyzer->setup_data_tags(node_id)) {
                 double arr = tag.arr_time().value();
                 sta_cpd = std::max(sta_cpd, arr);
 
-                double req = tag.req_time().value();
-                double slack = req - arr;
-                std::cout << "\t\tArr: " << arr << " Req: " << req << " Slack: " << slack << "\n"; 
+#ifdef STA_DUMP_ARR_REQ
+                //double req = tag.req_time().value();
+                //double slack = req - arr;
+                //std::cout << "\t\tArr: " << arr << " Req: " << req << " Slack: " << slack << "\n"; 
+#endif
             }
         }
     }
