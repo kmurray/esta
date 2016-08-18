@@ -5,7 +5,7 @@
 #include "transition_eval.hpp"
 
 //Print out detailed information about tags during analysis
-#define TAG_DEBUG
+/*#define TAG_DEBUG*/
 
 //Verify that the transition calculated incrementally during analysis matches
 //the transition calculated from scratch
