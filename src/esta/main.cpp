@@ -64,11 +64,11 @@ EtaStats g_eta_stats;
 optparse::Values parse_args(int argc, char** argv);
 void print_node_tags(const TimingGraph& tg, std::shared_ptr<EstaAnalyzerType> analyzer, std::shared_ptr<SharpSatType> sharp_sat_eval, NodeId node_id, size_t nvars, float progress);
 void print_node_histogram(const TimingGraph& tg, std::shared_ptr<EstaAnalyzerType> analyzer, std::shared_ptr<SharpSatType> sharp_sat_eval, std::shared_ptr<TimingGraphNameResolver> name_resolver, NodeId node_id, float progress);
-void print_max_node_histogram(const TimingGraph& tg, std::shared_ptr<EstaAnalyzerType> analyzer, std::shared_ptr<SharpSatType> sharp_sat_eval, double delay_bin_size);
+void print_max_node_histogram(const TimingGraph& tg, std::shared_ptr<EstaAnalyzerType> analyzer, std::shared_ptr<SharpSatType> sharp_sat_eval, const TagReducer& tag_reducer);
 void dump_exhaustive_csv(std::ostream& os, const TimingGraph& tg, std::shared_ptr<EstaAnalyzerType> analyzer, std::shared_ptr<SharpSatType> sharp_sat_eval, std::shared_ptr<TimingGraphNameResolver> name_resolver, NodeId node_id, size_t nvars);
-void dump_max_exhaustive_csv(std::ostream& os, const TimingGraph& tg, std::shared_ptr<EstaAnalyzerType> analyzer, std::shared_ptr<SharpSatType> sharp_sat_eval, std::shared_ptr<TimingGraphNameResolver> name_resolver, size_t nvars, double delay_bin_size);
+void dump_max_exhaustive_csv(std::ostream& os, const TimingGraph& tg, std::shared_ptr<EstaAnalyzerType> analyzer, std::shared_ptr<SharpSatType> sharp_sat_eval, std::shared_ptr<TimingGraphNameResolver> name_resolver, size_t nvars, const TagReducer& tag_reducer);
 std::string print_tag_debug(std::shared_ptr<const ExtTimingTag> tag, BDD f, size_t nvars);
-std::vector<std::tuple<std::shared_ptr<const ExtTimingTag>,BDD>> circuit_max_delays(const TimingGraph& tg, std::shared_ptr<EstaAnalyzerType> analyzer, std::shared_ptr<SharpSatType> sharp_sat_eval, double delay_bin_size);
+std::vector<std::tuple<std::shared_ptr<const ExtTimingTag>,std::shared_ptr<BDD>>> circuit_max_delays(const TimingGraph& tg, std::shared_ptr<EstaAnalyzerType> analyzer, std::shared_ptr<SharpSatType> sharp_sat_eval, const TagReducer& tag_reducer, bool calculate_smallest_max_bdd=true);
 std::vector<std::vector<int>> get_cubes(BDD f, size_t nvars);
 std::vector<std::vector<int>> get_minterms(BDD f, size_t nvars);
 std::vector<std::vector<int>> cube_to_minterms(std::vector<int> cube);
@@ -402,7 +402,7 @@ int main(int argc, char** argv) {
     bool do_max_hist = options.get_as<bool>("max_histogram");
 
     if(do_max_hist) {
-        print_max_node_histogram(timing_graph, esta_analyzer, sharp_sat_eval, options.get_as<double>("delay_bin_size"));
+        print_max_node_histogram(timing_graph, esta_analyzer, sharp_sat_eval, tag_reducer);
     }
 
     if(options.get_as<string>("print_histograms") != "none") {
@@ -441,7 +441,7 @@ int main(int argc, char** argv) {
 
         std::cout << "Writing " << csv_filename << " for circuit max delay\n";
 
-        dump_max_exhaustive_csv(csv_os, timing_graph, esta_analyzer, sharp_sat_eval, name_resolver, nvars, options.get_as<double>("delay_bin_size"));
+        dump_max_exhaustive_csv(csv_os, timing_graph, esta_analyzer, sharp_sat_eval, name_resolver, nvars, tag_reducer);
         g_action_timer.pop_timer("Exhaustive Max CSV");
     }
 
@@ -625,17 +625,34 @@ void print_node_histogram(const TimingGraph& tg, std::shared_ptr<EstaAnalyzerTyp
     g_action_timer.pop_timer("Node " + std::to_string(node_id) + " histogram"); 
 }
 
-void print_max_node_histogram(const TimingGraph& tg, std::shared_ptr<EstaAnalyzerType> analyzer, std::shared_ptr<SharpSatType> sharp_sat_eval, double delay_bin_size) {
+void print_max_node_histogram(const TimingGraph& tg, std::shared_ptr<EstaAnalyzerType> analyzer, std::shared_ptr<SharpSatType> sharp_sat_eval, const TagReducer& tag_reducer) {
     g_action_timer.push_timer("Max histogram"); 
 
-    auto max_delays = circuit_max_delays(tg, analyzer, sharp_sat_eval, delay_bin_size);
+    auto max_delays = circuit_max_delays(tg, analyzer, sharp_sat_eval, tag_reducer, false);
 
+    bool inferred_probability = false;
     std::map<double,double> delay_prob_histo;
     for(auto tag_bdd_tuple : max_delays) {
+        assert(!inferred_probability); //Should only happen on the last iteration
         auto tag = std::get<0>(tag_bdd_tuple);
         auto bdd = std::get<1>(tag_bdd_tuple);
         
-        delay_prob_histo[tag->arr_time().value()] += CountMintermFraction(bdd.getNode());
+        if(bdd) {
+            delay_prob_histo[tag->arr_time().value()] += CountMintermFraction(bdd->getNode());
+        } else {
+            //Only the last tag should have a 'null' bdd ptr implying we can infer
+            //the probability
+
+            //Sum up all the pre-calculated probabilities
+            double other_prob = 0;
+            for(auto kv : delay_prob_histo) {
+                other_prob += kv.second;
+            }
+
+            delay_prob_histo[tag->arr_time().value()] += 1. - other_prob;
+
+            inferred_probability = true; //We can only infer one probability
+        }
     }
 
     double total_prob = 0.;
@@ -749,7 +766,32 @@ std::string print_tag_debug(std::shared_ptr<const ExtTimingTag> tag, BDD f, size
     return ss.str();
 }
 
-std::vector<std::tuple<std::shared_ptr<const ExtTimingTag>,BDD>> circuit_max_delays(const TimingGraph& tg, std::shared_ptr<EstaAnalyzerType> analyzer, std::shared_ptr<SharpSatType> sharp_sat_eval, double delay_bin_size) {
+//Returns a vector of tags and their associated BDD's representing the maximum delay of the circuit.
+//  If calculate_smallest_max_bdd is false, then the smallest-delay tag will not have it's BDD 
+//  calculated (a null shared_ptr is returned instead), and it is assumed that the caller will infer the
+//  probability based on the probability of the other tags.
+std::vector<std::tuple<std::shared_ptr<const ExtTimingTag>,std::shared_ptr<BDD>>> circuit_max_delays(const TimingGraph& tg, 
+        std::shared_ptr<EstaAnalyzerType> analyzer, 
+        std::shared_ptr<SharpSatType> sharp_sat_eval, 
+        const TagReducer& tag_reducer,
+        bool calculate_smallest_max_bdd) {
+    //We intially calculate the the maximum tags by iterating over all the Primary output tags,
+    //then we sort the resulting max tags by delay and calculate the BDD for each tag.
+    //We are careful to avoid double-counting transition cases accross multiple primary outputs by tracking
+    //which minterms have already been covered
+    //
+    //We make several run-time optimizations:
+    //
+    //  1) We don't need to update covered_minterms on the last while-loop iteration, since it won't be
+    //     used again -- since covered_minterms is a complex function the update could be expensive
+    //
+    //  2) Since the probability over all tags must be one, we can infer the probability of one tag
+    //     as 1. - sum(all_other_tag_probs).  This is controlled by the calculate_smallest_max_bdd parameter,
+    //     which when false causes a null bdd to be passed back for the last (lowest max delay) tag.
+    //     The caller can then inferr the probability from the other tags.  This avoids calculating one
+    //     tag's BDD.  If we have done a very coarse binning then the lowest delay tag may cover a large part
+    //     of the output space and may save run-time by avoiding the calculation of such a BDD.
+
     ExtTimingTags max_tags;
 
     //Calculate the max tags
@@ -757,13 +799,16 @@ std::vector<std::tuple<std::shared_ptr<const ExtTimingTag>,BDD>> circuit_max_del
         const ExtTimingTags& node_tags = analyzer->setup_data_tags(po_node_id);
 
         //std::cout << "Max Input Tags (Node " << po_node_id << "):" << std::endl;
-        for(auto tag : node_tags) {
+        for(const auto tag : node_tags) {
             //std::cout << "\t" << *tag << std::endl;
             auto new_tag = std::make_shared<ExtTimingTag>(*tag);
             new_tag->set_trans_type(TransitionType::MAX);
             max_tags.max_arr(new_tag);
         }
     }
+
+    //Reduce the tags to simplify BDD calculation
+    max_tags = tag_reducer.merge_max_tags(max_tags, tg.num_nodes());
 
     //When we calculate the max tags above, we may end up with the same set of input transitions
     //appearing multiple times in different tags (i.e. different delays to the primary outputs).
@@ -773,32 +818,56 @@ std::vector<std::tuple<std::shared_ptr<const ExtTimingTag>,BDD>> circuit_max_del
     //been covered.  These covered minterms are then used to exclude any repeated minterms with delay
     //lower than the maximum.
 
-    //Sort into ascending order
+    //Sort into descending order
     std::sort(max_tags.begin(), max_tags.end(),
                 [](std::shared_ptr<const ExtTimingTag> lhs, std::shared_ptr<const ExtTimingTag> rhs) {
                     return lhs->arr_time().value() > rhs->arr_time().value();
                 }
              );
 
-    std::vector<std::tuple<std::shared_ptr<const ExtTimingTag>,BDD>> max_delays;
+    std::vector<std::tuple<std::shared_ptr<const ExtTimingTag>,std::shared_ptr<BDD>>> max_delays;
 
     BDD covered_terms = g_cudd.bddZero();
-    for(const auto tag : max_tags) {
-        auto bdd = sharp_sat_eval->build_bdd_xfunc(tag);
+
+    auto tag_end = (calculate_smallest_max_bdd) ? max_tags.end() : max_tags.end() - 1;
+    auto tag_iter = max_tags.begin();
+    while(tag_iter != tag_end) {
+        auto bdd = sharp_sat_eval->build_bdd_xfunc(*tag_iter);
 
         //Remove any terms already covered
         bdd = bdd.And(!covered_terms);
 
         //Save the result
-        max_delays.emplace_back(tag, bdd);
+        max_delays.emplace_back(*tag_iter, std::make_shared<BDD>(bdd));
+        std::cout << (*tag_iter)->arr_time().value() << "\n";
 
-        covered_terms |= bdd;
+        //Update already covered terms
+        // Note not needed after the last iteration,
+        // so don't update since it could be very expensive
+        if(tag_iter != tag_end - 1) {
+            covered_terms |= bdd;
+        }
+
+        ++tag_iter;
     }
+    if(tag_iter != max_tags.end()) {
+        assert(!calculate_smallest_max_bdd);
+
+        //We are not directly calculating the final tag
+        //
+        //We mark the last tag as null to inform the caller that they should
+        //infer the probability as 1. - sum(other_tag_probabilities)
+        max_delays.emplace_back(*tag_iter, std::shared_ptr<BDD>(nullptr));
+
+        ++tag_iter;
+    }
+
+    assert(tag_iter == max_tags.end());
 
     return max_delays;
 }
 
-void dump_max_exhaustive_csv(std::ostream& os, const TimingGraph& tg, std::shared_ptr<EstaAnalyzerType> analyzer, std::shared_ptr<SharpSatType> sharp_sat_eval, std::shared_ptr<TimingGraphNameResolver> name_resolver, size_t nvars, double delay_bin_size) {
+void dump_max_exhaustive_csv(std::ostream& os, const TimingGraph& tg, std::shared_ptr<EstaAnalyzerType> analyzer, std::shared_ptr<SharpSatType> sharp_sat_eval, std::shared_ptr<TimingGraphNameResolver> name_resolver, size_t nvars, const TagReducer& tag_reducer) {
     ExtTimingTags max_tags;
 
 
@@ -806,10 +875,10 @@ void dump_max_exhaustive_csv(std::ostream& os, const TimingGraph& tg, std::share
     using TupleVal = std::tuple<std::vector<TransitionType>,TransitionType,double>;
     std::vector<TupleVal> exhaustive_values;
 
-    auto max_delays = circuit_max_delays(tg, analyzer, sharp_sat_eval, delay_bin_size);
+    auto max_delays = circuit_max_delays(tg, analyzer, sharp_sat_eval, tag_reducer, false);
     for(auto tag_bdd_tuple : max_delays) {
         auto tag = std::get<0>(tag_bdd_tuple);
-        auto bdd = std::get<1>(tag_bdd_tuple);
+        auto bdd = *(std::get<1>(tag_bdd_tuple));
 
         auto input_transitions = get_transitions(bdd, nvars);
 
