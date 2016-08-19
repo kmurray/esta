@@ -53,7 +53,7 @@ class ExtTimingTag {
         const Time& arr_time() const { return arr_time_; }
 
         ///\returns This tag's required time
-        const Time& req_time() const { return req_time_; }
+        //const Time& req_time() const { return req_time_; }
 
         ///\returns This tag's launching clock domain
         DomainId clock_domain() const { return clock_domain_; }
@@ -73,7 +73,7 @@ class ExtTimingTag {
         void set_arr_time(const Time& new_arr_time) { arr_time_ = new_arr_time; };
 
         ///\param new_req_time The new value set as the tag's required time
-        void set_req_time(const Time& new_req_time) { req_time_ = new_req_time; };
+        //void set_req_time(const Time& new_req_time) { req_time_ = new_req_time; };
 
         ///\param new_req_time The new value set as the tag's clock domain
         void set_clock_domain(const DomainId new_clock_domain) { clock_domain_ = new_clock_domain; };
@@ -131,38 +131,38 @@ class ExtTimingTag {
         /*
          * Data
          */
-        Time arr_time_; //Arrival time
-        Time req_time_; //Required time
-        DomainId clock_domain_; //Clock domain for arr/req times
-        NodeId launch_node_; //Node which launched this arrival time
-        TransitionType trans_type_; //The transition type associated with this tag
         std::vector<std::vector<std::shared_ptr<const ExtTimingTag>>> input_tags_;
+        NodeId launch_node_; //Node which launched this arrival time
+        DomainId clock_domain_; //Clock domain for arr/req times
+        TransitionType trans_type_; //The transition type associated with this tag
+        Time arr_time_; //Arrival time
+        //Time req_time_; //Required time
 };
 
 std::ostream& operator<<(std::ostream& os, const ExtTimingTag& tag);
 
 inline ExtTimingTag::ExtTimingTag()
-    : arr_time_(NAN)
-    , req_time_(NAN)
+    : launch_node_(-1)
     , clock_domain_(INVALID_CLOCK_DOMAIN)
-    , launch_node_(-1)
     , trans_type_(TransitionType::UNKOWN)
+    , arr_time_(NAN)
+    //, req_time_(NAN)
     {}
 
 inline ExtTimingTag::ExtTimingTag(const Time& arr_time_val, const Time& req_time_val, DomainId domain, NodeId node, TransitionType trans)
-    : arr_time_(arr_time_val)
-    , req_time_(req_time_val)
+    : launch_node_(node)
     , clock_domain_(domain)
-    , launch_node_(node)
     , trans_type_(trans)
+    , arr_time_(arr_time_val)
+    //, req_time_(req_time_val)
     {}
 
 inline ExtTimingTag::ExtTimingTag(const Time& arr_time_val, const Time& req_time_val, const ExtTimingTag& base_tag)
-    : arr_time_(arr_time_val)
-    , req_time_(req_time_val)
+    : launch_node_(base_tag.launch_node())
     , clock_domain_(base_tag.clock_domain())
-    , launch_node_(base_tag.launch_node())
     , trans_type_(base_tag.trans_type())
+    , arr_time_(arr_time_val)
+    //, req_time_(req_time_val)
     {}
 
 inline void ExtTimingTag::update_arr(const Time new_arr, std::shared_ptr<const ExtTimingTag> base_tag) {

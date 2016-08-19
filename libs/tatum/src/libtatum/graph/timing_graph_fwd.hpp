@@ -11,10 +11,10 @@ enum class TN_Type;
 enum class TE_Type;
 
 //Various IDs used by the timing graph
-typedef int NodeId;
+typedef unsigned short NodeId;
 typedef int BlockId;
 typedef int EdgeId;
-typedef int DomainId;
+typedef char DomainId;
 typedef int LevelId;
 
 #define INVALID_CLOCK_DOMAIN -1

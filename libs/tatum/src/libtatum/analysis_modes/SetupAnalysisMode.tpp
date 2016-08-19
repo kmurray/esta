@@ -149,7 +149,7 @@ void SetupAnalysisMode<BaseAnalysisMode,Tags>::forward_traverse_finalize_node(co
 
                 //Set the required time on the sink.
                 if(clock_constraint < 0.) {
-                    double max_delay = 0.;
+                    auto max_delay = 0.f;
                     
                     for(auto& tag : node_data_tags) {
                         max_delay = std::max(max_delay, tag.arr_time().value());

@@ -91,7 +91,7 @@ set(WARN_FLAGS_TO_CHECK  #The flags to check if the compiler supports
     "-Wno-unused-parameter"     #Don't worry about unused function parameters
     #GCC-like optional
     #"-Wsign-conversion"         #Warn if a conversion may change the sign
-    #"-Wpadded"                  #Will warn if additional padding is introduced to a struct/class. Turn on if optimizing class memory layouts
+    "-Wpadded"                  #Will warn if additional padding is introduced to a struct/class. Turn on if optimizing class memory layouts
     )
 
 #Check and see if the compiler supports the various warning flags,

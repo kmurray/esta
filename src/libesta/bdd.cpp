@@ -296,7 +296,7 @@ std::pair<BDD,size_t> gen_norm_sharpSAT_equiv_func(Cudd& cudd, double nsat_frac,
     return {f_approx, nvars};
 }
 
-BDD gen_cube(Cudd& cudd, size_t nvars, size_t cube_size, const CubeNum& cube_num) {
+BDD gen_cube(Cudd& cudd, size_t /*nvars*/, size_t cube_size, const CubeNum& cube_num) {
     BDD cube = cudd.bddOne();
     //We associate each but (put to cube_size-1) of cube_num
     //corresponds to a variable literal (i.e. the variable for 1, inverted for 0)

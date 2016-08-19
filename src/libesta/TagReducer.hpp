@@ -60,7 +60,7 @@ class StaSlackTagReducer : public TagReducer {
         }
 
         Tags merge_max_tags(const Tags& orig_tags, int num_nodes) const override {
-            auto max_req = 0.;
+            auto max_req = 0.f;
 
             for(NodeId node_id = 0; node_id < num_nodes; ++node_id) {
                 auto sta_tags = analyzer_->setup_data_tags(node_id);

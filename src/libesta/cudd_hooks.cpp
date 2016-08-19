@@ -1,7 +1,7 @@
 #include "cudd_hooks.hpp"
 #include "util.h" //From CUDD
 
-int PreReorderHook( DdManager *dd, const char *str, void *data) {
+int PreReorderHook( DdManager* dd, const char* str, void* /*data*/) {
     int retval;
 
     retval = fprintf(dd->out,"%s reordering", str);
@@ -35,12 +35,12 @@ int PostReorderHook( DdManager *dd, const char *str, void *data) {
     return(1);
 }
 
-int PreGarbageCollectHook(DdManager* dd, const char* str, void* data) {
+int PreGarbageCollectHook(DdManager* dd, const char* str, void* /*data*/) {
     fprintf(dd->out,"%s gc %u dead nodes ...", str, dd->dead);
     return 1;
 }
 
-int PostGarbageCollectHook(DdManager* dd, const char* str, void* data) {
+int PostGarbageCollectHook(DdManager* dd, const char* /*str*/, void* /*data*/) {
     fprintf(dd->out,"gc finished\n");
     return 1;
 }

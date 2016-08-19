@@ -464,7 +464,7 @@ TagPermutationGenerator ExtSetupAnalysisMode<BaseAnalysisMode,Tags>::reduce_perm
 
     size_t num_permutations = tag_permutation_generator.num_permutations();
 
-    double max_tag_delay = 0.;
+    auto max_tag_delay = 0.f;
     for(const auto& tags : src_data_tag_sets) {
         for(const auto& tag : tags) {
             max_tag_delay = std::max(max_tag_delay, tag->arr_time().value());

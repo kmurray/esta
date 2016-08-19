@@ -24,7 +24,7 @@
 
 class Time {
     public:
-        typedef double scalar_type;
+        typedef float scalar_type;
         Time(): Time(NAN) {}
         ///Initialize from float types
         explicit Time(const double time) { set_value(time); }

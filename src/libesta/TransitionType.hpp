@@ -2,7 +2,7 @@
 #include <vector>
 #include <iosfwd>
 
-enum class TransitionType {
+enum class TransitionType : char {
     RISE,
     FALL,
     HIGH,

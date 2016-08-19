@@ -58,7 +58,7 @@ class ActionTimer {
         }
     private:
         float duration(const time_point end, const time_point start) const {
-            return std::chrono::duration_cast<std::chrono::duration<float>>(steady_clock::now() - start).count();
+            return std::chrono::duration_cast<std::chrono::duration<float>>(end - start).count();
         }
 
     private:
