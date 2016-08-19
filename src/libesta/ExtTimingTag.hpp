@@ -5,6 +5,9 @@
 #include <cassert>
 #include <memory>
 #include <unordered_map>
+
+#include <boost/intrusive_ptr.hpp>
+
 #include "bdd.hpp"
 #include "Time.hpp"
 #include "TransitionType.hpp"
@@ -28,6 +31,9 @@
 
 class ExtTimingTag {
     public:
+        typedef boost::intrusive_ptr<ExtTimingTag> ptr;
+        typedef boost::intrusive_ptr<const ExtTimingTag> cptr;
+
         /*
          * Constructors
          */
@@ -64,7 +70,7 @@ class ExtTimingTag {
         ///\returns This tag's associated transition type
         TransitionType trans_type() const { return trans_type_; }
 
-        const std::vector<std::vector<std::shared_ptr<const ExtTimingTag>>>& input_tags() const { return input_tags_; }
+        const std::vector<std::vector<ExtTimingTag::cptr>>& input_tags() const { return input_tags_; }
 
         /*
          * Setters
@@ -84,7 +90,7 @@ class ExtTimingTag {
         ///\param new_trans The new value to set as the tag's transition type
         void set_trans_type(const TransitionType& new_trans_type) { trans_type_ = new_trans_type; }
 
-        void add_input_tags(const std::vector<std::shared_ptr<const ExtTimingTag>>& t) { input_tags_.push_back(t); }
+        void add_input_tags(const std::vector<ExtTimingTag::cptr>& t) { input_tags_.push_back(t); }
 
         /*
          * Modification operations
@@ -97,7 +103,7 @@ class ExtTimingTag {
         ///If the arrival time is updated, meta-data is also updated from base_tag
         ///\param new_arr_time The arrival time to compare against
         ///\param base_tag The tag from which meta-data is copied
-        void max_arr(const Time new_arr, std::shared_ptr<const ExtTimingTag> base_tag);
+        void max_arr(const Time new_arr, ExtTimingTag::cptr base_tag);
 
         ///Updates the tag's arrival time if new_arr_time is smaller than the current arrival time.
         ///If the arrival time is updated, meta-data is also updated from base_tag
@@ -122,21 +128,35 @@ class ExtTimingTag {
          */
         ///\param other The tag to compare against
         ///\returns true if the meta-data of the current and other tag match
-        bool matches(std::shared_ptr<const ExtTimingTag> other) const;
+        bool matches(ExtTimingTag::cptr other) const;
 
     private:
-        void update_arr(const Time new_arr, std::shared_ptr<const ExtTimingTag> base_tag);
+        void update_arr(const Time new_arr, ExtTimingTag::cptr base_tag);
         //void update_req(const Time& new_req_time, const ExtTimingTag& base_tag);
 
         /*
          * Data
          */
-        std::vector<std::vector<std::shared_ptr<const ExtTimingTag>>> input_tags_;
+        std::vector<std::vector<ExtTimingTag::cptr>> input_tags_;
         NodeId launch_node_; //Node which launched this arrival time
         DomainId clock_domain_; //Clock domain for arr/req times
         TransitionType trans_type_; //The transition type associated with this tag
         Time arr_time_; //Arrival time
         //Time req_time_; //Required time
+
+
+        //Reference counting for boost intrusive_ptr
+        mutable int ref_cnt_ = 0;
+        friend inline void intrusive_ptr_add_ref(const ExtTimingTag* tag) {
+            assert(ref_cnt_ < std::numeric_limits<int>::max());
+            ++(tag->ref_cnt_);
+        }
+
+        friend inline void intrusive_ptr_release(const ExtTimingTag* tag) {
+            if(--(tag->ref_cnt_) == 0) {
+                delete tag;
+            }
+        }
 };
 
 std::ostream& operator<<(std::ostream& os, const ExtTimingTag& tag);
@@ -165,7 +185,7 @@ inline ExtTimingTag::ExtTimingTag(const Time& arr_time_val, const Time& req_time
     //, req_time_(req_time_val)
     {}
 
-inline void ExtTimingTag::update_arr(const Time new_arr, std::shared_ptr<const ExtTimingTag> base_tag) {
+inline void ExtTimingTag::update_arr(const Time new_arr, ExtTimingTag::cptr base_tag) {
     if(base_tag->clock_domain() != INVALID_CLOCK_DOMAIN) {
         assert(clock_domain() == base_tag->clock_domain()); //Domain must be the same
         set_arr_time(new_arr);
@@ -173,7 +193,7 @@ inline void ExtTimingTag::update_arr(const Time new_arr, std::shared_ptr<const E
     }
 }
 
-inline void ExtTimingTag::max_arr(const Time new_arr, std::shared_ptr<const ExtTimingTag> base_tag) {
+inline void ExtTimingTag::max_arr(const Time new_arr, ExtTimingTag::cptr base_tag) {
     //Need to min with existing value
     if(!arr_time().valid() || new_arr.value() > arr_time().value()) {
         //New value is smaller, or no previous valid value existed
@@ -182,7 +202,7 @@ inline void ExtTimingTag::max_arr(const Time new_arr, std::shared_ptr<const ExtT
     }
 }
 
-inline bool ExtTimingTag::matches(std::shared_ptr<const ExtTimingTag> other) const {
+inline bool ExtTimingTag::matches(ExtTimingTag::cptr other) const {
     //If a tag 'matches' it is typically collapsed into the matching tag.
 
     bool match = (clock_domain() == other->clock_domain());

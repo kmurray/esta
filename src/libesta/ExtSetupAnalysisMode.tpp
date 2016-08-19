@@ -68,14 +68,14 @@ void ExtSetupAnalysisMode<BaseAnalysisMode,Tags>::pre_traverse_node(const Timing
         }
         assert(trans == TransitionType::HIGH || trans == TransitionType::LOW);
 
-        auto constant_tag = std::make_shared<Tag>(Time(0.), Time(NAN), tg.node_clock_domain(node_id), node_id, trans);
+        boost::intrusive_ptr<Tag> constant_tag = new Tag(Time(0.), Time(NAN), tg.node_clock_domain(node_id), node_id, trans);
         setup_data_tags_[node_id].add_tag(constant_tag);
 
     } else if(node_type == TN_Type::CLOCK_SOURCE) {
         ASSERT_MSG(setup_clock_tags_[node_id].num_tags() == 0, "Clock source already has clock tags");
 
         //Initialize a clock tag with zero arrival, invalid required time
-        auto clock_tag = std::make_shared<Tag>(Time(0.), Time(NAN), tg.node_clock_domain(node_id), node_id, TransitionType::CLOCK);
+        boost::intrusive_ptr<Tag> clock_tag = new Tag(Time(0.), Time(NAN), tg.node_clock_domain(node_id), node_id, TransitionType::CLOCK);
 
         //Add the tag
         setup_clock_tags_[node_id].add_tag(clock_tag);
@@ -91,7 +91,7 @@ void ExtSetupAnalysisMode<BaseAnalysisMode,Tags>::pre_traverse_node(const Timing
         if(tg.node_is_clock_source(node_id)) {
             //Figure out if we are an input which defines a clock
             for(auto trans : {TransitionType::CLOCK}) {
-                auto input_tag = std::make_shared<Tag>(Time(0.), Time(NAN), tg.node_clock_domain(node_id), node_id, trans);
+                boost::intrusive_ptr<Tag> input_tag = new Tag(Time(0.), Time(NAN), tg.node_clock_domain(node_id), node_id, trans);
                 setup_clock_tags_[node_id].add_tag(input_tag);
             }
         } else {
@@ -102,7 +102,7 @@ void ExtSetupAnalysisMode<BaseAnalysisMode,Tags>::pre_traverse_node(const Timing
                     /*arr_time = Time(-std::numeric_limits<Time::scalar_type>::infinity());*/
                 /*}*/
 
-                auto input_tag = std::make_shared<Tag>(arr_time, Time(NAN), tg.node_clock_domain(node_id), node_id, trans);
+                boost::intrusive_ptr<Tag> input_tag = new Tag(arr_time, Time(NAN), tg.node_clock_domain(node_id), node_id, trans);
                 setup_data_tags_[node_id].add_tag(input_tag);
             }
         }
@@ -141,11 +141,11 @@ void ExtSetupAnalysisMode<BaseAnalysisMode,Tags>::forward_traverse_finalize_node
             const Time& edge_delay = dc.max_edge_delay(tg, edge_id, TransitionType::CLOCK, TransitionType::CLOCK);
 
             Tags& sink_data_tags = setup_data_tags_[node_id];
-            for(std::shared_ptr<const Tag> clk_tag : src_clock_tags) {
+            for(typename Tag::cptr clk_tag : src_clock_tags) {
                 //Determine the new data tag based on the arriving clock tag
                 Time new_arr = clk_tag->arr_time() + edge_delay;
                 for(auto trans : {TransitionType::RISE, TransitionType::FALL, TransitionType::HIGH, TransitionType::LOW}) {
-                    auto launch_data_tag = std::make_shared<Tag>(new_arr, Time(NAN), clk_tag->clock_domain(), node_id, trans);
+                    boost::intrusive_ptr<Tag> launch_data_tag = new Tag(new_arr, Time(NAN), clk_tag->clock_domain(), node_id, trans);
                     sink_data_tags.max_arr(launch_data_tag); //Don't bin clock tags since there are few of them
                 }
             }
@@ -156,10 +156,10 @@ void ExtSetupAnalysisMode<BaseAnalysisMode,Tags>::forward_traverse_finalize_node
             const Time& edge_delay = dc.max_edge_delay(tg, edge_id, TransitionType::CLOCK, TransitionType::CLOCK);
             Tags& sink_clock_tags = setup_clock_tags_[node_id];
 
-            for(std::shared_ptr<const Tag> clk_tag : src_clock_tags) {
+            for(typename Tag::cptr clk_tag : src_clock_tags) {
                 //Determine the new data tag based on the arriving clock tag
                 Time new_arr = clk_tag->arr_time() + edge_delay;
-                auto new_clk_tag = std::make_shared<Tag>(new_arr, Time(NAN), *clk_tag);
+                boost::intrusive_ptr<Tag> new_clk_tag = new Tag(new_arr, Time(NAN), *clk_tag);
                 sink_clock_tags.max_arr(new_clk_tag);
             }
         }
@@ -194,7 +194,7 @@ void ExtSetupAnalysisMode<BaseAnalysisMode,Tags>::forward_traverse_finalize_node
         TagPermutationGenerator tag_permutation_generator = reduce_permutations(tg, node_id, src_data_tag_sets, max_permutations, delay_bin_size_scale_fac, tag_reducer);
 
         while(!tag_permutation_generator.done()) {
-            std::vector<std::shared_ptr<const Tag>> src_tags = tag_permutation_generator.next();
+            std::vector<typename Tag::cptr> src_tags = tag_permutation_generator.next();
 
 #ifdef TAG_DEBUG
             std::cout << "\tCase " << i_case << "\n";
@@ -212,16 +212,16 @@ void ExtSetupAnalysisMode<BaseAnalysisMode,Tags>::forward_traverse_finalize_node
             assert((int) src_tags.size() <= tg.num_node_in_edges(node_id)); //May be less than if we are ignoring non-data edges like those from FF_CLOCK to FF_SINK
 
             //Initialize the tag representing the behaviour for the current set of input transitions
-            auto scenario_tag = std::make_shared<Tag>();
+            boost::intrusive_ptr<Tag> scenario_tag = new Tag();
             scenario_tag->set_clock_domain(0); //Currently only single-clock supported
             scenario_tag->set_arr_time(Time(0.)); //Set a default arrival to avoid nan
 
             //Keep a collection of the input tags (note that this may be different from the src tags
             //due to skipping clock tags and filtering inputs
-            std::vector<std::shared_ptr<const Tag>> input_tags;
+            std::vector<typename Tag::cptr> input_tags;
 
             //Collect up the edge indicies and associated tags
-            std::vector<std::tuple<int,EdgeId, std::shared_ptr<const Tag>>> edge_idx_id_tag_tuples;
+            std::vector<std::tuple<int,EdgeId, typename Tag::cptr>> edge_idx_id_tag_tuples;
             for(int edge_idx = 0; edge_idx < tg.num_node_in_edges(node_id); edge_idx++) {
                 EdgeId edge_id = tg.node_in_edge(node_id, edge_idx);
 
@@ -230,7 +230,7 @@ void ExtSetupAnalysisMode<BaseAnalysisMode,Tags>::forward_traverse_finalize_node
                     continue; //We skip edges from FF_CLOCK since they never carry data arrivals
                 }
 
-                std::shared_ptr<const Tag> src_tag = src_tags[edge_idx];
+                typename Tag::cptr src_tag = src_tags[edge_idx];
 
                 input_tags.push_back(src_tag); //We still need to track this input for #SAT calculation purposes
 
@@ -238,8 +238,8 @@ void ExtSetupAnalysisMode<BaseAnalysisMode,Tags>::forward_traverse_finalize_node
             }
 
             //Sort the edges/tags by the associated input tag arrival times (asscending)
-            auto order = [&src_tags] (const std::tuple<int, EdgeId, std::shared_ptr<const Tag>>& lhs_edge_id_tag_pair,
-                                      const std::tuple<int, EdgeId, std::shared_ptr<const Tag>>& rhs_edge_id_tag_pair) {
+            auto order = [&src_tags] (const std::tuple<int, EdgeId, typename Tag::cptr>& lhs_edge_id_tag_pair,
+                                      const std::tuple<int, EdgeId, typename Tag::cptr>& rhs_edge_id_tag_pair) {
                 return std::get<2>(lhs_edge_id_tag_pair)->arr_time() < std::get<2>(rhs_edge_id_tag_pair)->arr_time();
             };
             std::sort(edge_idx_id_tag_tuples.begin(), edge_idx_id_tag_tuples.end(), order);
@@ -248,7 +248,7 @@ void ExtSetupAnalysisMode<BaseAnalysisMode,Tags>::forward_traverse_finalize_node
             // Note that the previous sorting means this occurs in order of increase arrival time (so causality is preserved)
             BDD f = node_func;
             bool only_static_inputs_applied = true;
-            std::vector<std::tuple<EdgeId, std::shared_ptr<const Tag>>> unfiltered_inputs;
+            std::vector<std::tuple<EdgeId, typename Tag::cptr>> unfiltered_inputs;
             for(auto& edge_idx_id_tag_tuple : edge_idx_id_tag_tuples) {
                 //Check if the function has already been determined.
                 //If it has we don't need to look at any more inputs
@@ -259,7 +259,7 @@ void ExtSetupAnalysisMode<BaseAnalysisMode,Tags>::forward_traverse_finalize_node
 
                 int edge_idx; //Used to the the correct BDD var to restrict
                 EdgeId edge_id; //Used to get the edge delay
-                std::shared_ptr<const Tag> src_tag; //To retreive the transition and arrival time
+                typename Tag::cptr src_tag; //To retreive the transition and arrival time
                 std::tie(edge_idx, edge_id, src_tag) = edge_idx_id_tag_tuple;
 
 
@@ -333,7 +333,7 @@ void ExtSetupAnalysisMode<BaseAnalysisMode,Tags>::forward_traverse_finalize_node
             // This is done by taking the worst-case arrival + edge_delay from all unfiltered inputs
             for(auto& unfiltered_input : unfiltered_inputs) {
                 EdgeId edge_id;
-                std::shared_ptr<const Tag> src_tag;
+                typename Tag::cptr src_tag;
                 std::tie(edge_id, src_tag) = unfiltered_input;
 
                 //And update the arrival time to reflect this change
@@ -405,18 +405,18 @@ BDD ExtSetupAnalysisMode<BaseAnalysisMode,Tags>::apply_restriction(int var_idx, 
 }
 
 template<class BaseAnalysisMode, class Tags>
-std::vector<std::vector<std::shared_ptr<const typename Tags::Tag>>> ExtSetupAnalysisMode<BaseAnalysisMode,Tags>::gen_tag_permutations(const std::vector<Tags>& tags) {
-    std::vector<std::vector<std::shared_ptr<const Tag>>> tag_permuations;
+std::vector<std::vector<typename Tags::Tag::cptr>> ExtSetupAnalysisMode<BaseAnalysisMode,Tags>::gen_tag_permutations(const std::vector<Tags>& tags) {
+    std::vector<std::vector<typename Tag::cptr>> tag_permuations;
 
-    gen_tag_permutations_recurr(tags, 0, std::vector<std::shared_ptr<const Tag>>(), tag_permuations);
+    gen_tag_permutations_recurr(tags, 0, std::vector<typename Tag::cptr>(), tag_permuations);
 
     return tag_permuations;
 }
 
 template<class BaseAnalysisMode, class Tags>
-void ExtSetupAnalysisMode<BaseAnalysisMode,Tags>::gen_tag_permutations_recurr(const std::vector<Tags>& tags, size_t var_idx, const std::vector<std::shared_ptr<const Tag>>& partial_perm, std::vector<std::vector<std::shared_ptr<const Tag>>>& tag_permutations) {
+void ExtSetupAnalysisMode<BaseAnalysisMode,Tags>::gen_tag_permutations_recurr(const std::vector<Tags>& tags, size_t var_idx, const std::vector<typename Tag::cptr>& partial_perm, std::vector<std::vector<typename Tag::cptr>>& tag_permutations) {
     
-    for(std::shared_ptr<const Tag> tag : tags[var_idx]) {
+    for(typename Tag::cptr tag : tags[var_idx]) {
         //Make a copy since we will be adding our values
         auto new_perm = partial_perm;
         new_perm.push_back(tag);

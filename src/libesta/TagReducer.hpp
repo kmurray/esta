@@ -94,7 +94,7 @@ class StaSlackTagReducer : public TagReducer {
 #endif
                 } else {
                     //Below threshold, merge if possible
-                    auto bin_tag_pred = [&](std::shared_ptr<const typename Tags::Tag> search_tag) {
+                    auto bin_tag_pred = [&](typename Tags::Tag::cptr search_tag) {
                         if(tag->trans_type() != search_tag->trans_type()) return false; //Require the same transition
                         if(search_tag->arr_time().value() > arr_threshold) return false; //Don't merge with tags beyond threshold
 

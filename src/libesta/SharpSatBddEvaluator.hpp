@@ -12,7 +12,7 @@
 template<class Analyzer>
 class SharpSatBddEvaluator : public SharpSatEvaluator<Analyzer> {
     private:
-        typedef ObjectCacheMap<std::shared_ptr<const ExtTimingTag>,BDD> BddCache;
+        typedef ObjectCacheMap<ExtTimingTag::cptr,BDD> BddCache;
     public:
         SharpSatBddEvaluator(const TimingGraph& tg, std::shared_ptr<Analyzer> analyzer, size_t nvars)
             : SharpSatEvaluator<Analyzer>(tg, analyzer, nvars) {
@@ -39,7 +39,7 @@ class SharpSatBddEvaluator : public SharpSatEvaluator<Analyzer> {
             assert(pi_curr_bdd_vars_.size() + pi_curr_bdd_vars_.size() == nvars);
         }
 
-        double count_sat_fraction(std::shared_ptr<const ExtTimingTag> tag) override {
+        double count_sat_fraction(ExtTimingTag::cptr tag) override {
             BDD f = build_bdd_xfunc(tag);
 
             return bdd_sharpsat_fraction(f);
@@ -69,7 +69,7 @@ class SharpSatBddEvaluator : public SharpSatEvaluator<Analyzer> {
              g_cudd.SetNextReordering(4096);
         }
 
-        BDD build_bdd_xfunc(std::shared_ptr<const ExtTimingTag> tag, int level=0) {
+        BDD build_bdd_xfunc(ExtTimingTag::cptr tag, int level=0) {
             /*std::cout << "build_xfunc at Node: " << node_id << " TAG: " << tag << "\n";*/
             auto key = tag;
 

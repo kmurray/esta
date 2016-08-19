@@ -12,7 +12,7 @@ class SharpSatEvaluator {
             , nvars_(nvars) {}
         virtual ~SharpSatEvaluator() {}
 
-        virtual double count_sat_fraction(std::shared_ptr<const ExtTimingTag> tag) = 0;
+        virtual double count_sat_fraction(ExtTimingTag::cptr tag) = 0;
         virtual void reset() {}
 
     protected:

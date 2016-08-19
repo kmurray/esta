@@ -41,11 +41,11 @@ class ExtSetupAnalysisMode : public BaseAnalysisMode {
          *template<class DelayCalc>
          *void backward_traverse_edge(const TimingGraph& tg, const DelayCalc& dc, const NodeId node_id, const EdgeId edge_id);
          */
-        std::unordered_set<std::shared_ptr<const Tag>> identify_filtered_tags(const std::vector<std::shared_ptr<const Tag>>& input_tags, BDD node_func);
+        std::unordered_set<typename Tag::cptr> identify_filtered_tags(const std::vector<typename Tag::cptr>& input_tags, BDD node_func);
         bool input_is_filtered(size_t input_idx, const std::vector<TransitionType>& input_transitions, BDD f);
 
-        std::vector<std::vector<std::shared_ptr<const Tag>>> gen_tag_permutations(const std::vector<Tags>& input_tags);
-        void gen_tag_permutations_recurr(const std::vector<Tags>& input_tags, size_t var_idx, const std::vector<std::shared_ptr<const Tag>>& partial_perm, std::vector<std::vector<std::shared_ptr<const Tag>>>& permutations);
+        std::vector<std::vector<typename Tag::cptr>> gen_tag_permutations(const std::vector<Tags>& input_tags);
+        void gen_tag_permutations_recurr(const std::vector<Tags>& input_tags, size_t var_idx, const std::vector<typename Tag::cptr>& partial_perm, std::vector<std::vector<typename Tag::cptr>>& permutations);
 
         Time map_to_delay_bin(Time delay, const double delay_bin_size);
 

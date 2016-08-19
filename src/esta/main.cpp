@@ -56,7 +56,7 @@ using EstaAnalysisType = ExtSetupAnalysisMode<BaseAnalysisMode,ExtTimingTags>;
 using EstaAnalyzerType = SerialTimingAnalyzer<EstaAnalysisType,DelayCalcType>;
 using SharpSatType = SharpSatBddEvaluator<EstaAnalyzerType>;
 
-template class std::vector<std::shared_ptr<const ExtTimingTag>>; //Debuging visiblitity
+template class std::vector<ExtTimingTag::cptr>; //Debuging visiblitity
 
 //XXX: global variable
 //TODO: Clean up and pass appropriately....
@@ -70,8 +70,8 @@ void print_node_histogram(const TimingGraph& tg, std::shared_ptr<EstaAnalyzerTyp
 void print_max_node_histogram(const TimingGraph& tg, std::shared_ptr<EstaAnalyzerType> analyzer, std::shared_ptr<SharpSatType> sharp_sat_eval, const TagReducer& tag_reducer);
 void dump_exhaustive_csv(std::ostream& os, const TimingGraph& tg, std::shared_ptr<EstaAnalyzerType> analyzer, std::shared_ptr<SharpSatType> sharp_sat_eval, std::shared_ptr<TimingGraphNameResolver> name_resolver, NodeId node_id, size_t nvars);
 void dump_max_exhaustive_csv(std::ostream& os, const TimingGraph& tg, std::shared_ptr<EstaAnalyzerType> analyzer, std::shared_ptr<SharpSatType> sharp_sat_eval, std::shared_ptr<TimingGraphNameResolver> name_resolver, size_t nvars, const TagReducer& tag_reducer);
-std::string print_tag_debug(std::shared_ptr<const ExtTimingTag> tag, BDD f, size_t nvars);
-std::vector<std::tuple<std::shared_ptr<const ExtTimingTag>,std::shared_ptr<BDD>>> circuit_max_delays(const TimingGraph& tg, std::shared_ptr<EstaAnalyzerType> analyzer, std::shared_ptr<SharpSatType> sharp_sat_eval, const TagReducer& tag_reducer, bool calculate_smallest_max_bdd=true);
+std::string print_tag_debug(ExtTimingTag::cptr tag, BDD f, size_t nvars);
+std::vector<std::tuple<ExtTimingTag::cptr,std::shared_ptr<BDD>>> circuit_max_delays(const TimingGraph& tg, std::shared_ptr<EstaAnalyzerType> analyzer, std::shared_ptr<SharpSatType> sharp_sat_eval, const TagReducer& tag_reducer, bool calculate_smallest_max_bdd=true);
 std::vector<std::vector<int>> get_cubes(BDD f, size_t nvars);
 std::vector<std::vector<int>> get_minterms(BDD f, size_t nvars);
 std::vector<std::vector<int>> cube_to_minterms(std::vector<int> cube);
@@ -207,7 +207,7 @@ int main(int argc, char** argv) {
     std::cout << "sizeof(TransitionType) = " << sizeof(TransitionType) << "\n";
     std::cout << "sizeof(NodeId) = " << sizeof(NodeId) << "\n";
     std::cout << "sizeof(DomainId) = " << sizeof(DomainId) << "\n";
-    std::cout << "sizeof(std::vector<std::vector<std::shared_ptr<const ExtTimingTag>>>) = " << sizeof(std::vector<std::vector<std::shared_ptr<const ExtTimingTag>>>) << "\n";
+    std::cout << "sizeof(std::vector<std::vector<ExtTimingTag::cptr>>) = " << sizeof(std::vector<std::vector<ExtTimingTag::cptr>>) << "\n";
     std::cout << "sizeof(std::vector<int>) = " << sizeof(std::vector<int>) << "\n";
 
     auto options = parse_args(argc, argv);
@@ -587,8 +587,8 @@ void print_node_histogram(const TimingGraph& tg, std::shared_ptr<EstaAnalyzerTyp
     auto& raw_data_tags = analyzer->setup_data_tags(node_id);
 
     //Sort the tags so they come out in order
-    std::vector<std::shared_ptr<const ExtTimingTag>> sorted_data_tags(raw_data_tags.begin(), raw_data_tags.end());
-    auto tag_sorter = [](std::shared_ptr<const ExtTimingTag> lhs, std::shared_ptr<const ExtTimingTag> rhs) {
+    std::vector<ExtTimingTag::cptr> sorted_data_tags(raw_data_tags.begin(), raw_data_tags.end());
+    auto tag_sorter = [](ExtTimingTag::cptr lhs, ExtTimingTag::cptr rhs) {
         return lhs->arr_time().value() < rhs->arr_time().value();
     };
     std::sort(sorted_data_tags.begin(), sorted_data_tags.end(), tag_sorter);
@@ -782,7 +782,7 @@ void dump_exhaustive_csv(std::ostream& os, const TimingGraph& tg, std::shared_pt
     }
 }
 
-std::string print_tag_debug(std::shared_ptr<const ExtTimingTag> tag, BDD f, size_t nvars) {
+std::string print_tag_debug(ExtTimingTag::cptr tag, BDD f, size_t nvars) {
     double sat_frac = CountMintermFraction(f.getNode());
 
     std::stringstream ss;
@@ -795,7 +795,7 @@ std::string print_tag_debug(std::shared_ptr<const ExtTimingTag> tag, BDD f, size
 //  If calculate_smallest_max_bdd is false, then the smallest-delay tag will not have it's BDD 
 //  calculated (a null shared_ptr is returned instead), and it is assumed that the caller will infer the
 //  probability based on the probability of the other tags.
-std::vector<std::tuple<std::shared_ptr<const ExtTimingTag>,std::shared_ptr<BDD>>> circuit_max_delays(const TimingGraph& tg, 
+std::vector<std::tuple<ExtTimingTag::cptr,std::shared_ptr<BDD>>> circuit_max_delays(const TimingGraph& tg, 
         std::shared_ptr<EstaAnalyzerType> analyzer, 
         std::shared_ptr<SharpSatType> sharp_sat_eval, 
         const TagReducer& tag_reducer,
@@ -826,7 +826,7 @@ std::vector<std::tuple<std::shared_ptr<const ExtTimingTag>,std::shared_ptr<BDD>>
         //std::cout << "Max Input Tags (Node " << po_node_id << "):" << std::endl;
         for(const auto tag : node_tags) {
             //std::cout << "\t" << *tag << std::endl;
-            auto new_tag = std::make_shared<ExtTimingTag>(*tag);
+            boost::intrusive_ptr<ExtTimingTag> new_tag = new ExtTimingTag(*tag);
             new_tag->set_trans_type(TransitionType::MAX);
             max_tags.max_arr(new_tag);
         }
@@ -845,12 +845,12 @@ std::vector<std::tuple<std::shared_ptr<const ExtTimingTag>,std::shared_ptr<BDD>>
 
     //Sort into descending order
     std::sort(max_tags.begin(), max_tags.end(),
-                [](std::shared_ptr<const ExtTimingTag> lhs, std::shared_ptr<const ExtTimingTag> rhs) {
+                [](ExtTimingTag::cptr lhs, ExtTimingTag::cptr rhs) {
                     return lhs->arr_time().value() > rhs->arr_time().value();
                 }
              );
 
-    std::vector<std::tuple<std::shared_ptr<const ExtTimingTag>,std::shared_ptr<BDD>>> max_delays;
+    std::vector<std::tuple<ExtTimingTag::cptr,std::shared_ptr<BDD>>> max_delays;
 
     BDD covered_terms = g_cudd.bddZero();
 

@@ -14,7 +14,7 @@ class TagPermutationGenerator {
         size_t num_permutations();
 
         //Gets the next permutation
-        std::vector<std::shared_ptr<const ExtTimingTag>> next();
+        std::vector<ExtTimingTag::cptr> next();
 
     private:
         void initialize();
