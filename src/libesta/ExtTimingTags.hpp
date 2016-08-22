@@ -84,7 +84,7 @@ inline void ExtTimingTags::max_arr(Tag::cptr tag) {
 
     if(iter == end()) {
         //First time we've seen this tag
-        add_tag(new Tag(*tag));
+        add_tag(Tag::make_ptr(*tag));
     } else {
         max_arr(iter, tag);    
     }

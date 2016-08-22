@@ -826,7 +826,7 @@ std::vector<std::tuple<ExtTimingTag::cptr,std::shared_ptr<BDD>>> circuit_max_del
         //std::cout << "Max Input Tags (Node " << po_node_id << "):" << std::endl;
         for(const auto tag : node_tags) {
             //std::cout << "\t" << *tag << std::endl;
-            boost::intrusive_ptr<ExtTimingTag> new_tag = new ExtTimingTag(*tag);
+            auto new_tag = ExtTimingTag::make_ptr(*tag);
             new_tag->set_trans_type(TransitionType::MAX);
             max_tags.max_arr(new_tag);
         }
@@ -839,9 +839,9 @@ std::vector<std::tuple<ExtTimingTag::cptr,std::shared_ptr<BDD>>> circuit_max_del
     //appearing multiple times in different tags (i.e. different delays to the primary outputs).
     //
     //Since we want to ensure we report *only* the maximum delay for a particular set of input transitions
-    //we walk through the tags from highest to lowest delay and record which minterms have already
-    //been covered.  These covered minterms are then used to exclude any repeated minterms with delay
-    //lower than the maximum.
+    //we walk through the tags from highest to lowest delay and record which minterms (sets of input transitions)
+    //have already been covered.  These covered minterms are then used to exclude any repeated minterms/cases 
+    //with delay lower than the maximum.
 
     //Sort into descending order
     std::sort(max_tags.begin(), max_tags.end(),

@@ -68,14 +68,14 @@ void ExtSetupAnalysisMode<BaseAnalysisMode,Tags>::pre_traverse_node(const Timing
         }
         assert(trans == TransitionType::HIGH || trans == TransitionType::LOW);
 
-        boost::intrusive_ptr<Tag> constant_tag = new Tag(Time(0.), Time(NAN), tg.node_clock_domain(node_id), node_id, trans);
+        auto constant_tag = Tag::make_ptr(Time(0.), Time(NAN), tg.node_clock_domain(node_id), node_id, trans);
         setup_data_tags_[node_id].add_tag(constant_tag);
 
     } else if(node_type == TN_Type::CLOCK_SOURCE) {
         ASSERT_MSG(setup_clock_tags_[node_id].num_tags() == 0, "Clock source already has clock tags");
 
         //Initialize a clock tag with zero arrival, invalid required time
-        boost::intrusive_ptr<Tag> clock_tag = new Tag(Time(0.), Time(NAN), tg.node_clock_domain(node_id), node_id, TransitionType::CLOCK);
+        auto clock_tag = Tag::make_ptr(Time(0.), Time(NAN), tg.node_clock_domain(node_id), node_id, TransitionType::CLOCK);
 
         //Add the tag
         setup_clock_tags_[node_id].add_tag(clock_tag);
@@ -91,7 +91,7 @@ void ExtSetupAnalysisMode<BaseAnalysisMode,Tags>::pre_traverse_node(const Timing
         if(tg.node_is_clock_source(node_id)) {
             //Figure out if we are an input which defines a clock
             for(auto trans : {TransitionType::CLOCK}) {
-                boost::intrusive_ptr<Tag> input_tag = new Tag(Time(0.), Time(NAN), tg.node_clock_domain(node_id), node_id, trans);
+                auto input_tag = Tag::make_ptr(Time(0.), Time(NAN), tg.node_clock_domain(node_id), node_id, trans);
                 setup_clock_tags_[node_id].add_tag(input_tag);
             }
         } else {
@@ -102,7 +102,7 @@ void ExtSetupAnalysisMode<BaseAnalysisMode,Tags>::pre_traverse_node(const Timing
                     /*arr_time = Time(-std::numeric_limits<Time::scalar_type>::infinity());*/
                 /*}*/
 
-                boost::intrusive_ptr<Tag> input_tag = new Tag(arr_time, Time(NAN), tg.node_clock_domain(node_id), node_id, trans);
+                auto input_tag = Tag::make_ptr(arr_time, Time(NAN), tg.node_clock_domain(node_id), node_id, trans);
                 setup_data_tags_[node_id].add_tag(input_tag);
             }
         }
@@ -145,7 +145,7 @@ void ExtSetupAnalysisMode<BaseAnalysisMode,Tags>::forward_traverse_finalize_node
                 //Determine the new data tag based on the arriving clock tag
                 Time new_arr = clk_tag->arr_time() + edge_delay;
                 for(auto trans : {TransitionType::RISE, TransitionType::FALL, TransitionType::HIGH, TransitionType::LOW}) {
-                    boost::intrusive_ptr<Tag> launch_data_tag = new Tag(new_arr, Time(NAN), clk_tag->clock_domain(), node_id, trans);
+                    auto launch_data_tag = Tag::make_ptr(new_arr, Time(NAN), clk_tag->clock_domain(), node_id, trans);
                     sink_data_tags.max_arr(launch_data_tag); //Don't bin clock tags since there are few of them
                 }
             }
@@ -159,7 +159,7 @@ void ExtSetupAnalysisMode<BaseAnalysisMode,Tags>::forward_traverse_finalize_node
             for(typename Tag::cptr clk_tag : src_clock_tags) {
                 //Determine the new data tag based on the arriving clock tag
                 Time new_arr = clk_tag->arr_time() + edge_delay;
-                boost::intrusive_ptr<Tag> new_clk_tag = new Tag(new_arr, Time(NAN), *clk_tag);
+                auto new_clk_tag = Tag::make_ptr(new_arr, Time(NAN), *clk_tag);
                 sink_clock_tags.max_arr(new_clk_tag);
             }
         }
@@ -212,7 +212,7 @@ void ExtSetupAnalysisMode<BaseAnalysisMode,Tags>::forward_traverse_finalize_node
             assert((int) src_tags.size() <= tg.num_node_in_edges(node_id)); //May be less than if we are ignoring non-data edges like those from FF_CLOCK to FF_SINK
 
             //Initialize the tag representing the behaviour for the current set of input transitions
-            boost::intrusive_ptr<Tag> scenario_tag = new Tag();
+            auto scenario_tag = Tag::make_ptr();
             scenario_tag->set_clock_domain(0); //Currently only single-clock supported
             scenario_tag->set_arr_time(Time(0.)); //Set a default arrival to avoid nan
 

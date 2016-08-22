@@ -31,8 +31,16 @@
 
 class ExtTimingTag {
     public:
-        typedef boost::intrusive_ptr<ExtTimingTag> ptr;
-        typedef boost::intrusive_ptr<const ExtTimingTag> cptr;
+        typedef boost::intrusive_ptr<ExtTimingTag> ptr; //Mutable pointer
+        typedef boost::intrusive_ptr<const ExtTimingTag> cptr; //Immutable pointer
+
+        //Class method for constructing a dynamically allocated ExtTimingTag and returning
+        //a boost::intrusive_ptr to it.
+        //Any provided arguments are passed to the constructor.
+        //
+        //Use this instead of manually 'new'ing the tag yourself
+        template<typename ... ARGS>
+        static ptr make_ptr(ARGS&&... args) { return new ExtTimingTag(std::forward<ARGS>(args)...); }
 
         /*
          * Constructors
