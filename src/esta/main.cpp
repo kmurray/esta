@@ -100,18 +100,11 @@ optparse::Values parse_args(int argc, char** argv) {
           .help("The SDF file to be loaded.")
           ;
 
-    parser.add_option("-d", "--delay_bin_size")
-          .dest("delay_bin_size")
+    parser.add_option("-d", "--delay_bin_size_coarse")
+          .dest("delay_bin_size_coarse")
           .metavar("DELAY_BIN_SIZE")
           .set_default(0.)
-          .help("The delay bin size to apply during analysis.")
-          ;
-
-    parser.add_option("--slack_threshold")
-          .dest("slack_threshold_frac")
-          .set_default(0.)
-          .metavar("DELAY_BIN_SIZE")
-          .help("The delay bin size to apply during analysis.")
+          .help("The delay bin size to apply during analysis (below slack threshold).")
           ;
 
     parser.add_option("-m", "--max_permutations")
@@ -119,6 +112,20 @@ optparse::Values parse_args(int argc, char** argv) {
           .metavar("MAX_PERMUTATIONS")
           .set_default(0.)
           .help("The maximum number of permutations to be evaluated at a node in the timing graph during analysis. Zero implies no limit.")
+          ;
+
+    parser.add_option("--slack_threshold")
+          .dest("slack_threshold_frac")
+          .set_default(0.)
+          .metavar("THRESHOLD")
+          .help("The fraction of worst-case delay paths to analyze in detail (e.g. 0.05 means analyze only the 95th perctile paths in detail.")
+          ;
+
+    parser.add_option("-f", "--delay_bin_size_fine")
+          .dest("delay_bin_size_fine")
+          .metavar("DELAY_BIN_SIZE")
+          .set_default(0.)
+          .help("The delay bin size to apply during analysis (above slack threshold).")
           ;
 
     parser.add_option("--print_graph")
@@ -359,15 +366,16 @@ int main(int argc, char** argv) {
 
     g_action_timer.push_timer("ESTA Analysis");
 
-    //auto tag_reducer = FixedBinTagReducer(options.get_as<double>("delay_bin_size"));
     double slack_threshold_frac = options.get_as<double>("slack_threshold_frac");
     double slack_threshold = slack_threshold_frac*sta_cpd;
-    double delay_bin_size = options.get_as<double>("delay_bin_size");
+    double coarse_delay_bin_size = options.get_as<double>("delay_bin_size_coarse");
+    double fine_delay_bin_size = options.get_as<double>("delay_bin_size_fine");
     double max_permutations = options.get_as<double>("max_permutations");
     std::cout << "Slack Threshold : " << slack_threshold << " ps (" << slack_threshold_frac << ")" << "\n";
-    std::cout << "Delay Bin Size  : " << delay_bin_size << "\n";
+    std::cout << "Delay Bin Size Coarse (below threshold) : " << coarse_delay_bin_size << "\n";
+    std::cout << "Delay Bin Size Fine (above threshold): " << fine_delay_bin_size << "\n";
     std::cout << "Max Permutations: " << max_permutations << "\n";
-    auto tag_reducer = StaSlackTagReducer<StaAnalyzerType>(sta_analyzer, slack_threshold, delay_bin_size);
+    auto tag_reducer = StaSlackTagReducer<StaAnalyzerType>(sta_analyzer, slack_threshold, coarse_delay_bin_size, fine_delay_bin_size);
 
     //The actual analyzer
     auto esta_analyzer = std::make_shared<EstaAnalyzerType>(timing_graph, timing_constraints, delay_calc, tag_reducer, max_permutations);
