@@ -103,7 +103,7 @@ class ExtTimingTag {
         ///If the arrival time is updated, meta-data is also updated from base_tag
         ///\param new_arr_time The arrival time to compare against
         ///\param base_tag The tag from which meta-data is copied
-        void max_arr(const Time new_arr, ExtTimingTag::cptr base_tag);
+        void max_arr(const Time new_arr, ExtTimingTag::cptr& base_tag);
 
         ///Updates the tag's arrival time if new_arr_time is smaller than the current arrival time.
         ///If the arrival time is updated, meta-data is also updated from base_tag
@@ -131,7 +131,7 @@ class ExtTimingTag {
         bool matches(ExtTimingTag::cptr other) const;
 
     private:
-        void update_arr(const Time new_arr, ExtTimingTag::cptr base_tag);
+        void update_arr(const Time new_arr, ExtTimingTag::cptr& base_tag);
         //void update_req(const Time& new_req_time, const ExtTimingTag& base_tag);
 
         /*
@@ -148,7 +148,7 @@ class ExtTimingTag {
         //Reference counting for boost intrusive_ptr
         mutable int ref_cnt_ = 0;
         friend inline void intrusive_ptr_add_ref(const ExtTimingTag* tag) {
-            assert(ref_cnt_ < std::numeric_limits<int>::max());
+            assert(tag->ref_cnt_ < std::numeric_limits<int>::max());
             ++(tag->ref_cnt_);
         }
 
@@ -185,7 +185,7 @@ inline ExtTimingTag::ExtTimingTag(const Time& arr_time_val, const Time& req_time
     //, req_time_(req_time_val)
     {}
 
-inline void ExtTimingTag::update_arr(const Time new_arr, ExtTimingTag::cptr base_tag) {
+inline void ExtTimingTag::update_arr(const Time new_arr, ExtTimingTag::cptr& base_tag) {
     if(base_tag->clock_domain() != INVALID_CLOCK_DOMAIN) {
         assert(clock_domain() == base_tag->clock_domain()); //Domain must be the same
         set_arr_time(new_arr);
@@ -193,7 +193,7 @@ inline void ExtTimingTag::update_arr(const Time new_arr, ExtTimingTag::cptr base
     }
 }
 
-inline void ExtTimingTag::max_arr(const Time new_arr, ExtTimingTag::cptr base_tag) {
+inline void ExtTimingTag::max_arr(const Time new_arr, ExtTimingTag::cptr& base_tag) {
     //Need to min with existing value
     if(!arr_time().valid() || new_arr.value() > arr_time().value()) {
         //New value is smaller, or no previous valid value existed
