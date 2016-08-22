@@ -77,8 +77,12 @@ def parse_args():
                         default=None,
                         help="Outputs to compare")
 
-    parser.add_argument("-d", "--delay_bin_size",
-                        default=100,
+    parser.add_argument("-d", "--delay_bin_size_coarse",
+                        default=100000,
+                        help="Delay bin size for ESTA. Smaller values increase accuracy at the cost of longer run-time.")
+
+    parser.add_argument("-f", "--delay_bin_size_fine",
+                        default=100000,
                         help="Delay bin size for ESTA. Smaller values increase accuracy at the cost of longer run-time.")
 
     parser.add_argument("-m", "--max_permutations",
@@ -325,7 +329,8 @@ def run_esta(args, design_info, sdf_file):
             args.esta_exec,
             "-b", args.blif,
             "-s", sdf_file,
-            "-d", args.delay_bin_size,
+            "-d", args.delay_bin_size_coarse,
+            "-f", args.delay_bin_size_fine,
             "-m", args.max_permutations,
             "--slack_threshold", args.slack_ratio
             ]
