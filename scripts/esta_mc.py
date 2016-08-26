@@ -34,9 +34,6 @@ def parse_args():
     #
     parser.add_argument("simulation_csv",
                         help="Simulation results CSV file")
-    parser.add_argument("--chunk_size",
-                        default=1e6,
-                        help="Number of rows to load in a chunk")
     parser.add_argument("--num_samples",
                         default=10,
                         type=int,
@@ -80,6 +77,8 @@ def parse_args():
 def main():
     args = parse_args()
 
+    print " ".join(sys.argv)
+
     all_data_sets = OrderedDict()
 
     print "Counting Cases..."
@@ -98,31 +97,36 @@ def main():
     print "Loading delay values"
     df = pd.read_csv(args.simulation_csv, usecols=['delay:MAX'])
 
-    if args.search is None:
-        print "Num Samples: ", args.num_samples
+    try:
+        if args.search is None:
+            print "Num Samples: ", args.num_samples
 
-        sample_size = math.floor(num_sim_cases / args.num_samples)
-        print "Sample Size: ", sample_size
+            sample_size = math.floor(num_sim_cases / args.num_samples)
+            print "Sample Size: ", sample_size
 
-        print "Sample Frac (sim): ", sample_size / num_sim_cases
+            print "Sample Frac (sim): ", sample_size / num_sim_cases
 
-    elif args.search == 'mean':
-        sample_size, confidence_interval = search_mean(df, num_sim_cases, args.search_confidence, args.search_mean_interval_len)
+        elif args.search == 'mean':
+            sample_size, confidence_interval = search_mean(df, num_sim_cases, args.search_confidence, args.search_mean_interval_len)
 
-        args.num_samples = int(math.floor(num_sim_cases / float(sample_size)))
+            args.num_samples = int(math.floor(num_sim_cases / float(sample_size)))
 
-        print "Num Samples: ", args.num_samples
-    elif args.search == 'max':
+            print "Num Samples: ", args.num_samples
+        elif args.search == 'max':
 
-        max_delay = args.true_max
-        if max_delay is None:
-            max_delay = max(df['delay:MAX'])
+            max_delay = args.true_max
+            if max_delay is None:
+                max_delay = max(df['delay:MAX'])
+            else:
+                max_delay = float(max_delay)
+
+            sample_size = search_max_prob(df, num_sim_cases, args.search_confidence, args.search_max_p_rel_interval_len, args.num_samples, max_delay)
         else:
-            max_delay = float(max_delay)
-
-        sample_size = search_max_prob(df, num_sim_cases, args.search_confidence, args.search_max_p_rel_interval_len, args.num_samples, max_delay)
-    else:
-        assert False
+            assert False
+    except NotConvergedException as e:
+        print "Not Converged"
+        print e
+        sys.exit()
 
     sample_frac = sample_size / float(num_exhaustive_cases)
     sim_sample_frac = sample_size / float(num_sim_cases)
@@ -131,7 +135,7 @@ def main():
 
     print "MC Runtime (sec):", sim_sample_frac * (48 * 60 * 60)
 
-    sampled_data_sets = generate_samples(args.num_samples, sample_size, df, args.chunk_size)
+    sampled_data_sets = generate_samples(args.num_samples, sample_size, df)
     all_data_sets.update(sampled_data_sets)
 
     if args.search == 'mean':
@@ -299,8 +303,8 @@ def search_max_prob(df, num_sim_cases, search_confidence, search_max_p_rel_inter
     print "Max delay: {}".format(max_delay)
 
     if max_delay not in df['delay:MAX'].values:
-        print "Max delay not found in simulation: NOT CONVERGED"
-        sys.exit(1)
+        msg = "Max delay not found in simulation: NOT CONVERGED"
+        raise NotConvergedException(msg)
 
     p_est, p_est_conf_interval = determine_p_est_by_interval(df, max_delay, search_confidence, search_max_p_rel_interval_len)
 
@@ -343,7 +347,7 @@ def search_max_prob(df, num_sim_cases, search_confidence, search_max_p_rel_inter
                 step = -(sample_size - lower_bound_sample_size) / 2
 
         if lower_bound_sample_size == num_sim_cases:
-            raise ValueError("Failed to converge".format(p_max, lower_bound_sample_size, search_confidence))
+            raise NotConvergedException("Failed to converge".format(p_max, lower_bound_sample_size, search_confidence))
 
         assert upper_bound_sample_size >= lower_bound_sample_size
 
@@ -385,7 +389,7 @@ def generate_samples_df(num_samples, sample_size, df):
     return sampled_data_sets
 
 
-def generate_samples(num_samples, sample_size, df, max_chunk_size):
+def generate_samples(num_samples, sample_size, df):
     sampled_data_sets = OrderedDict()
 
     for i in xrange(num_samples):
