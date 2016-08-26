@@ -60,22 +60,17 @@ def parse_args():
     parser.add_argument("--search_confidence",
                         default=0.99,
                         type=float,
-                        help="Confidence (mean search mode: interval specification, max search mode: probability have max)")
+                        help="Confidence (used during interval calculation)")
 
-    parser.add_argument("--search_mean_interval_length",
+    parser.add_argument("--search_mean_interval_len",
                         default=5,
                         type=float,
-                        help="Interval length to search for")
+                        help="Acceptable mean delay confidence interval length")
 
-    parser.add_argument("--search_mean_interval_tol",
-                        default=0.01,
+    parser.add_argument("--search_max_p_rel_interval_len",
+                        default=0.03,
                         type=float,
-                        help="Error Tolerance in search for mean interval")
-
-    parser.add_argument("--converged_p_threshold",
-                        default=0.025,
-                        type=float,
-                        help="Fractional tolerance in max delay probability confidence interval")
+                        help="Acceptable max delay relative probability confidence interval length")
 
     args = parser.parse_args()
 
@@ -112,7 +107,7 @@ def main():
         print "Sample Frac (sim): ", sample_size / num_sim_cases
 
     elif args.search == 'mean':
-        sample_size, confidence_interval = search_mean(df, num_sim_cases, args.search_confidence, args.search_mean_interval_length, args.search_mean_interval_tol, args.chunk_size)
+        sample_size, confidence_interval = search_mean(df, num_sim_cases, args.search_confidence, args.search_mean_interval_len)
 
         args.num_samples = int(math.floor(num_sim_cases / float(sample_size)))
 
@@ -125,7 +120,7 @@ def main():
         else:
             max_delay = float(max_delay)
 
-        sample_size = search_max_prob(df, num_sim_cases, args.search_confidence, args.converged_p_threshold, args.num_samples, max_delay)
+        sample_size = search_max_prob(df, num_sim_cases, args.search_confidence, args.search_max_p_rel_interval_len, args.num_samples, max_delay)
     else:
         assert False
 
@@ -188,7 +183,7 @@ def main():
     sample_hist_0 = sampled_data_sets.values()[0]
     sample_hist_0.to_csv("sim_mc.max_hist." + args.search + ".csv", columns=['delay:MAX', 'probability'], index=False)
 
-def search_mean(df, num_sim_cases, search_confidence, search_mean_interval_len, search_mean_interval_tol, chunk_size):
+def search_mean(df, num_sim_cases, search_confidence, search_mean_interval_len):
     """
     Searches various samples sizes to find the smallest size which results in convergence,
     where convergence is defined as having the length of the mean's confidence interval less
@@ -201,7 +196,7 @@ def search_mean(df, num_sim_cases, search_confidence, search_mean_interval_len, 
         reader: The CSV reader to get data from
         num_sim_cases: Number of simulation cases in the input file
         search_confidence: Confidence level for confidence interval
-        search_mean_interval_len: Maximum allowed length for mean confidence interval
+        search_mean_threshold_ps: Maximum allowed delta for mean confidence interval
     """
 
     #Binary Search for the minimum sample size with sufficient confidence
@@ -252,11 +247,11 @@ def search_mean(df, num_sim_cases, search_confidence, search_mean_interval_len, 
     assert lower_bound_sample_size != -1
     assert upper_bound_sample_size - lower_bound_sample_size <= 1
 
-    print "Minimal Sample Size: {}, Interval Len: {} (@ {} confidence)".format(upper_bound_sample_size, interval_len, search_confidence)
+    print "Minimal Sample Size: {}, Interval len: {} (@ {} confidence)".format(upper_bound_sample_size, interval_len, search_confidence)
 
     return upper_bound_sample_size, confidence_interval
 
-def determine_p_est_by_interval(df, max_delay, search_confidence, converged_p_threshold_frac):
+def determine_p_est_by_interval(df, max_delay, search_confidence, search_max_p_rel_interval_len):
     num_sample_cases = df.shape[0]
 
     #Estimate probability of getting a max delay path from the entire MC sim
@@ -275,18 +270,17 @@ def determine_p_est_by_interval(df, max_delay, search_confidence, converged_p_th
     ci = sms_sp.proportion_confint(num_max_delay_cases, num_sample_cases, alpha=alpha, method="beta")
 
     ci_len = ci[1] - ci[0]
-    ci_delta = ci_len / 2
-    ci_delta_ratio = ci_delta / p_est
+    ci_len_ratio = ci_len / p_est
 
-    print "P_est CI: [{:g}, {:g}] @ alpha={} ci_delta/P_est={}".format(ci[0], ci[1], alpha, ci_delta_ratio)
+    print "P_est CI: [{:g}, {:g}] @ alpha={} ci_len/P_est={}".format(ci[0], ci[1], alpha, ci_len_ratio)
 
     if p_est < ci[0] or p_est > ci[1]:
         msg = "Estimate {:g} falls outside confidence interval [{:g}, {:g}]: NOT CONVERGED".format(p_est, ci[0], ci[1])
 
         raise NotConvergedException(msg)
 
-    if ci_delta_ratio > converged_p_threshold_frac:
-        msg = "Normalized CI delta ((ci[1] - ci[0]) / 2)/p_ext={:g} exceeds target={:g}: NOT CONVERGED".format(ci_delta_ratio, converged_p_threshold_frac)
+    if ci_len_ratio > search_max_p_rel_interval_len:
+        msg = "Normalized CI delta (ci[1] - ci[0])/p_ext={:g} exceeds target={:g}: NOT CONVERGED".format(ci_len_ratio, search_max_p_rel_interval_len)
 
         raise NotConvergedException(msg)
 
@@ -294,7 +288,7 @@ def determine_p_est_by_interval(df, max_delay, search_confidence, converged_p_th
     return p_est, ci
 
 
-def search_max_prob(df, num_sim_cases, search_confidence, converged_p_threshold_frac, num_samples, max_delay):
+def search_max_prob(df, num_sim_cases, search_confidence, search_max_p_rel_interval_len, num_samples, max_delay):
     """
     Determines the minimal sample size for which the Monte-Carlo simulation maximum delay has converged (in the
     sense max delay having correct probability).
@@ -308,7 +302,7 @@ def search_max_prob(df, num_sim_cases, search_confidence, converged_p_threshold_
         print "Max delay not found in simulation: NOT CONVERGED"
         sys.exit(1)
 
-    p_est, p_est_conf_interval = determine_p_est_by_interval(df, max_delay, search_confidence, converged_p_threshold_frac)
+    p_est, p_est_conf_interval = determine_p_est_by_interval(df, max_delay, search_confidence, search_max_p_rel_interval_len)
 
     #Binary Search for the minimum sample size with sufficient confidence
     sample_size = num_sim_cases
@@ -320,7 +314,7 @@ def search_max_prob(df, num_sim_cases, search_confidence, converged_p_threshold_
 
         converged = True
         try:
-            p_sub_est, p_sub_est_ci = determine_p_est_by_interval(df_sub_sample, max_delay, search_confidence, converged_p_threshold_frac)
+            p_sub_est, p_sub_est_ci = determine_p_est_by_interval(df_sub_sample, max_delay, search_confidence, search_max_p_rel_interval_len)
         except NotConvergedException as e:
             converged = False
 
