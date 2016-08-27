@@ -97,11 +97,12 @@ def main():
     print "Loading delay values"
     df = pd.read_csv(args.simulation_csv, usecols=['delay:MAX'])
 
+    num_samples = args.num_samples
     try:
         if args.search is None:
-            print "Num Samples: ", args.num_samples
+            print "Num Samples: ", num_samples
 
-            sample_size = math.floor(num_sim_cases / args.num_samples)
+            sample_size = math.floor(num_sim_cases / num_samples)
             print "Sample Size: ", sample_size
 
             print "Sample Frac (sim): ", sample_size / num_sim_cases
@@ -109,9 +110,9 @@ def main():
         elif args.search == 'mean':
             sample_size, confidence_interval = search_mean(df, num_sim_cases, args.search_confidence, args.search_mean_interval_len)
 
-            args.num_samples = int(math.floor(num_sim_cases / float(sample_size)))
+            num_samples = min(num_samples, int(math.floor(num_sim_cases / float(sample_size))))
 
-            print "Num Samples: ", args.num_samples
+            print "Num Samples: ", num_samples
         elif args.search == 'max':
 
             max_delay = args.true_max
@@ -120,7 +121,7 @@ def main():
             else:
                 max_delay = float(max_delay)
 
-            sample_size = search_max_prob(df, num_sim_cases, args.search_confidence, args.search_max_p_rel_interval_len, args.num_samples, max_delay)
+            sample_size = search_max_prob(df, num_sim_cases, args.search_confidence, args.search_max_p_rel_interval_len, num_samples, max_delay)
         else:
             assert False
     except NotConvergedException as e:
@@ -135,7 +136,7 @@ def main():
 
     print "MC Runtime (sec):", sim_sample_frac * (48 * 60 * 60)
 
-    sampled_data_sets = generate_samples(args.num_samples, sample_size, df)
+    sampled_data_sets = generate_samples(num_samples, sample_size, df)
     all_data_sets.update(sampled_data_sets)
 
     if args.search == 'mean':
@@ -147,7 +148,7 @@ def main():
             else:
                 num_samples_within_confidence += 1
 
-        print "Fraction of samples within confidence interval: {} (target confidence level {})".format(float(num_samples_within_confidence) / args.num_samples, args.search_confidence)
+        print "Fraction of samples within confidence interval: {} (target confidence level {})".format(float(num_samples_within_confidence) / num_samples, args.search_confidence)
 
     print "Plotting..."
 
@@ -155,7 +156,7 @@ def main():
     ncols = 1
 
     fig = plt.figure(figsize=(8,8))
-    fig.suptitle("{base_title} (Sample Size: {sample_size:.2g} ({sample_pct:.2g}%), Num. Samples: {num_samples})".format(base_title=args.base_title, sample_size=sample_size, sample_pct=100*sample_frac, num_samples=args.num_samples), fontsize=14)
+    fig.suptitle("{base_title} (Sample Size: {sample_size:.2g} ({sample_pct:.2g}%), Num. Samples: {num_samples})".format(base_title=args.base_title, sample_size=sample_size, sample_pct=100*sample_frac, num_samples=num_samples), fontsize=14)
 
 
     gs = GridSpec(3,1)
@@ -300,7 +301,10 @@ def search_max_prob(df, num_sim_cases, search_confidence, search_max_p_rel_inter
     We determine this by conducting a series of bernoulli (success/fail) experiments, where at different sample
     sizes
     """
-    print "Max delay: {}".format(max_delay)
+    print "Specified Max delay: {}".format(max_delay)
+
+    mc_max_delay = df.max()
+    print "MC Max delay: {}".format(mc_max_delay)
 
     if max_delay not in df['delay:MAX'].values:
         msg = "Max delay not found in simulation: NOT CONVERGED"
@@ -479,6 +483,7 @@ def inspect_sim_file(filename):
     for i, col_name in enumerate(cols):
         if col_name.startswith("delay"):
             num_inputs = i - 1 #-1 since column before delay is the output
+            break
 
     output_name = cols[num_inputs]
 
