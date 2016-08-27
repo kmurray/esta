@@ -303,7 +303,7 @@ def search_max_prob(df, num_sim_cases, search_confidence, search_max_p_rel_inter
     """
     print "Specified Max delay: {}".format(max_delay)
 
-    mc_max_delay = df.max()
+    mc_max_delay = max(df['delay:MAX'])
     print "MC Max delay: {}".format(mc_max_delay)
 
     if max_delay not in df['delay:MAX'].values:
