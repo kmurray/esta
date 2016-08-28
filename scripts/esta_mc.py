@@ -117,7 +117,7 @@ def main():
 
             max_delay = args.true_max
             if max_delay is None:
-                max_delay = max(df['delay:MAX'])
+                max_delay = float(max(df['delay:MAX']))
             else:
                 max_delay = float(max_delay)
 
@@ -306,7 +306,7 @@ def search_max_prob(df, num_sim_cases, search_confidence, search_max_p_rel_inter
     mc_max_delay = max(df['delay:MAX'])
     print "MC Max delay: {}".format(mc_max_delay)
 
-    if max_delay not in df['delay:MAX'].values:
+    if max_delay != float(mc_max_delay):
         msg = "Max delay not found in simulation: NOT CONVERGED"
         raise NotConvergedException(msg)
 
