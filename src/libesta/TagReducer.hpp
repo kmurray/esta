@@ -110,9 +110,9 @@ class StaSlackTagReducer : public TagReducer {
                         return false;
                     }
 
-                    auto bin_size = coarse_delay_bin_size_; //Default to coarse binning
+                    auto bin_size = coarse_delay_bin_size; //Default to coarse binning
                     if(search_tag->arr_time().value() > arr_threshold) {
-                        bin_size = fine_delay_bin_size_; //Use fine binning if beyond thershold
+                        bin_size = fine_delay_bin_size; //Use fine binning if beyond thershold
                     }
 
                     //Map to the appropriate bin, we treat a bin size of zero as no binning
