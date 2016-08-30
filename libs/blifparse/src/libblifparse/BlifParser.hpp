@@ -15,7 +15,7 @@ class BlifParser {
             : lexer_context_(this)
             , blif_data_(nullptr) 
             , clean_nets_(true)
-            , sweep_dangling_ios_(true) { }
+            , sweep_dangling_ios_(false) { }
         virtual ~BlifParser() { }
 
         BlifData* parse(std::string filename);
