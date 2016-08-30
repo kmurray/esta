@@ -35,6 +35,7 @@ class SharpSatBddEvaluator : public SharpSatEvaluator<Analyzer> {
                     const_gens_.insert(node_id);
                 }
             }
+            bdd_cache_ = BddCache(false);
 
             assert(pi_curr_bdd_vars_.size() + pi_curr_bdd_vars_.size() == nvars);
         }
@@ -56,7 +57,7 @@ class SharpSatBddEvaluator : public SharpSatEvaluator<Analyzer> {
                 std::cout << "\treorder_time: " << (float) cudd.ReadReorderingTime() / 1000 << "\n";
                 i++;
             }
-            bdd_cache_ = BddCache();
+            bdd_cache_ = BddCache(false);
 
             //Reset the default re-order size
             //Re-ordering really big BDDs is slow (re-order time appears to be quadratic in size)
