@@ -842,10 +842,12 @@ std::vector<std::tuple<ExtTimingTag::cptr,std::shared_ptr<BDD>>> circuit_max_del
             max_tags.max_arr(new_tag);
         }
     }
+    std::cout << "Raw Max Tags to evaluate: " << max_tags.num_tags() << std::endl;
 
     //Reduce the tags to simplify BDD calculation
     max_tags = tag_reducer.merge_max_tags(max_tags, tg.num_nodes());
 
+    std::cout << "Reduced Max Tags to evaluate: " << max_tags.num_tags() << std::endl;
     //When we calculate the max tags above, we may end up with the same set of input transitions
     //appearing multiple times in different tags (i.e. different delays to the primary outputs).
     //
@@ -868,6 +870,8 @@ std::vector<std::tuple<ExtTimingTag::cptr,std::shared_ptr<BDD>>> circuit_max_del
     auto tag_end = (calculate_smallest_max_bdd) ? max_tags.end() : max_tags.end() - 1;
     auto tag_iter = max_tags.begin();
     while(tag_iter != tag_end) {
+        auto tag_num = tag_iter - max_tags.begin();
+        std::cout << "Evaluating tag delay: " << (*tag_iter)->arr_time().value() << " (progress " << 100*((float) tag_num / max_tags.num_tags()) << "%)" << std::endl;
         auto bdd = sharp_sat_eval->build_bdd_xfunc(*tag_iter);
 
         //Remove any terms already covered
@@ -882,6 +886,8 @@ std::vector<std::tuple<ExtTimingTag::cptr,std::shared_ptr<BDD>>> circuit_max_del
         if(tag_iter != tag_end - 1) {
             covered_terms |= bdd;
         }
+
+        //sharp_sat_eval->reset();
 
         ++tag_iter;
     }
