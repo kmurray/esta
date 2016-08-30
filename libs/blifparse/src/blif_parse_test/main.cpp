@@ -40,7 +40,7 @@ int main(int argc, char** argv) {
     Options options;
 
     int i = 1;
-    while(process_option(options, argv[1])) {
+    while(process_option(options, argv[i])) {
         i++;
     }
 
@@ -49,8 +49,8 @@ int main(int argc, char** argv) {
 
         //Create the parser
         BlifParser parser;
-        parser.set_clean_nets(true)
-              .set_sweep_dangling_ios(true);
+        parser.set_clean_nets(options.clean_nets)
+              .set_sweep_dangling_ios(options.sweep_ios);
 
         //Load the file
         BlifData* blif_data = nullptr;
