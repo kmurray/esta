@@ -206,16 +206,16 @@ int main(int argc, char** argv) {
     g_action_timer.push_timer("ETA Application");
     cout << "\n";
 
-    std::cout << "sizeof(Time) = " << sizeof(Time) << "\n";
-    std::cout << "sizeof(TimingTag) = " << sizeof(TimingTag) << "\n";
-    std::cout << "sizeof(TimingTags) = " << sizeof(TimingTags) << "\n";
-    std::cout << "sizeof(ExtTimingTag) = " << sizeof(ExtTimingTag) << "\n";
-    std::cout << "sizeof(ExtTimingTags) = " << sizeof(ExtTimingTags) << "\n";
-    std::cout << "sizeof(TransitionType) = " << sizeof(TransitionType) << "\n";
-    std::cout << "sizeof(NodeId) = " << sizeof(NodeId) << "\n";
-    std::cout << "sizeof(DomainId) = " << sizeof(DomainId) << "\n";
-    std::cout << "sizeof(std::vector<std::vector<ExtTimingTag::cptr>>) = " << sizeof(std::vector<std::vector<ExtTimingTag::cptr>>) << "\n";
-    std::cout << "sizeof(std::vector<int>) = " << sizeof(std::vector<int>) << "\n";
+    //std::cout << "sizeof(Time) = " << sizeof(Time) << "\n";
+    //std::cout << "sizeof(TimingTag) = " << sizeof(TimingTag) << "\n";
+    //std::cout << "sizeof(TimingTags) = " << sizeof(TimingTags) << "\n";
+    //std::cout << "sizeof(ExtTimingTag) = " << sizeof(ExtTimingTag) << "\n";
+    //std::cout << "sizeof(ExtTimingTags) = " << sizeof(ExtTimingTags) << "\n";
+    //std::cout << "sizeof(TransitionType) = " << sizeof(TransitionType) << "\n";
+    //std::cout << "sizeof(NodeId) = " << sizeof(NodeId) << "\n";
+    //std::cout << "sizeof(DomainId) = " << sizeof(DomainId) << "\n";
+    //std::cout << "sizeof(std::vector<std::vector<ExtTimingTag::cptr>>) = " << sizeof(std::vector<std::vector<ExtTimingTag::cptr>>) << "\n";
+    //std::cout << "sizeof(std::vector<int>) = " << sizeof(std::vector<int>) << "\n";
 
     auto options = parse_args(argc, argv);
 
