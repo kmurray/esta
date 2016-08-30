@@ -40,15 +40,15 @@ def main():
         #print compare_hist
 
         #Merge the two columns on the union of delays
-        merged_df = pd.merge(reference_hist, compare_hist, how='outer', on=['delay'])
+        merged_df = pd.merge(reference_hist, compare_hist, how='outer', on=['delay:MAX'])
 
         #Treat missing values as zero
         merged_df = merged_df.fillna(0)
 
         distance_matrix = np.zeros(shape=(merged_df.shape[0], merged_df.shape[0]))
 
-        for i, ival in enumerate(merged_df['delay'].values):
-            for j, jval in enumerate(merged_df['delay'].values):
+        for i, ival in enumerate(merged_df['delay:MAX'].values):
+            for j, jval in enumerate(merged_df['delay:MAX'].values):
                 distance_matrix[i][j] = abs(ival - jval)
                 #print i, j, ival - jval
 
