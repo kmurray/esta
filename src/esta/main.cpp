@@ -253,6 +253,7 @@ int main(int argc, char** argv) {
 
     //Create the parser
     BlifParser parser;
+    parser.set_sweep_dangling_ios(false);
     try {
         g_blif_data = parser.parse(options.get_as<string>("blif_file"));
     } catch (BlifParseLocationError& e) {
