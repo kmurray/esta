@@ -5,6 +5,7 @@
 
 #include "TimingGraph.hpp"
 #include "TimingAnalyzer.hpp"
+#include "TimingGraphNameResolver.hpp"
 
 void write_timing_graph_dot(std::ostream& os, const TimingGraph& tg);
 
@@ -17,7 +18,7 @@ void print_level_histogram(const TimingGraph& tg, int nbuckets);
 void print_node_fanin_histogram(const TimingGraph& tg, int nbuckets);
 void print_node_fanout_histogram(const TimingGraph& tg, int nbuckets);
 
-void print_timing_graph(const TimingGraph& tg);
+void print_timing_graph(const TimingGraph& tg, std::shared_ptr<TimingGraphNameResolver> name_resolver);
 void print_levelization(const TimingGraph& tg);
 
 std::set<NodeId> identify_constant_gen_fanout(const TimingGraph& tg);

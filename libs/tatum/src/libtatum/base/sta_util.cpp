@@ -178,12 +178,13 @@ void print_node_fanout_histogram(const TimingGraph& tg, int nbuckets) {
 }
 
 
-void print_timing_graph(const TimingGraph& tg) {
+void print_timing_graph(const TimingGraph& tg, std::shared_ptr<TimingGraphNameResolver> name_resolver) {
     for(NodeId node_id = 0; node_id < tg.num_nodes(); node_id++) {
         cout << "Node: " << node_id;
         cout << " Type: " << tg.node_type(node_id);
         cout << " Out Edges: " << tg.num_node_out_edges(node_id);
         cout << " is_clk_src: " << tg.node_is_clock_source(node_id);
+        cout << " name: " << name_resolver->get_node_name(node_id);
         cout << endl;
         for(int out_edge_idx = 0; out_edge_idx < tg.num_node_out_edges(node_id); out_edge_idx++) {
             EdgeId edge_id = tg.node_out_edge(node_id, out_edge_idx);
@@ -208,6 +209,16 @@ void print_levelization(const TimingGraph& tg) {
         }
         cout << endl;
     }
+    cout << "Sources: ";
+    for(auto node_id : tg.primary_inputs()) {
+        cout << node_id << " ";
+    }
+    cout << endl;
+    cout << "Sinks: ";
+    for(auto node_id : tg.primary_outputs()) {
+        cout << node_id << " ";
+    }
+    cout << endl;
 }
 
 

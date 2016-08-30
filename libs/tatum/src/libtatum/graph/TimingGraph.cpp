@@ -156,7 +156,8 @@ void TimingGraph::levelize() {
             }
 
             //Also track the primary outputs
-            if(num_node_out_edges(node_id) == 0) {
+            if(num_node_out_edges(node_id) == 0 //) {
+                    && (node_type(node_id) == TN_Type::OUTPAD_SINK || node_type(node_id) == TN_Type::FF_SINK)) {
                 primary_outputs_.push_back(node_id);
             }
         }

@@ -520,8 +520,8 @@ void BlifTimingGraphBuilder::verify(const TimingGraph& tg) {
         assert(tg.num_node_in_edges(node_id) > 0);
 
         auto node_type = tg.node_type(node_id);
-        assert(node_type == TN_Type::OUTPAD_SINK 
-               || node_type == TN_Type::FF_SINK);
+        //assert(node_type == TN_Type::OUTPAD_SINK 
+               //|| node_type == TN_Type::FF_SINK);
     }
 }
 

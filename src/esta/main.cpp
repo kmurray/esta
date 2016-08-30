@@ -282,13 +282,15 @@ int main(int argc, char** argv) {
 
     std::shared_ptr<TimingGraphNameResolver> name_resolver = tg_builder.get_name_resolver();
 
+    std::cout << "node 57: " << name_resolver->get_node_name(57) << "\n";
+
     g_action_timer.pop_timer("Building Timing Graph");
     cout << "\n";
 
     if(options.get_as<bool>("print_graph")) {
         cout << "\n";
         cout << "TimingGraph: " << "\n";
-        print_timing_graph(timing_graph);
+        print_timing_graph(timing_graph, name_resolver);
 
         cout << "\n";
         cout << "TimingGraph logic functions: " << "\n";
