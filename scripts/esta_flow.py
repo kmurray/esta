@@ -82,7 +82,7 @@ def parse_args():
                         help="Delay bin size for ESTA. Smaller values increase accuracy at the cost of longer run-time.")
 
     parser.add_argument("-f", "--delay_bin_size_fine",
-                        default=100000,
+                        default=0,
                         help="Delay bin size for ESTA. Smaller values increase accuracy at the cost of longer run-time.")
 
     parser.add_argument("-m", "--max_permutations",
@@ -90,7 +90,7 @@ def parse_args():
                         help="Maximum number of permutations (per node) for ESTA. Smaller values reduce runtime at the cost of lower accuracy. A value of 0 causes no limit to be enforced.")
 
     parser.add_argument("-s", "--slack_ratio",
-                        default=0.05,
+                        default=0.00,
                         help="Percentile slack to never reduce")
 
     parser.add_argument("--sim_mode",
