@@ -125,6 +125,10 @@ def parse_args():
     esta_arguments.add_argument("--esta_exec",
                                 default="esta",
                                 help="ESTA executable.")
+    esta_arguments.add_argument("--esta_mode",
+                                choices=['max', 'po'],
+                                default="max",
+                                help="ESTA executable.")
 
     #
     # Modelsim related arguments
@@ -334,6 +338,14 @@ def run_esta(args, design_info, sdf_file):
             "-m", args.max_permutations,
             "--slack_threshold", args.slack_ratio
             ]
+
+    if args.esta_mode == "max":
+        pass
+    elif args.esta_mode == "po":
+        cmd += ['--max_histogram', 'false']
+        cmd += ['--print_histograms', 'po']
+    else:
+        raise ValueError("Unrecognized esta mode {}".format(args.esta_mode))
 
     if args.reorder_method is not None:
         cmd += ["--reorder_method", args.reorder_method]
