@@ -776,10 +776,11 @@ def create_modelsim_do(args, vcd_file, verilog_files, dut_inputs, dut_outputs, d
         do_lines.append("vlog -sv -work work {" + file + "}")
     do_lines.append("")
 
+    modelsim_cmd = "vsim -t 1ps -L rtl_work -L work -voptargs=\"+acc\" +transport_int_delays +transport_path_delays +sdf_verbose +bitblast tb"
     if args.modelsim_flavour == "modelsim_altera":
-        do_lines.append("vsim -t 1ps -L rtl_work -L work -L altera_mf_ver -L altera_ver -L lpm_ver -L sgate_ver -L stratixiv_hssi_ver -L stratixiv_pcie_hip_ver -L stratixiv_ver -voptargs=\"+acc\" +transport_int_delays +transport_path_delays +sdf_verbose tb")
-    else:
-        do_lines.append("vsim -t 1ps -L rtl_work -L work -voptargs=\"+acc\" +transport_int_delays +transport_path_delays +sdf_verbose +bitblast tb")
+        #Include required altera libraries
+        modelsim_cmd += " -L altera_mf_ver -L altera_ver -L lpm_ver -L sgate_ver -L stratixiv_hssi_ver -L stratixiv_pcie_hip_ver -L stratixiv_ver "
+    do_lines.append(modelsim_cmd)
     do_lines.append("")
     do_lines.append("#Setup VCD logging")
     do_lines.append("vcd file {vcd_file}".format(vcd_file=vcd_file))
