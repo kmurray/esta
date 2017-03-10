@@ -287,11 +287,14 @@ def run_vtr(args, vpr_log_filename):
             args.vpr_exec,
             args.arch,
             args.blif,
-            "-sweep_hanging_nets_and_inputs", "off",
             "-absorb_buffer_luts", "off",
+            "-sweep_dangling_primary_ios", "off",
+            "-sweep_dangling_nets", "off",
+            "-sweep_dangling_blocks", "off",
             "-route_chan_width", "300",
             "-echo_file", "on",
-            "-gen_postsynthesis_netlist", "on"
+            "-gen_postsynthesis_netlist", "on",
+            "-nodisp"
           ]
 
     output = run_command(cmd, log_filename=vpr_log_filename, verbose=args.verbose)
