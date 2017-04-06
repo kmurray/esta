@@ -144,7 +144,7 @@ optparse::Values parse_args(int argc, char** argv) {
     parser.add_option("--reorder_method")
           .dest("bdd_reorder_method")
           .metavar("CUDD_REORDER_METHOD")
-          .set_default("CUDD_REORDER_SIFT")
+          .set_default("CUDD_REORDER_GROUP_SIFT")
           .help("The method to use for dynamic BDD variable re-ordering. Default: %default")
           ;
 
