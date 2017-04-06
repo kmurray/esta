@@ -149,7 +149,8 @@ optparse::Values parse_args(int argc, char** argv) {
           ;
 
     parser.add_option("--max_histogram")
-          .set_default(true)
+          .set_default(false)
+          .action("store_true")
           .help("Output the maximum delay histogram to console and esta.max_hist.csv")
           ;
 
@@ -166,7 +167,7 @@ optparse::Values parse_args(int argc, char** argv) {
           .dest("print_histograms")
           .choices(node_choices.begin(), node_choices.end())
           .metavar("VALUE")
-          .set_default("none")
+          .set_default("po")
           .help("What node delay histograms to print. Must be one of {'po', 'pi', 'all', 'none'} (primary inputs, primary outputs, all nodes). Default: %default")
           ;
 
