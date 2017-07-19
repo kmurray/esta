@@ -95,7 +95,7 @@ def parse_args():
 
     parser.add_argument("--sim_mode",
                         choices=["exhaustive", "monte_carlo"],
-                        default="exhaustive",
+                        default="monte_carlo",
                         help="Simulation mode.")
 
     parser.add_argument("--monte_carlo_iter_fraction",
