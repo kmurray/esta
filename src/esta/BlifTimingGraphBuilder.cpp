@@ -642,7 +642,7 @@ void BlifTimingGraphBuilder::check_logical_output_dependancies(const TimingGraph
 }
 
 std::string BlifTimingGraphBuilder::sdf_name(std::string name) {
-    std::vector<char> chars_to_replace = {};
+    std::vector<char> chars_to_replace = {'.'};
     for(char val : chars_to_replace) {
         std::replace(name.begin(), name.end(), val, '_');
     }
@@ -657,7 +657,8 @@ void BlifTimingGraphBuilder::set_names_edge_delays_from_sdf(const TimingGraph& t
     }
 
     //Determine the sdf name for this .names 
-    std::string sdf_cell_name = sdf_name("lut_" + *blif_names->ports[blif_names->ports.size()-1]->name);
+    std::string raw_cell_name = "lut_" + *blif_names->ports[blif_names->ports.size()-1]->name;
+    std::string sdf_cell_name = sdf_name(raw_cell_name);
 
     //Find the matching SDF cell by name
     const auto& cell = find_sdf_cell_inst(sdf_cell_name);
