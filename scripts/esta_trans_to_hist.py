@@ -9,7 +9,7 @@ import numpy as np
 import matplotlib.pyplot as plt
 import seaborn as sns
 
-from esta_util import load_exhaustive_csv, load_trans_csv, transitions_to_histogram
+from esta_util import load_exhaustive_csv, load_trans_csv, transitions_to_histograms
 
 def parse_args():
     parser = argparse.ArgumentParser()
@@ -20,9 +20,10 @@ def parse_args():
     parser.add_argument("histogram_csv",
                         help="Output histogram csv file")
 
-    parser.add_argument("--key",
+    parser.add_argument("--keys",
                         default="delay:MAX",
-                        help="delay key to process in transition_csv")
+                        nargs="+",
+                        help="delay keys to process in transition_csv")
 
     return parser.parse_args()
 
@@ -30,13 +31,13 @@ def main():
     args = parse_args()
 
     print "Loading CSV"
-    trans_delay_df = load_trans_csv(args.transition_csv, keys=[args.key]) 
+    trans_delay_df = load_trans_csv(args.transition_csv, keys=args.keys) 
 
     print "Converting to Histogram"
-    hist_df = transitions_to_histogram(trans_delay_df, key=args.key)
+    hist_df = transitions_to_histograms(trans_delay_df, keys=args.keys)
     
     print "Writing CSV"
-    hist_df.to_csv(args.histogram_csv, index=False)
+    hist_df.to_csv(args.histogram_csv)
 
 if __name__ == "__main__":
     main()

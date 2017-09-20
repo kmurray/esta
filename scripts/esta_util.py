@@ -198,6 +198,35 @@ def transitions_to_histogram(raw_data, key="delay:MAX"):
 
     return df.sort_values(by=key)
 
+def transitions_to_histograms(raw_data, keys=["delay:MAX"]):
+
+    hist_dfs = []
+    for key in keys:
+
+        assert key.startswith("delay:")
+
+        prefix, name = key.split(":", 2)
+        assert prefix == "delay"
+
+        #Counts of how often all delay values occur
+        raw_counts = raw_data[key].value_counts(sort=False)
+
+        #Normalize by total combinations (i.e. number of rows)
+        #to get probability
+        normed_counts = raw_counts / raw_data.shape[0]
+
+        df = pd.DataFrame({'delay': normed_counts.index, "prob:{}".format(name): normed_counts.values})
+        df.set_index('delay', inplace=True)
+
+        hist_dfs.append(df)
+
+    hists_df = pd.concat(hist_dfs, axis=1)
+    hists_df.sort_index(inplace=True)
+    hists_df.fillna(0., inplace=True)
+
+    return hists_df
+
+
 
 def create_sta_hist(sta_cpd):
     return pd.DataFrame({"delay:MAX": [0., sta_cpd], "probability": [0., 1.]})
