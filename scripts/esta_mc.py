@@ -24,6 +24,10 @@ from esta_util import load_trans_csv, transitions_to_histogram
 class NotConvergedException(Exception):
     pass
 
+OK_EXIT_CODE = 0
+ERROR_EXIT_CODE = 1
+NOT_CONVERGED_EXIT_CODE = 2
+
 def parse_args():
     parser = argparse.ArgumentParser(
                 formatter_class=argparse.ArgumentDefaultsHelpFormatter
@@ -34,6 +38,11 @@ def parse_args():
     #
     parser.add_argument("simulation_csv",
                         help="Simulation results CSV file")
+
+    parser.add_argument("--keys",
+                        nargs="+",
+                        default=['delay:MAX'],
+                        help="Which keys to check for convergence in the CSV file")
 
     parser.add_argument("--search",
                         choices=['mean', 'max'],
@@ -54,6 +63,11 @@ def parse_args():
                         default=0.03,
                         type=float,
                         help="Acceptable max delay relative probability confidence interval length")
+
+    parser.add_argument("--sim_time_hours",
+                        default=48.0,
+                        type=float,
+                        help="Simulation run-time (scaled by converged sample fraction to determine MC run-time)")
 
     parser.add_argument("--true_max",
                         default=None,
@@ -83,26 +97,63 @@ def main():
 
     print " ".join(sys.argv)
 
-    all_data_sets = OrderedDict()
-
     print "Counting Cases..."
     num_sim_cases, num_inputs, output_name = inspect_sim_file(args.simulation_csv)
     print "Data file contains:", num_sim_cases, "cases"
 
     num_exhaustive_cases = Decimal(4)**Decimal(num_inputs)
 
-    # reader = pd.read_csv(args.simulation_csv,
-                         # usecols=['delay:MAX'])  #Read in only the delay to save time and memory
-                         # iterator=True)
-
     print "Inputs: ", num_inputs
     print "Exhaustive cases: {:g}".format(num_exhaustive_cases)
 
     print "Loading delay values"
-    df = pd.read_csv(args.simulation_csv, usecols=['delay:MAX'])
+    df = pd.read_csv(args.simulation_csv, usecols=args.keys)
 
-    num_samples = args.num_samples
+    sample_size = None
     try:
+
+        max_sample_size = None
+        for key in args.keys:
+            print "Checking Convergence for {}".format(key)
+            print "-------------------------------------------------------"
+            if args.search == 'mean':
+                sample_size, confidence_interval = search_mean(df, key, num_sim_cases, args.search_confidence, args.search_mean_interval_len)
+
+            elif args.search == 'max':
+
+                max_delay = args.true_max
+                if max_delay is None:
+                    max_delay = float(max(df[key]))
+                else:
+                    max_delay = float(max_delay)
+
+                sample_size = search_max_prob(df[key], key, num_sim_cases, args.search_confidence, args.search_max_p_rel_interval_len, max_delay)
+            else:
+                assert False
+
+            print "Converged sample size for {}: {}".format(key, sample_size)
+
+            if max_sample_size == None or sample_size > max_sample_size:
+                max_sample_size = sample_size
+                print "Max Sample Size: {} (for {})".format(max_sample_size, key)
+
+    except NotConvergedException as e:
+        print "Not Converged"
+        print e
+        sys.exit(NOT_CONVERGED_EXIT_CODE)
+
+    exhaustive_sample_frac = max_sample_size / float(num_exhaustive_cases)
+    sim_sample_frac = max_sample_size / float(num_sim_cases)
+    print "Final Sample Size: ", max_sample_size
+    print "Final Sample Frac (simulation): ", sim_sample_frac
+    print "Final Sample Frac (exhaustive): ", exhaustive_sample_frac
+
+    print "MC Runtime (sec):", sim_sample_frac * (args.sim_time_hours * 60 * 60)
+
+    if args.plot_file:
+        all_data_sets = OrderedDict()
+
+        num_samples = args.num_samples
         if args.search is None:
             print "Num Samples: ", num_samples
 
@@ -110,37 +161,10 @@ def main():
             print "Sample Size: ", sample_size
 
             print "Sample Frac (sim): ", sample_size / num_sim_cases
-
         elif args.search == 'mean':
-            sample_size, confidence_interval = search_mean(df, num_sim_cases, args.search_confidence, args.search_mean_interval_len)
-
             num_samples = min(num_samples, int(math.floor(num_sim_cases / float(sample_size))))
 
             print "Num Samples: ", num_samples
-        elif args.search == 'max':
-
-            max_delay = args.true_max
-            if max_delay is None:
-                max_delay = float(max(df['delay:MAX']))
-            else:
-                max_delay = float(max_delay)
-
-            sample_size = search_max_prob(df, num_sim_cases, args.search_confidence, args.search_max_p_rel_interval_len, num_samples, max_delay)
-        else:
-            assert False
-    except NotConvergedException as e:
-        print "Not Converged"
-        print e
-        sys.exit()
-
-    sample_frac = sample_size / float(num_exhaustive_cases)
-    sim_sample_frac = sample_size / float(num_sim_cases)
-    print "Final Sample Size: ", sample_size
-    print "Final Sample Frac (simulation): ", sample_size / float(num_sim_cases)
-
-    print "MC Runtime (sec):", sim_sample_frac * (48 * 60 * 60)
-
-    if args.plot_file:
 
         sampled_data_sets = generate_samples(num_samples, sample_size, df)
         all_data_sets.update(sampled_data_sets)
@@ -194,7 +218,9 @@ def main():
         sample_hist_0 = sampled_data_sets.values()[0]
         sample_hist_0.to_csv("sim_mc.max_hist." + args.search + ".csv", columns=['delay:MAX', 'probability'], index=False)
 
-def search_mean(df, num_sim_cases, search_confidence, search_mean_interval_len):
+    sys.exit(OK_EXIT_CODE)
+
+def search_mean(df, key, num_sim_cases, search_confidence, search_mean_interval_len):
     """
     Searches various samples sizes to find the smallest size which results in convergence,
     where convergence is defined as having the length of the mean's confidence interval less
@@ -222,7 +248,7 @@ def search_mean(df, num_sim_cases, search_confidence, search_mean_interval_len):
 
         sample = df.sample(sample_size)
 
-        mean, confidence_interval = mean_confidence_interval(sample['delay:MAX'], search_confidence)
+        mean, confidence_interval = mean_confidence_interval(sample[key], search_confidence)
 
         interval_len = confidence_interval[1] - confidence_interval[0]
 
@@ -262,11 +288,11 @@ def search_mean(df, num_sim_cases, search_confidence, search_mean_interval_len):
 
     return upper_bound_sample_size, confidence_interval
 
-def determine_p_est_by_interval(df, max_delay, search_confidence, search_max_p_rel_interval_len):
+def determine_p_est_by_interval(df, key, max_delay, search_confidence, search_max_p_rel_interval_len):
     num_sample_cases = df.shape[0]
 
     #Estimate probability of getting a max delay path from the entire MC sim
-    num_max_delay_cases = df['delay:MAX'].value_counts()[max_delay]
+    num_max_delay_cases = df.value_counts()[max_delay]
 
     p_est = num_max_delay_cases / float(num_sample_cases)
 
@@ -279,6 +305,16 @@ def determine_p_est_by_interval(df, max_delay, search_confidence, search_max_p_r
     #cover a more significant (smaller alpha)
     alpha = 1. - search_confidence
     ci = sms_sp.proportion_confint(num_max_delay_cases, num_sample_cases, alpha=alpha, method="beta")
+
+    #Convert tuple to array
+    ci = [ci[0], ci[1]]
+
+    if max_delay == 0 and math.isnan(ci[1]):
+        print "Warning: end of confidence interval was nan for max_delay 0; forcing to 1."
+        ci[1] = 1.
+
+    assert not math.isnan(ci[0])
+    assert not math.isnan(ci[1])
 
     ci_len = ci[1] - ci[0]
     ci_len_ratio = ci_len / p_est
@@ -299,7 +335,7 @@ def determine_p_est_by_interval(df, max_delay, search_confidence, search_max_p_r
     return p_est, ci
 
 
-def search_max_prob(df, num_sim_cases, search_confidence, search_max_p_rel_interval_len, num_samples, max_delay):
+def search_max_prob(df, key, num_sim_cases, search_confidence, search_max_p_rel_interval_len, max_delay):
     """
     Determines the minimal sample size for which the Monte-Carlo simulation maximum delay has converged (in the
     sense max delay having correct probability).
@@ -309,14 +345,14 @@ def search_max_prob(df, num_sim_cases, search_confidence, search_max_p_rel_inter
     """
     print "Specified Max delay: {}".format(max_delay)
 
-    mc_max_delay = max(df['delay:MAX'])
+    mc_max_delay = max(df)
     print "MC Max delay: {}".format(mc_max_delay)
 
     if max_delay != float(mc_max_delay):
         msg = "Max delay not found in simulation: NOT CONVERGED"
         raise NotConvergedException(msg)
 
-    p_est, p_est_conf_interval = determine_p_est_by_interval(df, max_delay, search_confidence, search_max_p_rel_interval_len)
+    p_est, p_est_conf_interval = determine_p_est_by_interval(df, key, max_delay, search_confidence, search_max_p_rel_interval_len)
 
     #Binary Search for the minimum sample size with sufficient confidence
     sample_size = num_sim_cases
@@ -328,7 +364,7 @@ def search_max_prob(df, num_sim_cases, search_confidence, search_max_p_rel_inter
 
         converged = True
         try:
-            p_sub_est, p_sub_est_ci = determine_p_est_by_interval(df_sub_sample, max_delay, search_confidence, search_max_p_rel_interval_len)
+            p_sub_est, p_sub_est_ci = determine_p_est_by_interval(df_sub_sample, key, max_delay, search_confidence, search_max_p_rel_interval_len)
         except NotConvergedException as e:
             converged = False
 
