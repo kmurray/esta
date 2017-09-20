@@ -34,20 +34,6 @@ def parse_args():
     #
     parser.add_argument("simulation_csv",
                         help="Simulation results CSV file")
-    parser.add_argument("--num_samples",
-                        default=10,
-                        type=int,
-                        help="Number of samples to draw")
-    parser.add_argument("--true_max",
-                        default=None,
-                        help="The true maximum delay")
-    parser.add_argument("--base_title",
-                        default="",
-                        help="Base component of figure title")
-
-    parser.add_argument("--plot_file",
-                        default=None,
-                        help="Output file")
 
     parser.add_argument("--search",
                         choices=['mean', 'max'],
@@ -68,6 +54,24 @@ def parse_args():
                         default=0.03,
                         type=float,
                         help="Acceptable max delay relative probability confidence interval length")
+
+    parser.add_argument("--true_max",
+                        default=None,
+                        help="The true maximum delay")
+
+    parser.add_argument("--base_title",
+                        default="",
+                        help="Base component of figure title")
+
+    parser.add_argument("--plot_file",
+                        default=None,
+                        help="Output file, or 'interactive' for an interactive plot")
+
+    parser.add_argument("--num_samples",
+                        default=10,
+                        type=int,
+                        help="Number of samples to draw for plotting")
+
 
     args = parser.parse_args()
 
@@ -136,57 +140,59 @@ def main():
 
     print "MC Runtime (sec):", sim_sample_frac * (48 * 60 * 60)
 
-    sampled_data_sets = generate_samples(num_samples, sample_size, df)
-    all_data_sets.update(sampled_data_sets)
-
-    if args.search == 'mean':
-        num_samples_within_confidence = 0
-        for k, df in all_data_sets.iteritems():
-            sample_mean = (df['delay:MAX']*df['probability']).sum()
-            if sample_mean < confidence_interval[0] or sample_mean > confidence_interval[1]:
-                print "Warning: sample {} has mean {} outside of confidence interval {}".format(k, sample_mean, confidence_interval)
-            else:
-                num_samples_within_confidence += 1
-
-        print "Fraction of samples within confidence interval: {} (target confidence level {})".format(float(num_samples_within_confidence) / num_samples, args.search_confidence)
-
-    print "Plotting..."
-
-    nrows = 3
-    ncols = 1
-
-    fig = plt.figure(figsize=(8,8))
-    fig.suptitle("{base_title} (Sample Size: {sample_size:.2g} ({sample_pct:.2g}%), Num. Samples: {num_samples})".format(base_title=args.base_title, sample_size=sample_size, sample_pct=100*sample_frac, num_samples=num_samples), fontsize=14)
-
-
-    gs = GridSpec(3,1)
-
-    cdf_ax = fig.add_subplot(gs[0,0])
-
-    plot_ax(cdf_ax, all_data_sets, labelx=False, show_legend=False)
-
-    cdf_ax.set_title("Delay CDF")
-
-    cdf_xlim = cdf_ax.get_xlim()
-
-    mean_ax = fig.add_subplot(gs[1,0])
-    max_ax = fig.add_subplot(gs[2,0])
-
-    plot_mean(mean_ax, sampled_data_sets)
-
-    plot_max(max_ax, sampled_data_sets, true_max=args.true_max)
-
-    max_ax.set_xlim(cdf_xlim)
-    mean_ax.set_xlim(cdf_xlim)
-
     if args.plot_file:
-        plt.savefig(args.plot_file)
-    else:
-        plt.show()
 
-    print "Saving Sample 0 Histogram ..."
-    sample_hist_0 = sampled_data_sets.values()[0]
-    sample_hist_0.to_csv("sim_mc.max_hist." + args.search + ".csv", columns=['delay:MAX', 'probability'], index=False)
+        sampled_data_sets = generate_samples(num_samples, sample_size, df)
+        all_data_sets.update(sampled_data_sets)
+
+        if args.search == 'mean':
+            num_samples_within_confidence = 0
+            for k, df in all_data_sets.iteritems():
+                sample_mean = (df['delay:MAX']*df['probability']).sum()
+                if sample_mean < confidence_interval[0] or sample_mean > confidence_interval[1]:
+                    print "Warning: sample {} has mean {} outside of confidence interval {}".format(k, sample_mean, confidence_interval)
+                else:
+                    num_samples_within_confidence += 1
+
+            print "Fraction of samples within confidence interval: {} (target confidence level {})".format(float(num_samples_within_confidence) / num_samples, args.search_confidence)
+
+        print "Plotting..."
+
+        nrows = 3
+        ncols = 1
+
+        fig = plt.figure(figsize=(8,8))
+        fig.suptitle("{base_title} (Sample Size: {sample_size:.2g} ({sample_pct:.2g}%), Num. Samples: {num_samples})".format(base_title=args.base_title, sample_size=sample_size, sample_pct=100*sample_frac, num_samples=num_samples), fontsize=14)
+
+
+        gs = GridSpec(3,1)
+
+        cdf_ax = fig.add_subplot(gs[0,0])
+
+        plot_ax(cdf_ax, all_data_sets, labelx=False, show_legend=False)
+
+        cdf_ax.set_title("Delay CDF")
+
+        cdf_xlim = cdf_ax.get_xlim()
+
+        mean_ax = fig.add_subplot(gs[1,0])
+        max_ax = fig.add_subplot(gs[2,0])
+
+        plot_mean(mean_ax, sampled_data_sets)
+
+        plot_max(max_ax, sampled_data_sets, true_max=args.true_max)
+
+        max_ax.set_xlim(cdf_xlim)
+        mean_ax.set_xlim(cdf_xlim)
+
+        if args.plot_file == "interactive":
+            plt.show()
+        else:
+            plt.savefig(args.plot_file)
+
+        print "Saving Sample 0 Histogram ..."
+        sample_hist_0 = sampled_data_sets.values()[0]
+        sample_hist_0.to_csv("sim_mc.max_hist." + args.search + ".csv", columns=['delay:MAX', 'probability'], index=False)
 
 def search_mean(df, num_sim_cases, search_confidence, search_mean_interval_len):
     """
