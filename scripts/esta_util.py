@@ -180,7 +180,10 @@ def load_trans_csv(filename, keys=["delay:MAX"]):
 
 def transitions_to_histogram(raw_data, key="delay:MAX"):
     #Counts of how often all delay values occur
-    raw_counts = raw_data[key].value_counts(sort=False)
+    if key != None:
+        raw_counts = raw_data[key].value_counts(sort=False)
+    else:
+        raw_counts = raw_data.value_counts(sort=False)
 
     #Normalize by total combinations (i.e. number of rows)
     #to get probability

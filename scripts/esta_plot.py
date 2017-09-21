@@ -123,7 +123,7 @@ def map_to_bins(delay_prob_data, bins, histogram_range):
 
     return heights
 
-def plot_ax(ax, data_sets, plot_style="cdf",  plot_title=None, labelx=True, labely=True, show_legend=True):
+def plot_ax(ax, data_sets, plot_style="cdf", key='delay:MAX', plot_title=None, labelx=True, labely=True, show_legend=True):
     color_cycle = cycle("rbgcmyk")
     alpha = 0.6
 
@@ -131,20 +131,18 @@ def plot_ax(ax, data_sets, plot_style="cdf",  plot_title=None, labelx=True, labe
 
         color = color_cycle.next()
 
-        max_delay = delay_prob_data['delay:MAX'].values.max()
+        max_delay = delay_prob_data[key].values.max()
 
 
         if "stem" in plot_style:
 
-            #ax.stem(delay_prob_data['delay:MAX'], delay_prob_data['probability'], label=label + " (pdf)", linefmt=color+'-', markerfmt=color+"o", basefmt=color+'-', alpha=alpha)
-            ax.stem(delay_prob_data['delay:MAX'], delay_prob_data['probability'], label=label + " (pdf)")
+            ax.stem(delay_prob_data[key], delay_prob_data['probability'], label=label + " (pdf)")
 
         if "cdf" in plot_style:
             #Calculate the CDF
             delay_prob_data['cumulative_probability'] = delay_prob_data['probability'].cumsum()
 
-            #ax.step(x=delay_prob_data['delay:MAX'], y=delay_prob_data['cumulative_probability'], where='post', label=label + " (cdf)", color=color)
-            ax.step(x=delay_prob_data['delay:MAX'], y=delay_prob_data['cumulative_probability'], where='post', label=label + " (cdf)")
+            ax.step(x=delay_prob_data[key], y=delay_prob_data['cumulative_probability'], where='post', label=label + " (cdf)")
 
     ax.set_ylim(ymin=0., ymax=1.)
     #ax.grid()
