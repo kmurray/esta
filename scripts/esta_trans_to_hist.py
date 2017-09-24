@@ -20,12 +20,12 @@ def parse_args():
                         help="Output histogram csv file")
 
     parser.add_argument("--keys",
-                        default="delay:MAX",
+                        default=["delay:MAX"],
                         nargs="+",
                         help="delay keys to process in transition_csv")
 
     parser.add_argument("--input_chunk_size",
-                        default=100,
+                        default=50,
                         type=int,
                         help="How many circuit inputs to load at a time (smaller values decrease peak memory usage in exchange for longer run-time")
 

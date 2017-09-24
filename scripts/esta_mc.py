@@ -88,7 +88,7 @@ def parse_args():
                         type=int,
                         help="Number of samples to draw for plotting")
     parser.add_argument("--input_chunk_size",
-                        default=100,
+                        default=50,
                         type=int,
                         help="How many circuit inputs to load at a time (smaller values decrease peak memory usage in exchange for longer run-time")
 
@@ -113,6 +113,11 @@ def main():
     print "Exhaustive cases: {:g}".format(num_exhaustive_cases)
 
     sim_time_sec = args.sim_time_hours * 60 * 60
+    TIME_THRESHOLD_SEC = 0.1
+    sim_sec_per_case = sim_time_sec / num_sim_cases
+    case_threshold = TIME_THRESHOLD_SEC / sim_sec_per_case
+    print "Sim sec/case: {}".format(sim_sec_per_case)
+    print "Sample Size Binary Search Threshold: {} ({} sec)".format(case_threshold, TIME_THRESHOLD_SEC)
 
     #Group keys into groups to reduce memory usage by only loading one group at a time
     ikey = -1 
@@ -133,6 +138,7 @@ def main():
 
 
         for key in key_group:
+            print ""
             print "Checking Convergence for {}".format(key)
             print "-------------------------------------------------------"
             sample_size = None
@@ -150,7 +156,7 @@ def main():
                         max_delay = float(max_delay)
 
                     sample_size = search_max_prob(df[key], key, num_sim_cases,
-                                    args.search_confidence, args.search_max_p_rel_interval_len, max_delay)
+                                    args.search_confidence, args.search_max_p_rel_interval_len, max_delay, case_threshold)
                 else:
                     assert False
             except NotConvergedException as e:
@@ -161,9 +167,12 @@ def main():
 
             print "Converged sample size for {}: {}".format(key, sample_size)
 
+            sim_sample_frac = sample_size / float(num_sim_cases)
+            print "MC Runtime (sec) for {}: {}".format(key, sim_sample_frac * sim_time_sec)
+
             if max_sample_size == None or sample_size > max_sample_size:
                 max_sample_size = sample_size
-                print "Max Sample Size: {} (for {})".format(max_sample_size, key)
+                print "Max Convereged Sample Size accross keys: {} (for {})".format(max_sample_size, key)
 
 
     exhaustive_sample_frac = max_sample_size / float(num_exhaustive_cases)
@@ -291,7 +300,7 @@ def determine_p_est_by_interval(df, key, max_delay, search_confidence, search_ma
     return p_est, ci
 
 
-def search_max_prob(df, key, num_sim_cases, search_confidence, search_max_p_rel_interval_len, max_delay):
+def search_max_prob(df, key, num_sim_cases, search_confidence, search_max_p_rel_interval_len, max_delay, sample_size_threshold = 0):
     """
     Determines the minimal sample size for which the Monte-Carlo simulation maximum delay has converged (in the
     sense max delay having correct probability).
@@ -314,7 +323,7 @@ def search_max_prob(df, key, num_sim_cases, search_confidence, search_max_p_rel_
     sample_size = num_sim_cases
     lower_bound_sample_size = -1
     upper_bound_sample_size = -1
-    while lower_bound_sample_size == -1 or upper_bound_sample_size == -1 or (upper_bound_sample_size - lower_bound_sample_size > 1):
+    while lower_bound_sample_size == -1 or upper_bound_sample_size == -1 or (upper_bound_sample_size - lower_bound_sample_size > sample_size_threshold):
 
         df_sub_sample = df.sample(sample_size)
 
@@ -360,7 +369,7 @@ def search_max_prob(df, key, num_sim_cases, search_confidence, search_max_p_rel_
 
     assert upper_bound_sample_size != -1
     assert lower_bound_sample_size != -1
-    assert upper_bound_sample_size - lower_bound_sample_size <= 1
+    assert upper_bound_sample_size - lower_bound_sample_size <= sample_size_threshold
 
     print "Minimal Sample Size: {} (@ {} confidence)".format(upper_bound_sample_size, search_confidence)
 
