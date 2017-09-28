@@ -61,7 +61,7 @@
 #else //Scalar case (TIME_VEC_WIDTH == 1)
     inline Time::scalar_type Time::value() const { return time_; }
     inline void Time::set_value(scalar_type time) { time_ = time; }
-    inline bool Time::valid() const { return !isnan(time_); }
+    inline bool Time::valid() const { return !std::isnan(time_); }
 
     inline void Time::max(const Time& other) { time_ = std::max(time_, other.time_); }
     inline void Time::min(const Time& other) { time_ = std::min(time_, other.time_); }

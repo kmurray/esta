@@ -340,7 +340,7 @@ void ExtSetupAnalysisMode<BaseAnalysisMode,Tags>::forward_traverse_finalize_node
                 Time edge_delay = dc.max_edge_delay(tg, edge_id, src_tag->trans_type(), output_transition);
 
                 Time new_arr = src_tag->arr_time() + edge_delay;
-                assert(!isnan(new_arr.value()));
+                assert(!std::isnan(new_arr.value()));
 
                 scenario_tag->max_arr(new_arr, src_tag);
             }
@@ -355,7 +355,7 @@ void ExtSetupAnalysisMode<BaseAnalysisMode,Tags>::forward_traverse_finalize_node
             if(only_static_inputs_applied) std::cout << " (staticly determined)";
             std::cout << "\n";
 #endif
-            assert(!isnan(scenario_tag->arr_time().value()));
+            assert(!std::isnan(scenario_tag->arr_time().value()));
             i_case++;
         }
 
