@@ -59,7 +59,11 @@ def main():
         ref_sta_emd = hist_emd(reference_hist, sta_hist, key)
         ref_comp_emd = hist_emd(reference_hist, compare_hist, key)
 
-        norm_emd = ref_comp_emd / ref_sta_emd
+        if ref_sta_emd == 0 and ref_comp_emd == 0:
+            #Equal so perfect match => zero normalized emd
+            norm_emd = 0
+        else:
+            norm_emd = ref_comp_emd / ref_sta_emd
 
         print "-------------------------"
         print "Ref-STA EMD for {}: {}".format(key, ref_sta_emd)
@@ -114,11 +118,16 @@ def build_sta_hist(sta_delays):
 
     for output, delay in sta_delays.iteritems():
         delay_ps = int(round(delay / 1.e-12))
-        sta_hist_df = pd.DataFrame({'prob:{}'.format(output): [0., 1.], 
-                                    'delay': [0, delay_ps]})
+        if delay_ps == 0:
+            sta_hist_df = pd.DataFrame({'prob:{}'.format(output): [1.], 
+                                        'delay': [delay_ps]})
+        else:
+            sta_hist_df = pd.DataFrame({'prob:{}'.format(output): [0., 1.], 
+                                        'delay': [0, delay_ps]})
         sta_hist_df.set_index('delay', inplace=True)
         
         sta_hist_dfs.append(sta_hist_df)
+
 
     sta_hist_df = pd.concat(sta_hist_dfs, axis=1)
     sta_hist_df.sort_index(inplace=True)
