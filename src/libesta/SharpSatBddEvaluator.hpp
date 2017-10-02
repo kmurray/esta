@@ -14,7 +14,8 @@
 enum class ConditionFunctionType {
     UNIFORM,
     NON_UNIFORM_ROUND_ROBIN,
-    NON_UNIFORM_GROUPED
+    NON_UNIFORM_GROUPED_BY_BINARY_MINTERM,
+    NON_UNIFORM_GROUPED_BY_GRAY_MINTERM
 };
 
 template<class Analyzer>
@@ -47,7 +48,7 @@ class SharpSatBddEvaluator : public SharpSatEvaluator<Analyzer> {
                         const_gens_.insert(node_id);
                     }
                 }
-            } else if (cond_func_type == ConditionFunctionType::NON_UNIFORM_ROUND_ROBIN || cond_func_type == ConditionFunctionType::NON_UNIFORM_GROUPED) {
+            } else if (cond_func_type == ConditionFunctionType::NON_UNIFORM_ROUND_ROBIN || cond_func_type == ConditionFunctionType::NON_UNIFORM_GROUPED_BY_BINARY_MINTERM || cond_func_type == ConditionFunctionType::NON_UNIFORM_GROUPED_BY_GRAY_MINTERM) {
                 //Collect primary inputs and identify constant generators
                 std::vector<NodeId> primary_inputs;
                 for(NodeId node_id = 0; node_id < tg.num_nodes(); node_id++) {
@@ -100,9 +101,16 @@ class SharpSatBddEvaluator : public SharpSatEvaluator<Analyzer> {
 
                     if (cond_func_type == ConditionFunctionType::NON_UNIFORM_ROUND_ROBIN) {
                         cond_funcs_[pi_node] = create_condition_functions_round_robin(pi_node, assigned_minterm_counts_[pi_node]);
+                    } else if (cond_func_type == ConditionFunctionType::NON_UNIFORM_GROUPED_BY_GRAY_MINTERM) {
+                        cond_funcs_[pi_node] = create_condition_functions_group_by_gray_minterm(pi_node, assigned_minterm_counts_[pi_node]);
                     } else {
-                        assert(cond_func_type == ConditionFunctionType::NON_UNIFORM_GROUPED);
-                        cond_funcs_[pi_node] = create_condition_functions_group(pi_node, assigned_minterm_counts_[pi_node]);
+                        assert(cond_func_type == ConditionFunctionType::NON_UNIFORM_GROUPED_BY_BINARY_MINTERM);
+                        cond_funcs_[pi_node] = create_condition_functions_group_by_binary_minterm(pi_node, assigned_minterm_counts_[pi_node]);
+                    }
+
+                    for (auto trans : {TransitionType::RISE, TransitionType::FALL, TransitionType::HIGH, TransitionType::LOW}) {
+                        std::cout << trans << ": " << bdd_sharpsat_fraction(cond_funcs_[pi_node][trans]) << "\n";
+                        cond_funcs_[pi_node][trans].PrintCover();
                     }
                 }
             } else {
@@ -254,10 +262,11 @@ class SharpSatBddEvaluator : public SharpSatEvaluator<Analyzer> {
                 return switch_func;
             } else if (cond_func_type_ == ConditionFunctionType::NON_UNIFORM_ROUND_ROBIN) {
                 return cond_funcs_[node_id][trans];
+            } else if (cond_func_type_ == ConditionFunctionType::NON_UNIFORM_GROUPED_BY_BINARY_MINTERM) {
+                return cond_funcs_[node_id][trans];
             } else {
-                assert(cond_func_type_ == ConditionFunctionType::NON_UNIFORM_GROUPED && "Invalid cond func type");
+                assert(cond_func_type_ == ConditionFunctionType::NON_UNIFORM_GROUPED_BY_GRAY_MINTERM && "Invalid cond func type");
 
-                assert(false && "unimplimented");
                 return cond_funcs_[node_id][trans];
             }
         }
@@ -290,15 +299,133 @@ class SharpSatBddEvaluator : public SharpSatEvaluator<Analyzer> {
             size_t total_minterms = 1 << nvars_per_input_;
             assert (iminterm == total_minterms);
 
-            for (auto trans : {TransitionType::RISE, TransitionType::FALL, TransitionType::HIGH, TransitionType::LOW}) {
-                std::cout << trans << ": " << bdd_sharpsat_fraction(cond_funcs[trans]) << "\n";
-
-            }
             return cond_funcs;
         }
 
-        std::map<TransitionType,BDD> create_condition_functions_group(NodeId node, std::map<TransitionType,size_t> minterm_counts) {
+        std::map<TransitionType,BDD> create_condition_functions_group_by_binary_minterm(NodeId node, std::map<TransitionType,size_t> minterm_counts) {
             std::map<TransitionType,BDD> cond_funcs;
+            for (auto trans : {TransitionType::RISE, TransitionType::FALL, TransitionType::HIGH, TransitionType::LOW}) {
+                cond_funcs[trans] = g_cudd.bddZero(); //Initially false
+            }
+
+
+            auto minterm_sort = [](const std::pair<TransitionType,size_t>& lhs, const std::pair<TransitionType,size_t>& rhs) {
+                //Descending order
+                return lhs.second >= rhs.second;
+            };
+
+            auto minterm_sum = [](size_t prior, const std::pair<TransitionType,size_t>& val) {
+                return prior + val.second;
+            };
+
+            std::vector<std::pair<TransitionType,size_t>> sorted_minterm_counts;
+            std::copy(minterm_counts.begin(), minterm_counts.end(), std::back_inserter(sorted_minterm_counts));
+            std::sort(sorted_minterm_counts.begin(), sorted_minterm_counts.end(), minterm_sort);
+
+            for (auto val : sorted_minterm_counts) {
+                std::cout << val.first << ": " << val.second << " (" << std::log2(val.second) << ")\n";
+            }
+
+
+            size_t iminterm = 0;
+
+            size_t unassigned_minterm_count = std::accumulate(sorted_minterm_counts.begin(),
+                                                              sorted_minterm_counts.end(),
+                                                              0u,
+                                                              minterm_sum);
+            while (unassigned_minterm_count > 0) {
+                for (auto& val : sorted_minterm_counts) {
+                    auto& trans = val.first;
+                    auto& num_minterms = val.second;
+
+                    if (num_minterms == 0) continue;
+
+                    size_t log2_minterms = std::floor(std::log2(num_minterms));
+
+                    size_t num_minterms_to_add = 1 << log2_minterms;
+
+                    size_t iminterm_end = iminterm + num_minterms_to_add;
+                    for(; iminterm < iminterm_end; ++iminterm) {
+                        set_minterm(node, cond_funcs[trans], iminterm);
+                    }
+
+                    num_minterms -= num_minterms_to_add;
+                }
+                unassigned_minterm_count = std::accumulate(sorted_minterm_counts.begin(),
+                                                           sorted_minterm_counts.end(),
+                                                           0u,
+                                                           minterm_sum);
+            }
+
+            size_t total_minterms = 1 << nvars_per_input_;
+            assert(iminterm == total_minterms);
+
+
+            return cond_funcs;
+        }
+
+        std::map<TransitionType,BDD> create_condition_functions_group_by_gray_minterm(NodeId node, std::map<TransitionType,size_t> minterm_counts) {
+            std::map<TransitionType,BDD> cond_funcs;
+            for (auto trans : {TransitionType::RISE, TransitionType::FALL, TransitionType::HIGH, TransitionType::LOW}) {
+                cond_funcs[trans] = g_cudd.bddZero(); //Initially false
+            }
+
+
+            auto minterm_sort = [](const std::pair<TransitionType,size_t>& lhs, const std::pair<TransitionType,size_t>& rhs) {
+                //Descending order
+                return lhs.second >= rhs.second;
+            };
+
+            auto minterm_sum = [](size_t prior, const std::pair<TransitionType,size_t>& val) {
+                return prior + val.second;
+            };
+
+            std::vector<std::pair<TransitionType,size_t>> sorted_minterm_counts;
+            std::copy(minterm_counts.begin(), minterm_counts.end(), std::back_inserter(sorted_minterm_counts));
+            std::sort(sorted_minterm_counts.begin(), sorted_minterm_counts.end(), minterm_sort);
+
+            for (auto val : sorted_minterm_counts) {
+                std::cout << val.first << ": " << val.second << " (" << std::log2(val.second) << ")\n";
+            }
+
+
+            size_t iminterm = 0;
+
+            size_t unassigned_minterm_count = std::accumulate(sorted_minterm_counts.begin(),
+                                                              sorted_minterm_counts.end(),
+                                                              0u,
+                                                              minterm_sum);
+            while (unassigned_minterm_count > 0) {
+                for (auto& val : sorted_minterm_counts) {
+                    auto& trans = val.first;
+                    auto& num_minterms = val.second;
+
+                    if (num_minterms == 0) continue;
+
+                    size_t log2_minterms = std::floor(std::log2(num_minterms));
+
+                    size_t num_minterms_to_add = 1 << log2_minterms;
+
+                    size_t iminterm_end = iminterm + num_minterms_to_add;
+                    for(; iminterm < iminterm_end; ++iminterm) {
+                        //Note that we count the minterms (iminterm) in standard binary,
+                        //but assign them based on their 'gray code' value; this should result
+                        //in simpler functions since assigned minterms will be adjacent in 
+                        //binary space (c.f. Karnaugh map) and easily covered
+                        set_minterm(node, cond_funcs[trans], binary_to_gray(iminterm));
+                    }
+
+                    num_minterms -= num_minterms_to_add;
+                }
+                unassigned_minterm_count = std::accumulate(sorted_minterm_counts.begin(),
+                                                           sorted_minterm_counts.end(),
+                                                           0u,
+                                                           minterm_sum);
+            }
+
+            size_t total_minterms = 1 << nvars_per_input_;
+            assert(iminterm == total_minterms);
+
 
             return cond_funcs;
         }
@@ -322,6 +449,11 @@ class SharpSatBddEvaluator : public SharpSatEvaluator<Analyzer> {
             //minterm.PrintCover();
             //std::cout << "minterm: " << minterm << "\n";
             //std::cout << "f: " << f << "\n";
+        }
+
+        size_t binary_to_gray(size_t binary_value) {
+            //See: https://en.wikipedia.org/wiki/Gray_code
+            return binary_value ^ (binary_value >> 1);
         }
     protected:
         size_t nvars_per_input_;

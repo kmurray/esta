@@ -135,12 +135,12 @@ optparse::Values parse_args(int argc, char** argv) {
           .help("The maximum number of permutations to be evaluated at a node in the timing graph during analysis (within slack thresholds). Zero implies no limit.")
           ;
 
-    std::vector<std::string> cond_func_choices = {"UNIFORM", "ROUND_ROBIN", "GROUPED"};
+    std::vector<std::string> cond_func_choices = {"UNIFORM", "ROUND_ROBIN", "GROUPED_BINARY", "GROUPED_GRAY"};
     parser.add_option("--condition_function")
           .dest("condition_function_type")
           .choices(cond_func_choices.begin(), cond_func_choices.end())
           .set_default("UNIFORM")
-          .metavar("{UNIFORM | ROUND_ROBIN | GROUPED}")
+          .metavar("{UNIFORM | ROUND_ROBIN | GROUPED_BINARY | GROUPED_GRAY}")
           .help("Specifies the primary input condition function types. Default: %default")
           ;
 
@@ -433,9 +433,11 @@ int main(int argc, char** argv) {
         cond_func_type = ConditionFunctionType::UNIFORM;
     } else if (cond_func_type_str == "ROUND_ROBIN") {
         cond_func_type = ConditionFunctionType::NON_UNIFORM_ROUND_ROBIN;
+    } else if (cond_func_type_str == "GROUPED_BINARY") {
+        cond_func_type = ConditionFunctionType::NON_UNIFORM_GROUPED_BY_BINARY_MINTERM;
     } else {
-        assert(cond_func_type_str == "GROUPED");
-        cond_func_type = ConditionFunctionType::NON_UNIFORM_GROUPED;
+        assert(cond_func_type_str == "GROUPED_GRAY");
+        cond_func_type = ConditionFunctionType::NON_UNIFORM_GROUPED_BY_GRAY_MINTERM;
     }
 
     auto sharp_sat_eval = std::make_shared<SharpSatType>(timing_graph, cond_func_type, nvars_per_input, esta_analyzer);
