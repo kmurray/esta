@@ -23,10 +23,11 @@ class SharpSatBddEvaluator : public SharpSatEvaluator<Analyzer> {
     private:
         typedef ObjectCacheMap<ExtTimingTag::cptr,BDD> BddCache;
     public:
-        SharpSatBddEvaluator(const TimingGraph& tg, ConditionFunctionType cond_func_type, size_t nvars_per_input, std::shared_ptr<Analyzer> analyzer)
+        SharpSatBddEvaluator(const TimingGraph& tg, ConditionFunctionType cond_func_type, size_t cond_func_seed, size_t nvars_per_input, std::shared_ptr<Analyzer> analyzer)
             : SharpSatEvaluator<Analyzer>(tg, analyzer)
             , nvars_per_input_(nvars_per_input)
-            , cond_func_type_(cond_func_type) {
+            , cond_func_type_(cond_func_type)
+            , cond_func_seed_(cond_func_seed) {
 
             if (cond_func_type == ConditionFunctionType::UNIFORM) {
                 //We have a unique logic variable for each Primary Input
@@ -60,7 +61,7 @@ class SharpSatBddEvaluator : public SharpSatEvaluator<Analyzer> {
                     }
                 }
 
-                auto rng = std::default_random_engine();
+                auto rng = std::default_random_engine(cond_func_seed_);
                 size_t num_minterms = 1 << nvars_per_input_;
 
                 for (NodeId pi_node : primary_inputs) {
@@ -466,6 +467,7 @@ class SharpSatBddEvaluator : public SharpSatEvaluator<Analyzer> {
 
         std::map<NodeId,std::map<TransitionType,size_t>> assigned_minterm_counts_;
         ConditionFunctionType  cond_func_type_;
+        size_t cond_func_seed_;
         std::map<NodeId,std::map<TransitionType,BDD>> cond_funcs_;
 
         BddCache bdd_cache_;

@@ -136,12 +136,18 @@ optparse::Values parse_args(int argc, char** argv) {
           ;
 
     std::vector<std::string> cond_func_choices = {"UNIFORM", "ROUND_ROBIN", "GROUPED_BINARY", "GROUPED_GRAY"};
-    parser.add_option("--condition_function")
+    parser.add_option("--condition_function_type")
           .dest("condition_function_type")
           .choices(cond_func_choices.begin(), cond_func_choices.end())
           .set_default("UNIFORM")
           .metavar("{UNIFORM | ROUND_ROBIN | GROUPED_BINARY | GROUPED_GRAY}")
           .help("Specifies the primary input condition function types. Default: %default")
+          ;
+
+    parser.add_option("--condition_function_seed")
+          .dest("condition_function_seed")
+          .set_default("1")
+          .help("Seed for randomly generated condition functions. Default: %default")
           ;
 
     parser.add_option("--nvars_per_input")
@@ -398,6 +404,7 @@ int main(int argc, char** argv) {
     double fine_delay_bin_size = options.get_as<double>("delay_bin_size_fine");
     double max_permutations = options.get_as<double>("max_permutations");
     std::string cond_func_type_str = options.get_as<std::string>("condition_function_type");
+    size_t cond_func_seed = options.get_as<size_t>("condition_function_seed");
     size_t nvars_per_input = options.get_as<size_t>("nvars_per_input");
     std::cout << "Slack Threshold : " << slack_threshold << " ps (" << slack_threshold_frac << ")" << "\n";
     std::cout << "Delay Bin Size Coarse (below threshold) : " << coarse_delay_bin_size << "\n";
@@ -440,7 +447,7 @@ int main(int argc, char** argv) {
         cond_func_type = ConditionFunctionType::NON_UNIFORM_GROUPED_BY_GRAY_MINTERM;
     }
 
-    auto sharp_sat_eval = std::make_shared<SharpSatType>(timing_graph, cond_func_type, nvars_per_input, esta_analyzer);
+    auto sharp_sat_eval = std::make_shared<SharpSatType>(timing_graph, cond_func_type, cond_func_seed, nvars_per_input, esta_analyzer);
 
     if(options.get_as<string>("print_tags") != "none") {
         g_action_timer.push_timer("Output tags");
