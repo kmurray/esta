@@ -104,14 +104,14 @@ optparse::Values parse_args(int argc, char** argv) {
           .dest("delay_bin_size_coarse")
           .metavar("DELAY_BIN_SIZE")
           .set_default(0.)
-          .help("The delay bin size to apply during analysis (below slack threshold).")
+          .help("The delay bin size to apply during analysis (outside slack thresholds).")
           ;
 
     parser.add_option("-m", "--max_permutations")
           .dest("max_permutations")
           .metavar("MAX_PERMUTATIONS")
           .set_default(0.)
-          .help("The maximum number of permutations to be evaluated at a node in the timing graph during analysis. Zero implies no limit.")
+          .help("The maximum number of permutations to be evaluated at a node in the timing graph during analysis (outside slack thresholds). Zero implies no limit.")
           ;
 
     parser.add_option("--slack_threshold")
@@ -121,11 +121,33 @@ optparse::Values parse_args(int argc, char** argv) {
           .help("The fraction of worst-case delay paths to analyze in detail (e.g. 0.05 means analyze only the 95th perctile paths in detail.")
           ;
 
-    parser.add_option("-f", "--delay_bin_size_fine")
+    parser.add_option("-D", "--delay_bin_size_fine")
           .dest("delay_bin_size_fine")
           .metavar("DELAY_BIN_SIZE")
           .set_default(0.)
-          .help("The delay bin size to apply during analysis (above slack threshold).")
+          .help("The delay bin size to apply during analysis (within slack threshold).")
+          ;
+
+    parser.add_option("-M", "--max_permutations_fine")
+          .dest("max_permutations_fine")
+          .metavar("MAX_PERMUTATIONS")
+          .set_default(0.)
+          .help("The maximum number of permutations to be evaluated at a node in the timing graph during analysis (within slack thresholds). Zero implies no limit.")
+          ;
+
+    std::vector<std::string> cond_func_choices = {"UNIFORM", "ROUND_ROBIN", "GROUPED"};
+    parser.add_option("--condition_function")
+          .dest("condition_function_type")
+          .choices(cond_func_choices.begin(), cond_func_choices.end())
+          .set_default("UNIFORM")
+          .metavar("{UNIFORM | ROUND_ROBIN | GROUPED}")
+          .help("Specifies the primary input condition function types. Default: %default")
+          ;
+
+    parser.add_option("--nvars_per_input")
+          .dest("nvars_per_input")
+          .set_default("2")
+          .help("Specifies the number of variables per input. Default: %default")
           ;
 
     parser.add_option("--print_graph")
@@ -375,6 +397,8 @@ int main(int argc, char** argv) {
     double coarse_delay_bin_size = options.get_as<double>("delay_bin_size_coarse");
     double fine_delay_bin_size = options.get_as<double>("delay_bin_size_fine");
     double max_permutations = options.get_as<double>("max_permutations");
+    std::string cond_func_type_str = options.get_as<std::string>("condition_function_type");
+    size_t nvars_per_input = options.get_as<size_t>("nvars_per_input");
     std::cout << "Slack Threshold : " << slack_threshold << " ps (" << slack_threshold_frac << ")" << "\n";
     std::cout << "Delay Bin Size Coarse (below threshold) : " << coarse_delay_bin_size << "\n";
     std::cout << "Delay Bin Size Fine (above threshold): " << fine_delay_bin_size << "\n";
@@ -397,14 +421,24 @@ int main(int argc, char** argv) {
     size_t nvars = 0;
     for(NodeId node_id = 0; node_id <timing_graph.num_nodes(); node_id++) {
         if(timing_graph.node_type(node_id) == TN_Type::INPAD_SOURCE || timing_graph.node_type(node_id) == TN_Type::FF_SOURCE) {
-            nvars += 2; //2 vars per input to encode 4 states
+            nvars += nvars_per_input; //2 vars per input to encode 4 states
         }
     }
     float nassigns = pow(2., nvars);
     cout << "Num Logical Inputs: " << timing_graph.logical_inputs().size() << " Num BDD Vars: " << nvars << " Num Possible Assignments: " << nassigns << endl;
     cout << endl;
 
-    auto sharp_sat_eval = std::make_shared<SharpSatType>(timing_graph, esta_analyzer, nvars);
+    ConditionFunctionType cond_func_type;
+    if (cond_func_type_str == "UNIFORM") {
+        cond_func_type = ConditionFunctionType::UNIFORM;
+    } else if (cond_func_type_str == "ROUND_ROBIN") {
+        cond_func_type = ConditionFunctionType::NON_UNIFORM_ROUND_ROBIN;
+    } else {
+        assert(cond_func_type_str == "GROUPED");
+        cond_func_type = ConditionFunctionType::NON_UNIFORM_GROUPED;
+    }
+
+    auto sharp_sat_eval = std::make_shared<SharpSatType>(timing_graph, cond_func_type, nvars_per_input, esta_analyzer);
 
     if(options.get_as<string>("print_tags") != "none") {
         g_action_timer.push_timer("Output tags");
