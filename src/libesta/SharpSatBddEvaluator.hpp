@@ -111,7 +111,7 @@ class SharpSatBddEvaluator : public SharpSatEvaluator<Analyzer> {
 
                     for (auto trans : {TransitionType::RISE, TransitionType::FALL, TransitionType::HIGH, TransitionType::LOW}) {
                         std::cout << trans << ": " << bdd_sharpsat_fraction(cond_funcs_[pi_node][trans]) << "\n";
-                        cond_funcs_[pi_node][trans].PrintCover();
+                        //cond_funcs_[pi_node][trans].PrintCover();
                     }
                 }
             } else {
