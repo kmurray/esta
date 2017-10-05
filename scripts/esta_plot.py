@@ -65,7 +65,7 @@ def main():
     data_sets = OrderedDict()
 
     if args.sta_cpd:
-        data_sets['STA'] = pd.DataFrame({'delay:MAX': [0., args.sta_cpd], 'probability': [0., 1.]})
+        data_sets['STA'] = pd.DataFrame({'delay': [0., args.sta_cpd], 'probability': [0., 1.]})
 
     for i in xrange(len(args.exhaustive_csvs)):
         label = args.exhaustive_csvs[i] #Default the file name
@@ -101,7 +101,7 @@ def main():
 
 def load_histogram_csv(filename):
     print "Loading " + filename + "..."
-    return pd.read_csv(filename).sort_values(by="delay:MAX")
+    return pd.read_csv(filename).sort_values(by="delay")
 
 def map_to_bins(delay_prob_data, bins, histogram_range):
 
@@ -123,7 +123,7 @@ def map_to_bins(delay_prob_data, bins, histogram_range):
 
     return heights
 
-def plot_ax(ax, data_sets, plot_style="cdf", key='delay:MAX', plot_title=None, labelx=True, labely=True, show_legend=True):
+def plot_ax(ax, data_sets, plot_style="cdf", key='delay', plot_title=None, labelx=True, labely=True, show_legend=True):
     color_cycle = cycle("rbgcmyk")
     alpha = 0.6
 

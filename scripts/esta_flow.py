@@ -17,7 +17,7 @@ import pyverilog.vparser.ast as vast
 from pyverilog.ast_code_generator.codegen import ASTCodeGenerator
 
 from esta_util import CommandError, CommandRunner
-from esta_trans_to_hist import transitions_to_histogram as exhaustive_csv_to_histogram_csv
+from esta_util import transitions_to_histogram as exhaustive_csv_to_histogram_csv
 
 SIM_CLOCK="sim_clk"
 
@@ -95,7 +95,7 @@ def parse_args():
 
     parser.add_argument("--sim_mode",
                         choices=["exhaustive", "monte_carlo"],
-                        default="exhaustive",
+                        default="monte_carlo",
                         help="Simulation mode.")
 
     parser.add_argument("--monte_carlo_iter_fraction",

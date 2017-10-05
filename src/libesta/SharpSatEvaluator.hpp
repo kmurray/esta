@@ -6,10 +6,9 @@
 template<class Analyzer>
 class SharpSatEvaluator {
     public:
-        SharpSatEvaluator(const TimingGraph& tg, std::shared_ptr<Analyzer> analyzer, size_t nvars)
+        SharpSatEvaluator(const TimingGraph& tg, std::shared_ptr<Analyzer> analyzer)
             : tg_(tg)
-            , analyzer_(analyzer)
-            , nvars_(nvars) {}
+            , analyzer_(analyzer) {}
         virtual ~SharpSatEvaluator() {}
 
         virtual double count_sat_fraction(ExtTimingTag::cptr tag) = 0;
@@ -18,5 +17,4 @@ class SharpSatEvaluator {
     protected:
         const TimingGraph& tg_;
         std::shared_ptr<Analyzer> analyzer_;
-        size_t nvars_;
 };
