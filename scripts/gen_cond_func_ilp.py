@@ -1,8 +1,12 @@
-#!/usr/bin/env python
+#!/usr/bin/env python3
 
 import sys
 from ortools.linear_solver import pywraplp
 from collections import OrderedDict
+
+from pyeda.boolalg.minimization import espresso_exprs
+from pyeda.boolalg.table import truthtable, truthtable2expr
+from pyeda.boolalg.bfarray import exprvars
 
 #TRANSITIONS = ['r', 'f', 'h', 'l']
 #INPUTS = ['A', 'B']
@@ -37,6 +41,8 @@ INPUTS = ['A', 'B']#, 'C']
 def main():
     N = 4
     num_minterms = 2**N
+
+    X = exprvars('x', N) #Boolean vars
     
     prob = {}
 
@@ -102,21 +108,21 @@ def main():
 
 
 
-    minterm_counts = dict([(key, int(p*num_minterms)) for key, p in prob.iteritems()])
+    minterm_counts = dict([(key, int(p*num_minterms)) for key, p in prob.items()])
 
-    print "Minterm counts:"
-    for key, value in minterm_counts.iteritems():
-        print key, value
+    print("Minterm counts:")
+    for key, value in minterm_counts.items():
+        print(key, value)
 
     #assert sum(minterm_counts.values()) == len(INPUTS)*num_minterms
 
     solver = pywraplp.Solver('SolveIntegerPorblem',
                             pywraplp.Solver.CBC_MIXED_INTEGER_PROGRAMMING)
 
-    print "Generating Vars"
+    print("Generating Vars")
     #Create the minterm variables
     minterm_vars = OrderedDict()
-    for minterm in xrange(0, num_minterms):
+    for minterm in range(0, num_minterms):
         for input in INPUTS:
             for trans in TRANSITIONS:
                 
@@ -125,8 +131,8 @@ def main():
 
     #Create the pair-wise boolean minterm variables
     minterm_pair_vars = OrderedDict()
-    for i in xrange(len(INPUTS)):
-        for j in xrange(i+1, len(INPUTS)):
+    for i in range(len(INPUTS)):
+        for j in range(i+1, len(INPUTS)):
             assert i != j
 
             input1 = INPUTS[i]
@@ -134,7 +140,7 @@ def main():
             
             for trans1 in TRANSITIONS:
                 for trans2 in TRANSITIONS:
-                    for minterm in xrange(0, num_minterms):
+                    for minterm in range(0, num_minterms):
 
                         minterm_var1_key = (minterm, input1, trans1)
                         minterm_var2_key = (minterm, input2, trans2)
@@ -151,11 +157,11 @@ def main():
     #for key, value in minterm_pair_vars.iteritems():
         #print key, value
 
-    print "Generating Constraints"
+    print("Generating Constraints")
 
     #Generate the pair-wise boolean AND constraints
     # to ensure the minterm pair variables define logical AND
-    for (minterm_var1_key, minterm_var2_key), and_var in minterm_pair_vars.iteritems():
+    for (minterm_var1_key, minterm_var2_key), and_var in minterm_pair_vars.items():
         minterm_var1 = minterm_vars[minterm_var1_key]
         minterm_var2 = minterm_vars[minterm_var2_key]
 
@@ -176,7 +182,7 @@ def main():
         constr2.SetCoefficient(minterm_var2, -1)
 
     #Generate the single minterm per primary-input constraints
-    for minterm in xrange(0, num_minterms):
+    for minterm in range(0, num_minterms):
         for input in INPUTS:
 
             #  -----
@@ -192,7 +198,7 @@ def main():
 
 
     #Generate the pair-wise count constraints
-    for pair, count in minterm_counts.iteritems():
+    for pair, count in minterm_counts.items():
 
         first, second = pair
 
@@ -216,19 +222,19 @@ def main():
 
             constr.SetCoefficient(and_var, 1)
 
-    print "Starting Solve"
+    print("Starting Solve")
     status = solver.Solve()
 
-    print "Solver took {:.2f} sec".format(solver.WallTime() / 1000)
+    print("Solver took {:.2f} sec".format(solver.WallTime() / 1000))
     if status == solver.OPTIMAL:
-        print "Solved optimal (OPTIMAL)"
+        print("Solved optimal (OPTIMAL)")
     elif status == solver.FEASIBLE:
-        print "Solved non-optimal (FEASIBLE)"
+        print("Solved non-optimal (FEASIBLE)")
     elif status == solver.INFEASIBLE:
-        print "Failed to solve (INFEASIBLE)"
+        print("Failed to solve (INFEASIBLE)")
         sys.exit(1)
     else:
-        print "Failed to solve (status unkown)"
+        print("Failed to solve (status unkown)")
         sys.exit(2)
 
 
@@ -236,12 +242,12 @@ def main():
     # GLOP_LINEAR_PROGRAMMING, verifying the solution is highly recommended!).
     assert solver.VerifySolution(1e-7, True)
 
-    print 'Number of variables =', solver.NumVariables() 
-    print 'Number of constraints =', solver.NumConstraints() 
+    print('Number of variables =', solver.NumVariables()) 
+    print('Number of constraints =', solver.NumConstraints()) 
 
     # The objective value of the solution.
-    print 'Optimal objective value = %d' % solver.Objective().Value() 
-    print
+    print('Optimal objective value = %d' % solver.Objective().Value()) 
+    print()
 
     # The value of each variable in the solution.
     #variable_list = [var for var in minterm_vars.values()] + [var for var in minterm_pair_vars.values()]
@@ -254,7 +260,7 @@ def main():
         for trans in TRANSITIONS:
             cond_funcs[(input, trans)] = []
 
-    for key, var in minterm_vars.iteritems():
+    for key, var in minterm_vars.items():
         if var.solution_value() == 1:
             minterm, input, trans = key
 
@@ -262,35 +268,56 @@ def main():
 
             cond_funcs[cond_func_key].append(minterm)
 
-    for cond_func_key, minterms in cond_funcs.iteritems():
-        print cond_func_key, minterms
+    for cond_func_key, minterms in cond_funcs.items():
+        print("{} = {} = {}".format(cond_func_key, minterms, minterms_to_func(X, minterms)))
 
-    verify_condition_functions(cond_funcs, minterm_counts, N, I=len(INPUTS))
+    verify_condition_functions(cond_funcs, minterm_counts, N, I=len(INPUTS), X=X)
+
+def espresso_expr_safe(expr):
+    expr_dnf = expr.to_dnf()
+    if not (expr_dnf.is_one() or expr_dnf.is_zero()):
+        return espresso_exprs(expr_dnf)[0]
+    else:
+        return expr_dnf
+
+def minterms_to_func(X, minterms):
+
+    tt_output_vec = [0 for x in range(2**len(X))]
+
+    for minterm in minterms:
+        tt_output_vec[minterm] = 1
+
+    tt_output_str = ''.join([str(v) for v in tt_output_vec])
+
+    f_tt = truthtable(X, tt_output_str)
+    f_expr = truthtable2expr(f_tt)
+
+    return espresso_expr_safe(f_expr)
 
 
-def verify_condition_functions(cond_funcs, minterm_counts, N, I):
+def verify_condition_functions(cond_funcs, minterm_counts, N, I, X):
     #assert sum(minterm_counts.values()) == (I-1) * 2**N, "Pair-wise minterm counts must total to total number of minterms"
 
     #Verify the pair-wise constraints
-    for (first_key, second_key), minterm_count in minterm_counts.iteritems():
+    for (first_key, second_key), minterm_count in minterm_counts.items():
 
         common_minterms = set(cond_funcs[first_key]) & set(cond_funcs[second_key])
 
         assert len(common_minterms) == minterm_count, "Pair wise constraints must be satisfied for {} {}".format(first_key, second_key)
 
-        print "{} & {} = {} / {} = {}".format(first_key, second_key, minterm_count, 2**N, float(minterm_count) / 2**N)
+        print("{} & {}= {} / {} = {} = {} ".format(first_key, second_key, minterm_count, 2**N, float(minterm_count) / 2**N, minterms_to_func(X, common_minterms)))
 
 
     #Determine the (unique) minterms for each input
     input_minterms = {}
-    for (input, trans), minterms in cond_funcs.iteritems():
+    for (input, trans), minterms in cond_funcs.items():
         if input not in input_minterms:
             input_minterms[input] = set()
 
         input_minterms[input] |= set(minterms)
 
     #Verify that the total number of minterms per input is 2**N
-    for input, minterms in input_minterms.iteritems():
+    for input, minterms in input_minterms.items():
 
         assert len(minterms) == 2**N, "Each PI must have 2**N minterms assigned to it"
 
