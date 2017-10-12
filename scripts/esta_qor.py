@@ -56,8 +56,14 @@ def main():
 
     normed_emds = {}
     for key in keys:
-        ref_sta_emd = hist_emd(reference_hist, sta_hist, key)
-        ref_comp_emd = hist_emd(reference_hist, compare_hist, key)
+        try:
+            ref_sta_emd = hist_emd(reference_hist, sta_hist, key)
+            ref_comp_emd = hist_emd(reference_hist, compare_hist, key)
+        except KeyError as e:
+            #This means something was missing (perhaps the output was not reported by STA?)
+            #TODO: debug
+            print "Failed to find Key skipping ({})".format(e)
+            continue
 
         if ref_sta_emd == 0 and ref_comp_emd == 0:
             #Equal so perfect match => zero normalized emd
