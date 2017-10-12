@@ -72,11 +72,12 @@ class SharpSatBddEvaluator : public SharpSatEvaluator<Analyzer> {
                     }
 
                     //Randomly assign numbers of minterms
-                    size_t free_minterms = num_minterms;
+                    int free_minterms = num_minterms;
                     for (auto trans : {TransitionType::RISE, TransitionType::FALL, TransitionType::HIGH}) {
-                        auto rand_minterms = std::uniform_int_distribution<size_t>(0, free_minterms);
+                        auto rand_minterms = std::uniform_int_distribution<int>(1, std::max(free_minterms - 3, 1));
 
-                        size_t minterm_cnt = rand_minterms(rng);
+                        int minterm_cnt = rand_minterms(rng);
+                        assert (minterm_cnt > 0);
 
                         assigned_minterm_counts_[pi_node][trans] = minterm_cnt;
 
@@ -85,13 +86,15 @@ class SharpSatBddEvaluator : public SharpSatEvaluator<Analyzer> {
                         assert(free_minterms >= 0);
                     }
                     //Allocate any remaining minterms to the LOW transition
+                    assert(free_minterms > 0);
                     assigned_minterm_counts_[pi_node][TransitionType::LOW] = free_minterms;
 
                     //All minterms must be assgined
                     size_t assigned_minterm_cnt = 0;
                     std::cout << "Node " << pi_node << " Cond Func Minterms: " << std::endl;
                     for (auto trans : {TransitionType::RISE, TransitionType::FALL, TransitionType::HIGH, TransitionType::LOW}) {
-                        auto trans_minterm_cnt = assigned_minterm_counts_[pi_node][trans];
+                        int trans_minterm_cnt = assigned_minterm_counts_[pi_node][trans];
+                        assert(trans_minterm_cnt > 0);
                         assigned_minterm_cnt += trans_minterm_cnt;
 
                         std::cout << "\t" << trans << ": " << trans_minterm_cnt << std::endl;
